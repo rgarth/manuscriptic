@@ -23,16 +23,17 @@ pub fn load_project(app: AppHandle) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-pub fn save_project(app: AppHandle, contents: String) -> Result<(), String> {
+pub fn save_project(
+    app: AppHandle,
+    contents: String,
+    previous: Option<String>,
+) -> Result<(), String> {
     serde_json::from_str::<Value>(&contents).map_err(|err| err.to_string())?;
+    if let Some(previous) = &previous {
+        serde_json::from_str::<Value>(previous).map_err(|err| err.to_string())?;
+    }
     let dir = project_dir(&app)?;
-    fs::create_dir_all(&dir).map_err(|err| err.to_string())?;
-    let target = dir.join("current-project.json");
-    let tmp = dir.join("current-project.json.tmp");
-    fs::write(&tmp, &contents).map_err(|err| err.to_string())?;
-    replace_file(&tmp, &target)?;
-    write_backup_if_due(&dir, &contents)?;
-    Ok(())
+    store_project(&dir, &contents, previous.as_deref())
 }
 
 #[cfg(unix)]
@@ -48,6 +49,18 @@ fn replace_file(tmp: &Path, target: &Path) -> Result<(), String> {
     fs::rename(tmp, target).map_err(|err| err.to_string())
 }
 
+fn store_project(dir: &Path, contents: &str, previous: Option<&str>) -> Result<(), String> {
+    if let Some(previous) = previous {
+        write_backup(dir, previous)?;
+    }
+    fs::create_dir_all(dir).map_err(|err| err.to_string())?;
+    let target = dir.join("current-project.json");
+    let tmp = dir.join("current-project.json.tmp");
+    fs::write(&tmp, contents).map_err(|err| err.to_string())?;
+    replace_file(&tmp, &target)?;
+    write_backup_if_due(dir, contents)
+}
+
 fn write_backup_if_due(dir: &Path, contents: &str) -> Result<(), String> {
     let backups = dir.join("backups");
     fs::create_dir_all(&backups).map_err(|err| err.to_string())?;
@@ -56,6 +69,12 @@ fn write_backup_if_due(dir: &Path, contents: &str) -> Result<(), String> {
             return Ok(());
         }
     }
+    write_backup(dir, contents)
+}
+
+fn write_backup(dir: &Path, contents: &str) -> Result<(), String> {
+    let backups = dir.join("backups");
+    fs::create_dir_all(&backups).map_err(|err| err.to_string())?;
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|err| err.to_string())?
@@ -87,6 +106,78 @@ fn newest_backup_age(dir: &Path) -> Result<Option<Duration>, String> {
     match newest {
         Some(time) => Ok(Some(time.elapsed().unwrap_or_default())),
         None => Ok(None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{store_project, write_backup, write_backup_if_due};
+    use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    fn temp_project_dir() -> std::path::PathBuf {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let id = NEXT.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("manuscriptic-backup-{}-{id}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn backup_names(dir: &std::path::Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir.join("backups"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn backup_file_is_named_with_unix_seconds() {
+        let dir = temp_project_dir();
+        write_backup(&dir, "{\"ok\":true}").unwrap();
+        let names = backup_names(&dir);
+        assert_eq!(names.len(), 1);
+        assert!(names[0].starts_with("backup-"));
+        assert!(names[0].ends_with(".json"));
+        let stamp = names[0].trim_start_matches("backup-").trim_end_matches(".json");
+        assert!(stamp.chars().all(|ch| ch.is_ascii_digit()));
+        assert_eq!(
+            fs::read_to_string(dir.join("backups").join(&names[0])).unwrap(),
+            "{\"ok\":true}"
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_recent_backup_is_not_replaced() {
+        let dir = temp_project_dir();
+        write_backup(&dir, "first").unwrap();
+        write_backup_if_due(&dir, "second").unwrap();
+        let names = backup_names(&dir);
+        assert_eq!(names.len(), 1);
+        assert_eq!(
+            fs::read_to_string(dir.join("backups").join(&names[0])).unwrap(),
+            "first"
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn replace_keeps_the_outgoing_book() {
+        let dir = temp_project_dir();
+        store_project(&dir, "{\"next\":true}", Some("{\"prev\":true}")).unwrap();
+        assert_eq!(
+            fs::read_to_string(dir.join("current-project.json")).unwrap(),
+            "{\"next\":true}"
+        );
+        let names = backup_names(&dir);
+        assert_eq!(names.len(), 1);
+        assert_eq!(
+            fs::read_to_string(dir.join("backups").join(&names[0])).unwrap(),
+            "{\"prev\":true}"
+        );
+        fs::remove_dir_all(dir).unwrap();
     }
 }
 

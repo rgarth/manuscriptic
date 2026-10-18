@@ -156,6 +156,18 @@ button[aria-pressed="true"] {
   border-top: 1px solid var(--line);
 }
 
+.confirm-new {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.confirm-new p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .editor-column {
   flex: 1;
   display: flex;

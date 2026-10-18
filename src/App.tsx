@@ -132,25 +132,32 @@ export default function App() {
     setLoadError(null);
   }
 
-  function enqueueSave(saveGeneration: number, json: string) {
+  function enqueueSave(saveGeneration: number, json: string, previous?: string): Promise<void> {
     setSaveState("saving");
-    saveQueue.current = saveQueue.current.then(async () => {
+    const pending = saveQueue.current.then(async () => {
       if (saveGeneration !== generation.current) {
-        return;
+        throw new Error("Save was superseded.");
       }
-      try {
-        await saveProject(json);
+      await saveProject(json, previous);
+      if (saveGeneration !== generation.current) {
+        throw new Error("Save was superseded.");
+      }
+    });
+    saveQueue.current = pending.then(
+      () => {
         if (saveGeneration === generation.current) {
           setSaveState("saved");
           setSaveError(null);
         }
-      } catch (error: unknown) {
+      },
+      (error: unknown) => {
         if (saveGeneration === generation.current) {
           setSaveState("error");
           setSaveError(error instanceof Error ? error.message : "Could not save.");
         }
-      }
-    });
+      },
+    );
+    return pending;
   }
 
   function flushSave() {
@@ -161,6 +168,22 @@ export default function App() {
     window.clearTimeout(pendingSave.current);
     pendingSave.current = null;
     enqueueSave(generation.current, JSON.stringify(current));
+  }
+
+  async function beginNewProject() {
+    const current = projectRef.current;
+    if (pendingSave.current !== null) {
+      window.clearTimeout(pendingSave.current);
+      pendingSave.current = null;
+    }
+    const nextGeneration = ++generation.current;
+    const next = createNovelProject();
+    await enqueueSave(
+      nextGeneration,
+      JSON.stringify(next),
+      current ? JSON.stringify(current) : undefined,
+    );
+    openProject(next);
   }
 
   function selectInserted(next: ProjectFile, id: string) {
@@ -184,7 +207,12 @@ export default function App() {
       <main className="gate">
         <h1>Manuscriptic</h1>
         <p>{loadError}</p>
-        <button type="button" onClick={() => openProject(createNovelProject())}>
+        <button
+          type="button"
+          onClick={() => {
+            void beginNewProject().catch(() => undefined);
+          }}
+        >
           Start a new project
         </button>
       </main>
@@ -249,6 +277,7 @@ export default function App() {
           }}
           trashLabel={trashLabel}
           trashDisabled={trashDisabled}
+          onNewProject={beginNewProject}
         />
         <section className="editor-column">
           <div className="editor-toolbar">

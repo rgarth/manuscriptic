@@ -12,3 +12,11 @@ npm run tauri dev
 ```
 
 `npm run tauri dev` opens the Manuscriptic window. While developing, it also starts a local server so the window can load the interface. That server is only for development. The app you ship is a desktop program and does not run in a browser.
+
+## Test
+
+```
+npm test
+```
+
+Runs the project-model tests and the Rust backup tests. Rust needs to be on `PATH`.

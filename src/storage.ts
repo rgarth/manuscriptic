@@ -4,6 +4,6 @@ export function loadProject(): Promise<string | null> {
   return invoke<string | null>("load_project");
 }
 
-export function saveProject(contents: string): Promise<void> {
-  return invoke("save_project", { contents });
+export function saveProject(contents: string, previous?: string): Promise<void> {
+  return invoke("save_project", { contents, previous: previous ?? null });
 }

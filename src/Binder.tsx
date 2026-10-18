@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ROOT_KEYS, type BinderNode, type ProjectFile } from "./model/project";
 
 type BinderProps = {
@@ -12,6 +13,7 @@ type BinderProps = {
   onTrash: () => void;
   trashLabel: string;
   trashDisabled: boolean;
+  onNewProject: () => Promise<void>;
 };
 
 export default function Binder({
@@ -26,7 +28,10 @@ export default function Binder({
   onTrash,
   trashLabel,
   trashDisabled,
+  onNewProject,
 }: BinderProps) {
+  const [confirmingNew, setConfirmingNew] = useState(false);
+
   return (
     <aside className="binder">
       <input
@@ -49,6 +54,29 @@ export default function Binder({
         ))}
       </div>
       <div className="binder-actions">
+        {confirmingNew ? (
+          <div className="confirm-new">
+            <p>Replace this novel with a blank one? The current book is copied to backups first.</p>
+            <button
+              type="button"
+              onClick={() => {
+                void onNewProject().then(
+                  () => setConfirmingNew(false),
+                  () => undefined,
+                );
+              }}
+            >
+              Replace
+            </button>
+            <button type="button" onClick={() => setConfirmingNew(false)}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setConfirmingNew(true)}>
+            New project
+          </button>
+        )}
         <button type="button" onClick={onAddScene}>
           New scene
         </button>
