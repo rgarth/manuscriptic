@@ -1,0 +1,13 @@
+[data-theme="ink"] {
+  color-scheme: dark;
+  --theme-label: Ink;
+  --theme-order: 2;
+  --room: #10141c;
+  --board: #0c1016;
+  --paper: #171c27;
+  --ink: #e8e2d4;
+  --faded: #8e98ab;
+  --rule: #2a3344;
+  --wash: #283246;
+  --nib: #d4b483;
+}

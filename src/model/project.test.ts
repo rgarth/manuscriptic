@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   addScene,
+  addSection,
   createNovelProject,
   deleteForever,
   isStoredInTrash,
   manuscriptWordCount,
   moveToTrash,
-  parseEditorDoc,
   parseProject,
+  removal,
   setDocumentContent,
-  wordCount,
-  type EditorDoc,
 } from "./project.ts";
+import { parseEditorDoc, wordCount, type EditorDoc, type TextRun } from "./editorDoc.ts";
 
 const rootTitles = {
   manuscript: "Manuscript",
@@ -23,7 +23,7 @@ const rootTitles = {
   trash: "Trash",
 } as const;
 
-function textDoc(text: string, marks?: EditorDoc["content"][number]["content"]): EditorDoc {
+function textDoc(text: string, marks?: TextRun[]): EditorDoc {
   return {
     type: "doc",
     content: [{ type: "paragraph", content: marks ?? [{ type: "text", text }] }],
@@ -47,6 +47,26 @@ test("a new novel has the manuscript roots", () => {
   assert.equal(opening?.title, "Opening");
 });
 
+test("a new scene lands in the selected section, or just below the selected scene", () => {
+  const project = createNovelProject();
+  const chapter = project.manuscript.children[0];
+  assert.ok(chapter?.kind === "folder");
+  const opening = chapter.children[0];
+  assert.ok(opening);
+  const below = addScene(project, opening.id);
+  const afterScene = below.project.manuscript.children[0];
+  assert.ok(afterScene?.kind === "folder");
+  assert.deepEqual(
+    afterScene.children.map((child) => child.id),
+    [opening.id, below.id],
+  );
+  const inside = addScene(below.project, chapter.id);
+  const afterSection = inside.project.manuscript.children[0];
+  assert.ok(afterSection?.kind === "folder");
+  assert.equal(afterSection.children[afterSection.children.length - 1]?.id, inside.id);
+  assert.equal(afterSection.children[0]?.id, opening.id);
+});
+
 test("adding a scene returns the id that was inserted", () => {
   const project = createNovelProject();
   const chapter = project.manuscript.children[0];
@@ -59,7 +79,58 @@ test("adding a scene returns the id that was inserted", () => {
   );
 });
 
-test("scene text accepts paragraphs with bold and italic only", () => {
+test("sections nest down to a scene", () => {
+  let project = createNovelProject();
+  const volume = addSection(project, project.manuscript.id);
+  project = volume.project;
+  const part = addSection(project, volume.id);
+  project = part.project;
+  const chapter = addSection(project, part.id);
+  project = chapter.project;
+  const scene = addScene(project, chapter.id);
+  project = scene.project;
+
+  const volumeNode = project.manuscript.children.find((child) => child.id === volume.id);
+  assert.equal(volumeNode?.kind, "folder");
+  const partNode =
+    volumeNode?.kind === "folder"
+      ? volumeNode.children.find((child) => child.id === part.id)
+      : undefined;
+  assert.equal(partNode?.kind, "folder");
+  const chapterNode =
+    partNode?.kind === "folder"
+      ? partNode.children.find((child) => child.id === chapter.id)
+      : undefined;
+  assert.equal(chapterNode?.kind, "folder");
+  const sceneNode =
+    chapterNode?.kind === "folder"
+      ? chapterNode.children.find((child) => child.id === scene.id)
+      : undefined;
+  assert.equal(sceneNode?.kind, "document");
+  assert.equal(sceneNode?.title, "New scene");
+});
+
+test("a scene stays a leaf", () => {
+  const project = createNovelProject();
+  const chapter = project.manuscript.children[0];
+  assert.ok(chapter?.kind === "folder");
+  const opening = chapter.children[0];
+  assert.ok(opening);
+  const inserted = addSection(project, opening.id);
+  const nextChapter = inserted.project.manuscript.children[0];
+  assert.ok(nextChapter?.kind === "folder");
+  assert.equal(
+    nextChapter.children.some((child) => child.id === opening.id),
+    true,
+  );
+  assert.equal(
+    nextChapter.children.some((child) => child.id === inserted.id),
+    true,
+  );
+  assert.equal(nextChapter.children.find((child) => child.id === opening.id)?.kind, "document");
+});
+
+test("scene text keeps bold and italic and drops unknown marks", () => {
   const parsed = parseEditorDoc({
     type: "doc",
     content: [
@@ -81,6 +152,103 @@ test("scene text accepts paragraphs with bold and italic only", () => {
     parseEditorDoc({
       type: "doc",
       content: [{ type: "paragraph", content: [{ type: "text", text: "Hi", marks: [{ type: "link" }] }] }],
+    }),
+    null,
+  );
+});
+
+test("a bullet list is part of the scene", () => {
+  const parsed = parseEditorDoc({
+    type: "doc",
+    content: [
+      {
+        type: "bulletList",
+        content: [
+          {
+            type: "listItem",
+            content: [{ type: "paragraph", content: [{ type: "text", text: "one two" }] }],
+          },
+          {
+            type: "listItem",
+            content: [
+              { type: "paragraph", content: [{ type: "text", text: "three" }] },
+              {
+                type: "bulletList",
+                content: [
+                  {
+                    type: "listItem",
+                    content: [{ type: "paragraph", content: [{ type: "text", text: "four" }] }],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  assert.ok(parsed);
+  assert.equal(wordCount(parsed), 4);
+});
+
+test("numbered lists and character styles stay in the scene", () => {
+  const parsed = parseEditorDoc({
+    type: "doc",
+    content: [
+      {
+        type: "orderedList",
+        attrs: { start: 3 },
+        content: [
+          {
+            type: "listItem",
+            content: [
+              {
+                type: "paragraph",
+                content: [
+                  { type: "text", text: "one" },
+                  { type: "hardBreak" },
+                  { type: "text", text: "two", marks: [{ type: "underline" }, { type: "strike", attrs: {} }] },
+                  { type: "text", text: "3", marks: [{ type: "superscript" }] },
+                  { type: "text", text: "4", marks: [{ type: "subscript" }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(parsed, {
+    type: "doc",
+    content: [
+      {
+        type: "orderedList",
+        attrs: { start: 3 },
+        content: [
+          {
+            type: "listItem",
+            content: [
+              {
+                type: "paragraph",
+                content: [
+                  { type: "text", text: "one" },
+                  { type: "hardBreak" },
+                  { type: "text", text: "two", marks: [{ type: "underline" }, { type: "strike" }] },
+                  { type: "text", text: "3", marks: [{ type: "superscript" }] },
+                  { type: "text", text: "4", marks: [{ type: "subscript" }] },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  assert.equal(parsed ? wordCount(parsed) : 0, 2);
+  assert.equal(
+    parseEditorDoc({
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Hi", marks: [{ type: "code" }] }] }],
     }),
     null,
   );
@@ -137,6 +305,24 @@ test("prose cannot be written onto a folder", () => {
   const next = setDocumentContent(project, project.manuscript.id, textDoc("nope"));
   assert.equal(next.manuscript.kind, "folder");
   assert.deepEqual(next.manuscript.children, project.manuscript.children);
+});
+
+test("a root cannot be removed and trash deletes instead of moving", () => {
+  const project = createNovelProject();
+  assert.equal(removal(project, project.manuscript.id), null);
+  const chapter = project.manuscript.children[0];
+  assert.ok(chapter?.kind === "folder");
+  const moving = removal(project, chapter.id);
+  assert.equal(moving?.action, "move");
+  assert.equal(moving?.folder, true);
+  assert.equal(moving?.label, "Move to Trash");
+  assert.match(moving?.message ?? "", /sections and scenes/);
+  const opening = chapter.children[0];
+  assert.ok(opening);
+  const trashed = moveToTrash(project, opening.id);
+  const deleting = removal(trashed, opening.id);
+  assert.equal(deleting?.action, "delete");
+  assert.equal(deleting?.label, "Delete");
 });
 
 test("trash keeps a scene until it is deleted", () => {

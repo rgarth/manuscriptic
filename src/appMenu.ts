@@ -1,0 +1,92 @@
+import { CheckMenuItem, Menu, Submenu } from "@tauri-apps/api/menu";
+import { commands } from "./commands";
+import { installEditCommands } from "./editMenu";
+import { createFormatMenu } from "./formatMenu";
+import { applyTheme, readTheme, readThemes } from "./themes";
+import { createViewMenu } from "./viewMenu";
+
+let installed: Menu | null = null;
+
+export async function installAppMenu(): Promise<void> {
+  const menu = await Menu.default();
+  const newProject = {
+    id: "new-project",
+    text: "New Project…",
+    accelerator: "CmdOrCtrl+N",
+    action: () => {
+      commands().newProject?.();
+    },
+  };
+  const items = await menu.items();
+  let fileMenu: Submenu | null = null;
+  for (const item of items) {
+    if (item instanceof Submenu && (await item.text()) === "File") {
+      fileMenu = item;
+      break;
+    }
+  }
+  const theme = await themeSubmenu();
+  if (fileMenu) {
+    await fileMenu.prepend(newProject);
+    await fileMenu.insert(theme, 1);
+  } else {
+    const file = await Submenu.new({ text: "File", items: [newProject, theme] });
+    const afterAppMenu = navigator.userAgent.includes("Mac") ? 1 : 0;
+    await menu.insert(file, afterAppMenu);
+  }
+  const itemsAfterFile = await menu.items();
+  for (const item of itemsAfterFile) {
+    if (item instanceof Submenu && (await item.text()) === "Edit") {
+      await installEditCommands(item);
+      break;
+    }
+  }
+  await insertAfter(menu, "Edit", await createViewMenu());
+  await insertAfter(menu, "View", await createFormatMenu());
+  const previous = await menu.setAsAppMenu();
+  await previous?.close();
+  if (!navigator.userAgent.includes("Mac")) {
+    await menu.setAsWindowMenu();
+  }
+  await installed?.close();
+  installed = menu;
+}
+
+async function insertAfter(menu: Menu, after: string, item: Submenu) {
+  const bar = await menu.items();
+  let index = bar.length;
+  for (let position = 0; position < bar.length; position += 1) {
+    const entry = bar[position];
+    if (entry instanceof Submenu && (await entry.text()) === after) {
+      index = position + 1;
+      break;
+    }
+  }
+  await menu.insert(item, index);
+}
+
+async function themeSubmenu(): Promise<Submenu> {
+  const available = readThemes();
+  const selected = readTheme(available);
+  applyTheme(selected);
+  let items: CheckMenuItem[] = [];
+  function choose(id: string) {
+    applyTheme(id);
+    for (const [index, theme] of available.entries()) {
+      void items[index]?.setChecked(theme.id === id);
+    }
+  }
+  items = await Promise.all(
+    available.map((theme) =>
+      CheckMenuItem.new({
+        id: `theme-${theme.id}`,
+        text: theme.label,
+        checked: theme.id === selected,
+        action: () => {
+          choose(theme.id);
+        },
+      }),
+    ),
+  );
+  return Submenu.new({ text: "Theme", items });
+}

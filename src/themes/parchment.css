@@ -1,0 +1,18 @@
+/*
+  Drop a CSS file in this folder to add a theme.
+  The Theme menu lists every [data-theme] block it finds.
+*/
+
+[data-theme="parchment"] {
+  color-scheme: light;
+  --theme-label: Parchment;
+  --theme-order: 1;
+  --room: #e5dccb;
+  --board: #efe6d4;
+  --paper: #f7f1e4;
+  --ink: #2b251d;
+  --faded: #8a7b68;
+  --rule: #e3d6c2;
+  --wash: #eadcc6;
+  --nib: #7c3b2e;
+}

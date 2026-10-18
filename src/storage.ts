@@ -7,3 +7,7 @@ export function loadProject(): Promise<string | null> {
 export function saveProject(contents: string, previous?: string): Promise<void> {
   return invoke("save_project", { contents, previous: previous ?? null });
 }
+
+export function listFonts(): Promise<string[]> {
+  return invoke<string[]>("list_fonts");
+}

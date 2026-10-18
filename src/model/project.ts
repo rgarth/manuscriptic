@@ -1,20 +1,4 @@
-export type Mark = { type: "bold" } | { type: "italic" };
-
-export type TextRun = {
-  type: "text";
-  text: string;
-  marks?: Mark[];
-};
-
-export type Paragraph = {
-  type: "paragraph";
-  content?: TextRun[];
-};
-
-export type EditorDoc = {
-  type: "doc";
-  content: Paragraph[];
-};
+import { emptyDoc, parseEditorDoc, wordCount, type EditorDoc } from "./editorDoc.ts";
 
 type BinderFields = {
   id: string;
@@ -67,10 +51,6 @@ export type InsertedNode = {
   id: string;
 };
 
-export function emptyDoc(): EditorDoc {
-  return { type: "doc", content: [{ type: "paragraph" }] };
-}
-
 export function createNovelProject(): ProjectFile {
   const opening = documentNode("Opening");
   const chapter = folderNode("Chapter One", [opening]);
@@ -94,27 +74,6 @@ export function parseProject(raw: string): ProjectFile | null {
     return null;
   }
   return parseProjectValue(value);
-}
-
-export function parseEditorDoc(value: unknown): EditorDoc | null {
-  if (!isRecord(value) || value.type !== "doc") {
-    return null;
-  }
-  if (value.content === undefined) {
-    return { type: "doc", content: [] };
-  }
-  if (!Array.isArray(value.content)) {
-    return null;
-  }
-  const content: Paragraph[] = [];
-  for (const block of value.content) {
-    const paragraph = parseParagraph(block);
-    if (!paragraph) {
-      return null;
-    }
-    content.push(paragraph);
-  }
-  return { type: "doc", content };
 }
 
 export function findNode(project: ProjectFile, id: string): LocatedNode | null {
@@ -193,8 +152,48 @@ export function addScene(project: ProjectFile, selectedId: string | null): Inser
   return addNode(project, selectedId, documentNode("New scene"));
 }
 
-export function addFolder(project: ProjectFile, selectedId: string | null): InsertedNode {
-  return addNode(project, selectedId, folderNode("New folder"));
+export function addSection(project: ProjectFile, selectedId: string | null): InsertedNode {
+  return addNode(project, selectedId, folderNode("New section"));
+}
+
+export type Removal = {
+  action: "move" | "delete";
+  title: string;
+  folder: boolean;
+  label: string;
+  message: string;
+};
+
+export function removal(project: ProjectFile, id: string): Removal | null {
+  if (isRoot(project, id)) {
+    return null;
+  }
+  const located = findNode(project, id);
+  if (!located) {
+    return null;
+  }
+  const title = located.node.title;
+  const folder = located.node.kind === "folder";
+  if (isStoredInTrash(project, id)) {
+    return {
+      action: "delete",
+      title,
+      folder,
+      label: "Delete",
+      message: folder
+        ? `Delete “${title}” and everything inside it? This cannot be undone.`
+        : `Delete “${title}”? This cannot be undone.`,
+    };
+  }
+  return {
+    action: "move",
+    title,
+    folder,
+    label: "Move to Trash",
+    message: folder
+      ? `Move “${title}” to the trash? Its sections and scenes move with it.`
+      : `Move “${title}” to the trash?`,
+  };
 }
 
 export function moveToTrash(project: ProjectFile, id: string): ProjectFile {
@@ -227,14 +226,6 @@ export function deleteForever(project: ProjectFile, id: string): ProjectFile {
   return removeFromProject(project, id).project;
 }
 
-export function wordCount(doc: EditorDoc): number {
-  const text = docText(doc).trim();
-  if (!text) {
-    return 0;
-  }
-  return text.split(/\s+/).length;
-}
-
 export function manuscriptWordCount(project: ProjectFile): number {
   return treeWordCount(project.manuscript);
 }
@@ -260,8 +251,18 @@ function documentNode(title: string): DocumentNode {
 }
 
 function addNode(project: ProjectFile, selectedId: string | null, child: BinderNode): InsertedNode {
-  const next = insertChild(project, destinationId(project, selectedId), child);
-  return { project: next ?? project, id: child.id };
+  const located = selectedId ? findNode(project, selectedId) : null;
+  const afterId =
+    child.kind === "document" && located?.node.kind === "document" ? located.node.id : undefined;
+  const parentId =
+    located && afterId && located.parent
+      ? located.parent.id
+      : destinationId(project, selectedId);
+  const next = insertChild(project, parentId, child, afterId);
+  if (!next) {
+    throw new Error("Could not insert into the binder.");
+  }
+  return { project: next, id: child.id };
 }
 
 function destinationId(project: ProjectFile, selectedId: string | null): string {
@@ -284,15 +285,28 @@ function destinationId(project: ProjectFile, selectedId: string | null): string 
   }
 }
 
-function insertChild(project: ProjectFile, parentId: string, child: BinderNode): ProjectFile | null {
+function insertChild(
+  project: ProjectFile,
+  parentId: string,
+  child: BinderNode,
+  afterId?: string,
+): ProjectFile | null {
   const parent = findNode(project, parentId);
   if (!parent || parent.node.kind !== "folder") {
     return null;
   }
   return editNode(project, parentId, (node) => {
     switch (node.kind) {
-      case "folder":
-        return { ...node, children: [...node.children, child] };
+      case "folder": {
+        const children = [...node.children];
+        const after = afterId ? children.findIndex((item) => item.id === afterId) : -1;
+        if (after >= 0) {
+          children.splice(after + 1, 0, child);
+        } else {
+          children.push(child);
+        }
+        return { ...node, children };
+      }
       case "document":
         return node;
       default: {
@@ -478,12 +492,6 @@ function treeWordCount(node: BinderNode): number {
   }
 }
 
-function docText(doc: EditorDoc): string {
-  return doc.content
-    .map((paragraph) => (paragraph.content ?? []).map((run) => run.text).join(""))
-    .join("\n");
-}
-
 function parseProjectValue(value: unknown): ProjectFile | null {
   if (!isRecord(value) || value.version !== 1 || typeof value.title !== "string") {
     return null;
@@ -536,67 +544,6 @@ function parseBinderNode(value: unknown): BinderNode | null {
     default:
       return null;
   }
-}
-
-function parseParagraph(value: unknown): Paragraph | null {
-  if (!isRecord(value) || value.type !== "paragraph") {
-    return null;
-  }
-  if (value.content === undefined) {
-    return { type: "paragraph" };
-  }
-  if (!Array.isArray(value.content)) {
-    return null;
-  }
-  const content: TextRun[] = [];
-  for (const child of value.content) {
-    const run = parseTextRun(child);
-    if (!run) {
-      return null;
-    }
-    content.push(run);
-  }
-  return { type: "paragraph", content };
-}
-
-function parseTextRun(value: unknown): TextRun | null {
-  if (!isRecord(value) || value.type !== "text" || typeof value.text !== "string") {
-    return null;
-  }
-  const marks = parseMarks(value.marks);
-  if (!marks) {
-    return null;
-  }
-  if (marks.length === 0) {
-    return { type: "text", text: value.text };
-  }
-  return { type: "text", text: value.text, marks };
-}
-
-function parseMarks(value: unknown): Mark[] | null {
-  if (value === undefined) {
-    return [];
-  }
-  if (!Array.isArray(value)) {
-    return null;
-  }
-  const marks: Mark[] = [];
-  for (const mark of value) {
-    if (!isRecord(mark)) {
-      return null;
-    }
-    switch (mark.type) {
-      case "bold":
-        marks.push({ type: "bold" });
-        break;
-      case "italic":
-        marks.push({ type: "italic" });
-        break;
-      default:
-        return null;
-    }
-  }
-  return marks;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

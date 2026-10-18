@@ -1,9 +1,18 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="parchment">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Manuscriptic</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      try {
+        var savedTheme = localStorage.getItem("manuscriptic-theme");
+        if (savedTheme && /^[a-z0-9-]+$/.test(savedTheme)) {
+          document.documentElement.dataset.theme = savedTheme;
+        }
+      } catch {}
+    </script>
   </head>
 
   <body>

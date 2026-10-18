@@ -1,26 +1,27 @@
 import { useEffect, useRef, useState } from "react";
 import Binder from "./Binder";
+import Icon from "./icons";
 import SceneEditor from "./SceneEditor";
 import {
-  addFolder,
   addScene,
+  addSection,
   createNovelProject,
   deleteForever,
   findNode,
   firstDocumentId,
   folderIds,
-  isRoot,
-  isStoredInTrash,
   manuscriptWordCount,
   moveToTrash,
   parseProject,
+  removal,
   renameNode,
   renameProject,
   setDocumentContent,
-  wordCount,
-  type EditorDoc,
   type ProjectFile,
 } from "./model/project";
+import { type EditorDoc, wordCount } from "./model/editorDoc";
+import { installAppMenu } from "./appMenu";
+import { registerCommands } from "./commands";
 import { loadProject, saveProject } from "./storage";
 import "./App.css";
 
@@ -34,13 +35,17 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [confirmingNew, setConfirmingNew] = useState(false);
+  const [pendingTrash, setPendingTrash] = useState<string | null>(null);
 
   const skipNextSave = useRef(true);
   const generation = useRef(0);
   const pendingSave = useRef<number | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const projectRef = useRef<ProjectFile | null>(null);
+  const dialogs = useRef({ confirmingNew: false, pendingTrash: null as string | null });
   projectRef.current = project;
+  dialogs.current = { confirmingNew, pendingTrash };
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +87,14 @@ export default function App() {
         return;
       }
       if (event.key === "Escape") {
+        if (dialogs.current.confirmingNew) {
+          setConfirmingNew(false);
+          return;
+        }
+        if (dialogs.current.pendingTrash) {
+          setPendingTrash(null);
+          return;
+        }
         setFocusMode(false);
       }
     }
@@ -186,6 +199,50 @@ export default function App() {
     openProject(next);
   }
 
+  useEffect(() => {
+    return registerCommands({
+      newProject: () => {
+        if (!projectRef.current) {
+          void beginNewProject().catch(() => undefined);
+          return;
+        }
+        setFocusMode(false);
+        setConfirmingNew(true);
+      },
+      newScene: project ? () => insertScene() : null,
+      newSection: project ? () => insertSection() : null,
+      trash: project ? () => askTrash(selectedId) : null,
+      removal: project && selectedId ? removal(project, selectedId) : null,
+    });
+  }, [project, selectedId]);
+
+  useEffect(() => {
+    void installAppMenu().catch(() => undefined);
+  }, []);
+
+  function insertScene(targetId?: string) {
+    if (!project) {
+      return;
+    }
+    const inserted = addScene(project, targetId ?? selectedId);
+    selectInserted(inserted.project, inserted.id);
+  }
+
+  function insertSection(targetId?: string) {
+    if (!project) {
+      return;
+    }
+    const inserted = addSection(project, targetId ?? selectedId);
+    selectInserted(inserted.project, inserted.id);
+  }
+
+  function askTrash(id: string | null) {
+    if (!project || !id || !removal(project, id)) {
+      return;
+    }
+    setPendingTrash(id);
+  }
+
   function selectInserted(next: ProjectFile, id: string) {
     setProject(next);
     setSelectedId(id);
@@ -231,9 +288,7 @@ export default function App() {
   const sceneWords =
     selected?.node.kind === "document" ? wordCount(selected.node.content) : 0;
   const bookWords = manuscriptWordCount(project);
-  const trashDisabled = !selectedId || isRoot(project, selectedId);
-  const trashLabel =
-    selectedId && isStoredInTrash(project, selectedId) ? "Delete" : "Move to trash";
+  const pendingRemoval = pendingTrash ? removal(project, pendingTrash) : null;
 
   return (
     <div className={focusMode ? "app focus" : "app"}>
@@ -255,40 +310,11 @@ export default function App() {
           }}
           onSelect={setSelectedId}
           onRenameProject={(title) => setProject(renameProject(project, title))}
-          onAddScene={() => {
-            const inserted = addScene(project, selectedId);
-            selectInserted(inserted.project, inserted.id);
-          }}
-          onAddFolder={() => {
-            const inserted = addFolder(project, selectedId);
-            selectInserted(inserted.project, inserted.id);
-          }}
-          onTrash={() => {
-            if (!selectedId || isRoot(project, selectedId)) {
-              return;
-            }
-            if (isStoredInTrash(project, selectedId)) {
-              const parent = findNode(project, selectedId)?.parent;
-              setProject(deleteForever(project, selectedId));
-              setSelectedId(parent?.id ?? project.trash.id);
-              return;
-            }
-            setProject(moveToTrash(project, selectedId));
-          }}
-          trashLabel={trashLabel}
-          trashDisabled={trashDisabled}
-          onNewProject={beginNewProject}
+          onAddScene={insertScene}
+          onAddSection={insertSection}
+          onAskTrash={askTrash}
         />
         <section className="editor-column">
-          <div className="editor-toolbar">
-            <button
-              type="button"
-              onClick={() => setFocusMode((value) => !value)}
-              title="Hide the binder (Ctrl+Shift+F or Command+Shift+F)"
-            >
-              {focusMode ? "Show binder" : "Focus"}
-            </button>
-          </div>
           <div className="editor-scroll">
             {selected?.node.kind === "document" ? (
               <SceneEditor
@@ -307,7 +333,7 @@ export default function App() {
                 }}
               />
             ) : (
-              <div className="page folder-note">
+              <div className="page section-note">
                 <h1>{selected?.node.title ?? "Manuscript"}</h1>
                 <p>Select a scene to write, or add one here.</p>
               </div>
@@ -322,8 +348,87 @@ export default function App() {
             : "No scene selected"}
         </span>
         <span>Manuscript · {bookWords.toLocaleString()} words</span>
-        <span title={saveError ?? undefined}>{saveLabel(saveState)}</span>
+        <span className="status-end">
+          <span title={saveError ?? undefined}>{saveLabel(saveState)}</span>
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={focusMode ? "Show the binder" : "Hide the binder"}
+            title="Hide the binder (Ctrl+Shift+F or Command+Shift+F)"
+            onClick={() => setFocusMode((value) => !value)}
+          >
+            <Icon name={focusMode ? "binder" : "focus"} />
+          </button>
+        </span>
       </footer>
+      {confirmingNew ? (
+        <ConfirmDialog
+          message="Replace this novel with a blank one? The current book is copied to backups first."
+          confirmLabel="Replace"
+          onCancel={() => setConfirmingNew(false)}
+          onConfirm={() => {
+            void beginNewProject().then(
+              () => setConfirmingNew(false),
+              () => undefined,
+            );
+          }}
+        />
+      ) : null}
+      {pendingTrash && pendingRemoval ? (
+        <ConfirmDialog
+          message={pendingRemoval.message}
+          confirmLabel={pendingRemoval.label}
+          onCancel={() => setPendingTrash(null)}
+          onConfirm={() => {
+            const id = pendingTrash;
+            const action = pendingRemoval.action;
+            setPendingTrash(null);
+            switch (action) {
+              case "delete": {
+                const parent = findNode(project, id)?.parent;
+                setProject(deleteForever(project, id));
+                setSelectedId(parent?.id ?? project.trash.id);
+                return;
+              }
+              case "move":
+                setProject(moveToTrash(project, id));
+                return;
+              default: {
+                const unexpected: never = action;
+                return unexpected;
+              }
+            }
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function ConfirmDialog({
+  message,
+  confirmLabel,
+  onConfirm,
+  onCancel,
+}: {
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="dialog-backdrop">
+      <div className="dialog" role="dialog" aria-modal="true">
+        <p>{message}</p>
+        <div>
+          <button type="button" onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

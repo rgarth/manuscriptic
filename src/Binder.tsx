@@ -1,5 +1,21 @@
-import { useState } from "react";
-import { ROOT_KEYS, type BinderNode, type ProjectFile } from "./model/project";
+import { useState, type MouseEvent } from "react";
+import Icon, { type IconName } from "./icons";
+import {
+  removal,
+  ROOT_KEYS,
+  type BinderNode,
+  type ProjectFile,
+  type RootKey,
+} from "./model/project";
+
+const rootIcons: Record<RootKey, IconName> = {
+  manuscript: "book",
+  characters: "people",
+  places: "place",
+  frontMatter: "front",
+  research: "research",
+  trash: "trash",
+};
 
 type BinderProps = {
   project: ProjectFile;
@@ -8,12 +24,9 @@ type BinderProps = {
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
   onRenameProject: (title: string) => void;
-  onAddScene: () => void;
-  onAddFolder: () => void;
-  onTrash: () => void;
-  trashLabel: string;
-  trashDisabled: boolean;
-  onNewProject: () => Promise<void>;
+  onAddScene: (targetId?: string) => void;
+  onAddSection: (targetId?: string) => void;
+  onAskTrash: (id: string) => void;
 };
 
 export default function Binder({
@@ -24,13 +37,11 @@ export default function Binder({
   onSelect,
   onRenameProject,
   onAddScene,
-  onAddFolder,
-  onTrash,
-  trashLabel,
-  trashDisabled,
-  onNewProject,
+  onAddSection,
+  onAskTrash,
 }: BinderProps) {
-  const [confirmingNew, setConfirmingNew] = useState(false);
+  const [context, setContext] = useState<ContextMenu | null>(null);
+  const selectedRemoval = selectedId ? removal(project, selectedId) : null;
 
   return (
     <aside className="binder">
@@ -45,68 +56,94 @@ export default function Binder({
           <BinderBranch
             key={project[key].id}
             node={project[key]}
+            icon={rootIcons[key]}
             depth={0}
             selectedId={selectedId}
             expanded={expanded}
             onToggle={onToggle}
             onSelect={onSelect}
+            onContext={setContext}
           />
         ))}
       </div>
+      {context ? (
+        <BinderContextMenu
+          project={project}
+          context={context}
+          onClose={() => setContext(null)}
+          onAddScene={onAddScene}
+          onAddSection={onAddSection}
+          onAskTrash={onAskTrash}
+        />
+      ) : null}
       <div className="binder-actions">
-        {confirmingNew ? (
-          <div className="confirm-new">
-            <p>Replace this novel with a blank one? The current book is copied to backups first.</p>
-            <button
-              type="button"
-              onClick={() => {
-                void onNewProject().then(
-                  () => setConfirmingNew(false),
-                  () => undefined,
-                );
-              }}
-            >
-              Replace
-            </button>
-            <button type="button" onClick={() => setConfirmingNew(false)}>
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <button type="button" onClick={() => setConfirmingNew(true)}>
-            New project
-          </button>
-        )}
-        <button type="button" onClick={onAddScene}>
+        <button type="button" className="binder-action" onClick={() => onAddScene()}>
+          <Icon name="scene" />
           New scene
         </button>
-        <button type="button" onClick={onAddFolder}>
-          New folder
+        <button type="button" className="binder-action" onClick={() => onAddSection()}>
+          <Icon name="section" />
+          New section
         </button>
-        <button type="button" onClick={onTrash} disabled={trashDisabled}>
-          {trashLabel}
+        <button
+          type="button"
+          className="binder-action"
+          onClick={() => {
+            if (selectedId) {
+              onAskTrash(selectedId);
+            }
+          }}
+          disabled={selectedRemoval === null}
+        >
+          <Icon name="trash" />
+          {selectedRemoval?.label ?? "Move to Trash"}
         </button>
       </div>
     </aside>
   );
 }
 
+type ContextMenu = {
+  id: string;
+  x: number;
+  y: number;
+};
+
 type BranchProps = {
   node: BinderNode;
+  icon?: IconName;
   depth: number;
   selectedId: string | null;
   expanded: Set<string>;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
+  onContext: (menu: ContextMenu) => void;
 };
+
+function openContext(
+  event: MouseEvent,
+  id: string,
+  onSelect: (id: string) => void,
+  onContext: (menu: ContextMenu) => void,
+) {
+  event.preventDefault();
+  onSelect(id);
+  onContext({
+    id,
+    x: Math.min(event.clientX, window.innerWidth - 196),
+    y: Math.min(event.clientY, window.innerHeight - 132),
+  });
+}
 
 function BinderBranch({
   node,
+  icon,
   depth,
   selectedId,
   expanded,
   onToggle,
   onSelect,
+  onContext,
 }: BranchProps) {
   const open = expanded.has(node.id);
   const selected = node.id === selectedId;
@@ -115,19 +152,23 @@ function BinderBranch({
     case "folder":
       return (
         <div>
-          <div className="tree-row" style={{ paddingLeft: 8 + depth * 14 }}>
+          <div className="tree-row" style={{ paddingLeft: 8 + depth * 16 }}>
             <button
               type="button"
               className={open ? "disclosure open" : "disclosure"}
-              aria-label={open ? "Collapse folder" : "Expand folder"}
+              aria-label={open ? "Collapse section" : "Expand section"}
               onClick={() => onToggle(node.id)}
-            />
+            >
+              <Icon name="chevron" />
+            </button>
             <button
               type="button"
               className={selected ? "tree-item selected" : "tree-item"}
               onClick={() => onSelect(node.id)}
+              onContextMenu={(event) => openContext(event, node.id, onSelect, onContext)}
             >
-              {node.title}
+              <Icon name={icon ?? "section"} />
+              <span>{node.title}</span>
             </button>
           </div>
           {open
@@ -140,6 +181,7 @@ function BinderBranch({
                   expanded={expanded}
                   onToggle={onToggle}
                   onSelect={onSelect}
+                  onContext={onContext}
                 />
               ))
             : null}
@@ -147,13 +189,16 @@ function BinderBranch({
       );
     case "document":
       return (
-        <div className="tree-row" style={{ paddingLeft: 28 + depth * 14 }}>
+        <div className="tree-row" style={{ paddingLeft: 8 + depth * 16 }}>
+          <span className="disclosure-gap" />
           <button
             type="button"
             className={selected ? "tree-item selected" : "tree-item"}
             onClick={() => onSelect(node.id)}
+            onContextMenu={(event) => openContext(event, node.id, onSelect, onContext)}
           >
-            {node.title}
+            <Icon name="scene" />
+            <span>{node.title}</span>
           </button>
         </div>
       );
@@ -162,4 +207,52 @@ function BinderBranch({
       return unexpected;
     }
   }
+}
+
+function BinderContextMenu({
+  project,
+  context,
+  onClose,
+  onAddScene,
+  onAddSection,
+  onAskTrash,
+}: {
+  project: ProjectFile;
+  context: ContextMenu;
+  onClose: () => void;
+  onAddScene: (targetId?: string) => void;
+  onAddSection: (targetId?: string) => void;
+  onAskTrash: (id: string) => void;
+}) {
+  const choice = removal(project, context.id);
+  const items = [
+    { label: "New Scene", disabled: false, run: () => onAddScene(context.id) },
+    { label: "New Section", disabled: false, run: () => onAddSection(context.id) },
+    {
+      label: choice?.label ?? "Move to Trash",
+      disabled: choice === null,
+      run: () => onAskTrash(context.id),
+    },
+  ];
+  return (
+    <>
+      <button type="button" className="menu-dismiss" aria-label="Close menu" onClick={onClose} />
+      <div className="context-menu" style={{ left: context.x, top: context.y }} role="menu">
+        {items.map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            role="menuitem"
+            disabled={item.disabled}
+            onClick={() => {
+              item.run();
+              onClose();
+            }}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </>
+  );
 }
