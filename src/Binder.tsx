@@ -1,4 +1,4 @@
-import type { BinderNode, ProjectFile } from "./model/project";
+import { ROOT_KEYS, type BinderNode, type ProjectFile } from "./model/project";
 
 type BinderProps = {
   project: ProjectFile;
@@ -36,54 +36,17 @@ export default function Binder({
         onChange={(event) => onRenameProject(event.currentTarget.value)}
       />
       <div className="tree">
-        <BinderBranch
-          node={project.manuscript}
-          depth={0}
-          selectedId={selectedId}
-          expanded={expanded}
-          onToggle={onToggle}
-          onSelect={onSelect}
-        />
-        <BinderBranch
-          node={project.characters}
-          depth={0}
-          selectedId={selectedId}
-          expanded={expanded}
-          onToggle={onToggle}
-          onSelect={onSelect}
-        />
-        <BinderBranch
-          node={project.places}
-          depth={0}
-          selectedId={selectedId}
-          expanded={expanded}
-          onToggle={onToggle}
-          onSelect={onSelect}
-        />
-        <BinderBranch
-          node={project.frontMatter}
-          depth={0}
-          selectedId={selectedId}
-          expanded={expanded}
-          onToggle={onToggle}
-          onSelect={onSelect}
-        />
-        <BinderBranch
-          node={project.research}
-          depth={0}
-          selectedId={selectedId}
-          expanded={expanded}
-          onToggle={onToggle}
-          onSelect={onSelect}
-        />
-        <BinderBranch
-          node={project.trash}
-          depth={0}
-          selectedId={selectedId}
-          expanded={expanded}
-          onToggle={onToggle}
-          onSelect={onSelect}
-        />
+        {ROOT_KEYS.map((key) => (
+          <BinderBranch
+            key={project[key].id}
+            node={project[key]}
+            depth={0}
+            selectedId={selectedId}
+            expanded={expanded}
+            onToggle={onToggle}
+            onSelect={onSelect}
+          />
+        ))}
       </div>
       <div className="binder-actions">
         <button type="button" onClick={onAddScene}>
@@ -167,7 +130,7 @@ function BinderBranch({
         </div>
       );
     default: {
-      const unexpected: never = node.kind;
+      const unexpected: never = node;
       return unexpected;
     }
   }

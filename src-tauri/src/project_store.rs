@@ -56,8 +56,11 @@ fn write_backup_if_due(dir: &Path, contents: &str) -> Result<(), String> {
             return Ok(());
         }
     }
-    let stamp = dated_stamp()?;
-    fs::write(backups.join(format!("backup-{stamp}.json")), contents).map_err(|err| err.to_string())
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| err.to_string())?
+        .as_secs();
+    fs::write(backups.join(format!("backup-{secs}.json")), contents).map_err(|err| err.to_string())
 }
 
 fn newest_backup_age(dir: &Path) -> Result<Option<Duration>, String> {
@@ -87,48 +90,3 @@ fn newest_backup_age(dir: &Path) -> Result<Option<Duration>, String> {
     }
 }
 
-fn dated_stamp() -> Result<String, String> {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|err| err.to_string())?
-        .as_secs();
-    let days = (secs / 86_400) as i64;
-    let rem = secs % 86_400;
-    let hour = rem / 3_600;
-    let minute = (rem % 3_600) / 60;
-    let second = rem % 60;
-    let (year, month, day) = civil_from_days(days);
-    Ok(format!("{year:04}{month:02}{day:02}-{hour:02}{minute:02}{second:02}"))
-}
-
-/// Days since the Unix epoch to a civil UTC date.
-/// Howard Hinnant's public-domain `civil_from_days` algorithm.
-fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
-    let z = days_since_epoch + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let year_of_era = yoe as i64;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let month = (if mp < 10 { mp + 3 } else { mp - 9 }) as u32;
-    let year = (if month <= 2 {
-        year_of_era + era * 400 + 1
-    } else {
-        year_of_era + era * 400
-    }) as i32;
-    (year, month, day)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::civil_from_days;
-
-    #[test]
-    fn unix_epoch_is_1970() {
-        assert_eq!(civil_from_days(0), (1970, 1, 1));
-        assert_eq!(civil_from_days(1), (1970, 1, 2));
-        assert_eq!(civil_from_days(365), (1971, 1, 1));
-    }
-}

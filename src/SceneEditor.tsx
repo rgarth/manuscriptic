@@ -1,6 +1,6 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import type { EditorDoc } from "./model/project";
+import { parseEditorDoc, type EditorDoc } from "./model/project";
 
 type SceneEditorProps = {
   title: string;
@@ -19,7 +19,11 @@ const extensions = [
     codeBlock: false,
     blockquote: false,
     horizontalRule: false,
+    hardBreak: false,
+    link: false,
+    listKeymap: false,
     strike: false,
+    underline: false,
   }),
 ];
 
@@ -40,7 +44,10 @@ export default function SceneEditor({
       },
     },
     onUpdate: ({ editor: current }) => {
-      onContent(current.getJSON() as EditorDoc);
+      const parsed = parseEditorDoc(current.getJSON());
+      if (parsed) {
+        onContent(parsed);
+      }
     },
   });
 

@@ -1,24 +1,38 @@
-export type BinderKind = "folder" | "document";
+export type Mark = { type: "bold" } | { type: "italic" };
 
-export type EditorBlock = {
-  type: string;
-  text?: string;
-  content?: EditorBlock[];
+export type TextRun = {
+  type: "text";
+  text: string;
+  marks?: Mark[];
+};
+
+export type Paragraph = {
+  type: "paragraph";
+  content?: TextRun[];
 };
 
 export type EditorDoc = {
   type: "doc";
-  content?: EditorBlock[];
+  content: Paragraph[];
 };
 
-export type BinderNode = {
+type BinderFields = {
   id: string;
   title: string;
-  kind: BinderKind;
   includeInCompile: boolean;
-  children: BinderNode[];
-  content: EditorDoc | null;
 };
+
+export type FolderNode = BinderFields & {
+  kind: "folder";
+  children: BinderNode[];
+};
+
+export type DocumentNode = BinderFields & {
+  kind: "document";
+  content: EditorDoc;
+};
+
+export type BinderNode = FolderNode | DocumentNode;
 
 export const ROOT_KEYS = [
   "manuscript",
@@ -34,18 +48,23 @@ export type RootKey = (typeof ROOT_KEYS)[number];
 export type ProjectFile = {
   version: 1;
   title: string;
-  manuscript: BinderNode;
-  characters: BinderNode;
-  places: BinderNode;
-  frontMatter: BinderNode;
-  research: BinderNode;
-  trash: BinderNode;
+  manuscript: FolderNode;
+  characters: FolderNode;
+  places: FolderNode;
+  frontMatter: FolderNode;
+  research: FolderNode;
+  trash: FolderNode;
 };
 
 export type LocatedNode = {
   node: BinderNode;
-  parent: BinderNode | null;
+  parent: FolderNode | null;
   root: RootKey;
+};
+
+export type InsertedNode = {
+  project: ProjectFile;
+  id: string;
 };
 
 export function emptyDoc(): EditorDoc {
@@ -74,10 +93,28 @@ export function parseProject(raw: string): ProjectFile | null {
   } catch {
     return null;
   }
-  if (!isProjectFile(value)) {
+  return parseProjectValue(value);
+}
+
+export function parseEditorDoc(value: unknown): EditorDoc | null {
+  if (!isRecord(value) || value.type !== "doc") {
     return null;
   }
-  return value;
+  if (value.content === undefined) {
+    return { type: "doc", content: [] };
+  }
+  if (!Array.isArray(value.content)) {
+    return null;
+  }
+  const content: Paragraph[] = [];
+  for (const block of value.content) {
+    const paragraph = parseParagraph(block);
+    if (!paragraph) {
+      return null;
+    }
+    content.push(paragraph);
+  }
+  return { type: "doc", content };
 }
 
 export function findNode(project: ProjectFile, id: string): LocatedNode | null {
@@ -111,7 +148,7 @@ export function firstDocumentId(node: BinderNode): string | null {
       }
       return null;
     default: {
-      const unexpected: never = node.kind;
+      const unexpected: never = node;
       return unexpected;
     }
   }
@@ -129,11 +166,7 @@ export function renameProject(project: ProjectFile, title: string): ProjectFile 
   return { ...project, title };
 }
 
-export function renameNode(
-  project: ProjectFile,
-  id: string,
-  title: string,
-): ProjectFile {
+export function renameNode(project: ProjectFile, id: string, title: string): ProjectFile {
   return editNode(project, id, (node) => ({ ...node, title }));
 }
 
@@ -142,17 +175,26 @@ export function setDocumentContent(
   id: string,
   content: EditorDoc,
 ): ProjectFile {
-  return editNode(project, id, (node) => ({ ...node, content }));
+  return editNode(project, id, (node) => {
+    switch (node.kind) {
+      case "document":
+        return { ...node, content };
+      case "folder":
+        return node;
+      default: {
+        const unexpected: never = node;
+        return unexpected;
+      }
+    }
+  });
 }
 
-export function addScene(project: ProjectFile, selectedId: string | null): ProjectFile {
-  const scene = documentNode("New scene");
-  return insertChild(project, destinationId(project, selectedId), scene);
+export function addScene(project: ProjectFile, selectedId: string | null): InsertedNode {
+  return addNode(project, selectedId, documentNode("New scene"));
 }
 
-export function addFolder(project: ProjectFile, selectedId: string | null): ProjectFile {
-  const folder = folderNode("New folder");
-  return insertChild(project, destinationId(project, selectedId), folder);
+export function addFolder(project: ProjectFile, selectedId: string | null): InsertedNode {
+  return addNode(project, selectedId, folderNode("New folder"));
 }
 
 export function moveToTrash(project: ProjectFile, id: string): ProjectFile {
@@ -164,10 +206,18 @@ export function moveToTrash(project: ProjectFile, id: string): ProjectFile {
   if (!node) {
     return project;
   }
-  return editNode(removed.project, removed.project.trash.id, (trash) => ({
-    ...trash,
-    children: [...trash.children, node],
-  }));
+  return editNode(removed.project, removed.project.trash.id, (trash) => {
+    switch (trash.kind) {
+      case "folder":
+        return { ...trash, children: [...trash.children, node] };
+      case "document":
+        return trash;
+      default: {
+        const unexpected: never = trash;
+        return unexpected;
+      }
+    }
+  });
 }
 
 export function deleteForever(project: ProjectFile, id: string): ProjectFile {
@@ -177,7 +227,7 @@ export function deleteForever(project: ProjectFile, id: string): ProjectFile {
   return removeFromProject(project, id).project;
 }
 
-export function wordCount(doc: EditorDoc | null): number {
+export function wordCount(doc: EditorDoc): number {
   const text = docText(doc).trim();
   if (!text) {
     return 0;
@@ -189,26 +239,29 @@ export function manuscriptWordCount(project: ProjectFile): number {
   return treeWordCount(project.manuscript);
 }
 
-function folderNode(title: string, children: BinderNode[] = []): BinderNode {
+function folderNode(title: string, children: BinderNode[] = []): FolderNode {
   return {
     id: crypto.randomUUID(),
     title,
     kind: "folder",
     includeInCompile: true,
     children,
-    content: null,
   };
 }
 
-function documentNode(title: string): BinderNode {
+function documentNode(title: string): DocumentNode {
   return {
     id: crypto.randomUUID(),
     title,
     kind: "document",
     includeInCompile: true,
-    children: [],
     content: emptyDoc(),
   };
+}
+
+function addNode(project: ProjectFile, selectedId: string | null, child: BinderNode): InsertedNode {
+  const next = insertChild(project, destinationId(project, selectedId), child);
+  return { project: next ?? project, id: child.id };
 }
 
 function destinationId(project: ProjectFile, selectedId: string | null): string {
@@ -225,25 +278,29 @@ function destinationId(project: ProjectFile, selectedId: string | null): string 
     case "document":
       return located.parent?.id ?? project.manuscript.id;
     default: {
-      const unexpected: never = located.node.kind;
+      const unexpected: never = located.node;
       return unexpected;
     }
   }
 }
 
-function insertChild(
-  project: ProjectFile,
-  parentId: string,
-  child: BinderNode,
-): ProjectFile {
+function insertChild(project: ProjectFile, parentId: string, child: BinderNode): ProjectFile | null {
   const parent = findNode(project, parentId);
   if (!parent || parent.node.kind !== "folder") {
-    return project;
+    return null;
   }
-  return editNode(project, parentId, (node) => ({
-    ...node,
-    children: [...node.children, child],
-  }));
+  return editNode(project, parentId, (node) => {
+    switch (node.kind) {
+      case "folder":
+        return { ...node, children: [...node.children, child] };
+      case "document":
+        return node;
+      default: {
+        const unexpected: never = node;
+        return unexpected;
+      }
+    }
+  });
 }
 
 function editNode(
@@ -253,7 +310,11 @@ function editNode(
 ): ProjectFile {
   const next = { ...project };
   for (const key of ROOT_KEYS) {
-    next[key] = mapNode(project[key], id, updater);
+    const mapped = mapNode(project[key], id, updater);
+    if (mapped.kind !== "folder") {
+      return project;
+    }
+    next[key] = mapped;
   }
   return next;
 }
@@ -266,18 +327,28 @@ function mapNode(
   if (node.id === id) {
     return updater(node);
   }
-  let changed = false;
-  const children = node.children.map((child) => {
-    const next = mapNode(child, id, updater);
-    if (next !== child) {
-      changed = true;
+  switch (node.kind) {
+    case "document":
+      return node;
+    case "folder": {
+      let changed = false;
+      const children = node.children.map((child) => {
+        const next = mapNode(child, id, updater);
+        if (next !== child) {
+          changed = true;
+        }
+        return next;
+      });
+      if (!changed) {
+        return node;
+      }
+      return { ...node, children };
     }
-    return next;
-  });
-  if (!changed) {
-    return node;
+    default: {
+      const unexpected: never = node;
+      return unexpected;
+    }
   }
-  return { ...node, children };
 }
 
 function removeFromProject(
@@ -288,6 +359,9 @@ function removeFromProject(
   let removed: BinderNode | null = null;
   for (const key of ROOT_KEYS) {
     const result = removeNode(project[key], id);
+    if (result.node.kind !== "folder") {
+      return { project, node: null };
+    }
     next[key] = result.node;
     if (result.removed) {
       removed = result.removed;
@@ -300,50 +374,78 @@ function removeNode(
   node: BinderNode,
   id: string,
 ): { node: BinderNode; removed: BinderNode | null } {
-  let removed: BinderNode | null = null;
-  const children: BinderNode[] = [];
-  let changed = false;
-  for (const child of node.children) {
-    if (child.id === id) {
-      removed = child;
-      changed = true;
-      continue;
+  switch (node.kind) {
+    case "document":
+      return { node, removed: null };
+    case "folder": {
+      let removed: BinderNode | null = null;
+      const children: BinderNode[] = [];
+      let changed = false;
+      for (const child of node.children) {
+        if (child.id === id) {
+          removed = child;
+          changed = true;
+          continue;
+        }
+        const nested = removeNode(child, id);
+        if (nested.removed) {
+          removed = nested.removed;
+          changed = true;
+        }
+        children.push(nested.node);
+      }
+      if (!changed) {
+        return { node, removed: null };
+      }
+      return { node: { ...node, children }, removed };
     }
-    const nested = removeNode(child, id);
-    if (nested.removed) {
-      removed = nested.removed;
-      changed = true;
+    default: {
+      const unexpected: never = node;
+      return { node: unexpected, removed: null };
     }
-    children.push(nested.node);
   }
-  if (!changed) {
-    return { node, removed: null };
-  }
-  return { node: { ...node, children }, removed };
 }
 
 function search(
   node: BinderNode,
-  parent: BinderNode | null,
+  parent: FolderNode | null,
   id: string,
-): { node: BinderNode; parent: BinderNode | null } | null {
+): { node: BinderNode; parent: FolderNode | null } | null {
   if (node.id === id) {
     return { node, parent };
   }
-  for (const child of node.children) {
-    const found = search(child, node, id);
-    if (found) {
-      return found;
+  switch (node.kind) {
+    case "document":
+      return null;
+    case "folder":
+      for (const child of node.children) {
+        const found = search(child, node, id);
+        if (found) {
+          return found;
+        }
+      }
+      return null;
+    default: {
+      const unexpected: never = node;
+      return unexpected;
     }
   }
-  return null;
 }
 
 function contains(node: BinderNode, id: string): boolean {
   if (node.id === id) {
     return true;
   }
-  return node.children.some((child) => contains(child, id));
+  switch (node.kind) {
+    case "document":
+      return false;
+    case "folder":
+      return node.children.some((child) => contains(child, id));
+    default: {
+      const unexpected: never = node;
+      return unexpected;
+    }
+  }
 }
 
 function collectFolderIds(node: BinderNode, ids: string[]): void {
@@ -357,8 +459,8 @@ function collectFolderIds(node: BinderNode, ids: string[]): void {
     case "document":
       return;
     default: {
-      const unexpected: never = node.kind;
-      throw new Error(`Unexpected binder kind: ${String(unexpected)}`);
+      const unexpected: never = node;
+      throw new Error(`Unexpected binder node: ${String(unexpected)}`);
     }
   }
 }
@@ -370,62 +472,131 @@ function treeWordCount(node: BinderNode): number {
     case "folder":
       return node.children.reduce((sum, child) => sum + treeWordCount(child), 0);
     default: {
-      const unexpected: never = node.kind;
+      const unexpected: never = node;
       return unexpected;
     }
   }
 }
 
-function docText(doc: EditorDoc | null): string {
-  if (!doc?.content) {
-    return "";
-  }
-  return doc.content.map((block) => blockText(block)).join("\n");
+function docText(doc: EditorDoc): string {
+  return doc.content
+    .map((paragraph) => (paragraph.content ?? []).map((run) => run.text).join(""))
+    .join("\n");
 }
 
-function blockText(node: EditorBlock): string {
-  const own = node.text ?? "";
-  const children = (node.content ?? []).map((child) => blockText(child)).join("");
-  return own + children;
+function parseProjectValue(value: unknown): ProjectFile | null {
+  if (!isRecord(value) || value.version !== 1 || typeof value.title !== "string") {
+    return null;
+  }
+  const roots = {} as Pick<ProjectFile, RootKey>;
+  for (const key of ROOT_KEYS) {
+    const node = parseBinderNode(value[key]);
+    if (!node || node.kind !== "folder") {
+      return null;
+    }
+    roots[key] = node;
+  }
+  return { version: 1, title: value.title, ...roots };
 }
 
-function isProjectFile(value: unknown): value is ProjectFile {
-  if (!isRecord(value)) {
-    return false;
-  }
-  if (value.version !== 1 || typeof value.title !== "string") {
-    return false;
-  }
-  return ROOT_KEYS.every((key) => isBinderNode(value[key]));
-}
-
-function isBinderNode(value: unknown): value is BinderNode {
-  if (!isRecord(value)) {
-    return false;
-  }
-  if (typeof value.id !== "string" || typeof value.title !== "string") {
-    return false;
-  }
-  if (value.kind !== "folder" && value.kind !== "document") {
-    return false;
+function parseBinderNode(value: unknown): BinderNode | null {
+  if (!isRecord(value) || typeof value.id !== "string" || typeof value.title !== "string") {
+    return null;
   }
   if (typeof value.includeInCompile !== "boolean") {
-    return false;
+    return null;
   }
-  if (!Array.isArray(value.children) || !value.children.every(isBinderNode)) {
-    return false;
+  const fields = {
+    id: value.id,
+    title: value.title,
+    includeInCompile: value.includeInCompile,
+  };
+  switch (value.kind) {
+    case "folder": {
+      if (!Array.isArray(value.children)) {
+        return null;
+      }
+      const children: BinderNode[] = [];
+      for (const child of value.children) {
+        const parsed = parseBinderNode(child);
+        if (!parsed) {
+          return null;
+        }
+        children.push(parsed);
+      }
+      return { ...fields, kind: "folder", children };
+    }
+    case "document": {
+      const content = value.content == null ? emptyDoc() : parseEditorDoc(value.content);
+      if (!content) {
+        return null;
+      }
+      return { ...fields, kind: "document", content };
+    }
+    default:
+      return null;
   }
-  if (value.content === null) {
-    return true;
-  }
-  return isEditorDoc(value.content);
 }
 
-function isEditorDoc(value: unknown): value is EditorDoc {
-  if (!isRecord(value) || value.type !== "doc") {
-    return false;
+function parseParagraph(value: unknown): Paragraph | null {
+  if (!isRecord(value) || value.type !== "paragraph") {
+    return null;
   }
-  return value.content === undefined || Array.isArray(value.content);
+  if (value.content === undefined) {
+    return { type: "paragraph" };
+  }
+  if (!Array.isArray(value.content)) {
+    return null;
+  }
+  const content: TextRun[] = [];
+  for (const child of value.content) {
+    const run = parseTextRun(child);
+    if (!run) {
+      return null;
+    }
+    content.push(run);
+  }
+  return { type: "paragraph", content };
+}
+
+function parseTextRun(value: unknown): TextRun | null {
+  if (!isRecord(value) || value.type !== "text" || typeof value.text !== "string") {
+    return null;
+  }
+  const marks = parseMarks(value.marks);
+  if (!marks) {
+    return null;
+  }
+  if (marks.length === 0) {
+    return { type: "text", text: value.text };
+  }
+  return { type: "text", text: value.text, marks };
+}
+
+function parseMarks(value: unknown): Mark[] | null {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const marks: Mark[] = [];
+  for (const mark of value) {
+    if (!isRecord(mark)) {
+      return null;
+    }
+    switch (mark.type) {
+      case "bold":
+        marks.push({ type: "bold" });
+        break;
+      case "italic":
+        marks.push({ type: "italic" });
+        break;
+      default:
+        return null;
+    }
+  }
+  return marks;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -163,8 +163,20 @@ export default function App() {
     enqueueSave(generation.current, JSON.stringify(current));
   }
 
-  function updateProject(next: ProjectFile) {
+  function selectInserted(next: ProjectFile, id: string) {
     setProject(next);
+    setSelectedId(id);
+    const located = findNode(next, id);
+    setExpanded((current) => {
+      const open = new Set(current);
+      if (located?.parent) {
+        open.add(located.parent.id);
+      }
+      if (located?.node.kind === "folder") {
+        open.add(located.node.id);
+      }
+      return open;
+    });
   }
 
   if (loadError && !project) {
@@ -214,32 +226,14 @@ export default function App() {
             });
           }}
           onSelect={setSelectedId}
-          onRenameProject={(title) => updateProject(renameProject(project, title))}
+          onRenameProject={(title) => setProject(renameProject(project, title))}
           onAddScene={() => {
-            const next = addScene(project, selectedId);
-            updateProject(next);
-            const created = newestChild(next, project);
-            if (created) {
-              setSelectedId(created);
-              setExpanded((current) => new Set(current).add(parentOf(next, created) ?? ""));
-            }
+            const inserted = addScene(project, selectedId);
+            selectInserted(inserted.project, inserted.id);
           }}
           onAddFolder={() => {
-            const next = addFolder(project, selectedId);
-            updateProject(next);
-            const created = newestChild(next, project);
-            if (created) {
-              setSelectedId(created);
-              setExpanded((current) => {
-                const open = new Set(current);
-                open.add(created);
-                const parent = parentOf(next, created);
-                if (parent) {
-                  open.add(parent);
-                }
-                return open;
-              });
-            }
+            const inserted = addFolder(project, selectedId);
+            selectInserted(inserted.project, inserted.id);
           }}
           onTrash={() => {
             if (!selectedId || isRoot(project, selectedId)) {
@@ -247,11 +241,11 @@ export default function App() {
             }
             if (isStoredInTrash(project, selectedId)) {
               const parent = findNode(project, selectedId)?.parent;
-              updateProject(deleteForever(project, selectedId));
+              setProject(deleteForever(project, selectedId));
               setSelectedId(parent?.id ?? project.trash.id);
               return;
             }
-            updateProject(moveToTrash(project, selectedId));
+            setProject(moveToTrash(project, selectedId));
           }}
           trashLabel={trashLabel}
           trashDisabled={trashDisabled}
@@ -267,7 +261,7 @@ export default function App() {
             </button>
           </div>
           <div className="editor-scroll">
-            {selected?.node.kind === "document" && selected.node.content ? (
+            {selected?.node.kind === "document" ? (
               <SceneEditor
                 key={selected.node.id}
                 title={selected.node.title}
@@ -322,29 +316,3 @@ function saveLabel(state: SaveState): string {
   }
 }
 
-function newestChild(next: ProjectFile, previous: ProjectFile): string | null {
-  const before = new Set(allIds(previous));
-  return allIds(next).find((id) => !before.has(id)) ?? null;
-}
-
-function parentOf(project: ProjectFile, id: string): string | null {
-  return findNode(project, id)?.parent?.id ?? null;
-}
-
-function allIds(project: ProjectFile): string[] {
-  const ids: string[] = [];
-  collectIds(project.manuscript, ids);
-  collectIds(project.characters, ids);
-  collectIds(project.places, ids);
-  collectIds(project.frontMatter, ids);
-  collectIds(project.research, ids);
-  collectIds(project.trash, ids);
-  return ids;
-}
-
-function collectIds(node: ProjectFile["manuscript"], ids: string[]): void {
-  ids.push(node.id);
-  for (const child of node.children) {
-    collectIds(child, ids);
-  }
-}
