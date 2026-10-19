@@ -1,4 +1,5 @@
 import { uniqueWords } from "../dictionary.ts";
+import { defaultPageLayout, pageLayout, type PageLayout } from "../pageLayout.ts";
 import { emptyDoc, parseEditorDoc, wordCount, type EditorDoc } from "./editorDoc.ts";
 
 export type TrashOrigin = {
@@ -38,6 +39,8 @@ export type ProjectView = {
   expanded: string[] | null;
 };
 
+export type { PageLayout };
+
 export type ProjectFile = {
   version: 2;
   title: string;
@@ -46,6 +49,7 @@ export type ProjectFile = {
   publishing: FolderNode;
   trash: FolderNode;
   dictionary: string[];
+  layout: PageLayout;
   view: ProjectView;
 };
 
@@ -81,9 +85,22 @@ export function createNovelProject(): ProjectFile {
     ),
     trash: folderNode("Trash"),
     dictionary: [],
+    layout: defaultPageLayout(),
     view: { selectedId: manuscript.id, expanded: null },
   };
-  return setView(novel, { expanded: folderIds(novel) });
+  return setView(novel, { expanded: [manuscript.id] });
+}
+
+export function setPageLayout(project: ProjectFile, layout: PageLayout): ProjectFile {
+  const next = pageLayout(layout);
+  if (
+    next.font === project.layout.font &&
+    next.points === project.layout.points &&
+    next.align === project.layout.align
+  ) {
+    return project;
+  }
+  return { ...project, layout: next };
 }
 
 export function setView(project: ProjectFile, view: Partial<ProjectView>): ProjectFile {
@@ -432,6 +449,7 @@ function parseVersion2(value: Record<string, unknown>): ProjectFile | null {
     ...roots,
     publishing: arrangePublishing(roots.publishing),
     dictionary: parseDictionary(value.dictionary),
+    layout: pageLayout(value.layout),
     view: parseView(value.view),
   };
 }
@@ -480,6 +498,7 @@ function migrateVersion1(value: Record<string, unknown>): ProjectFile | null {
     ),
     trash: assignFolder(trash, "scene", null),
     dictionary: [],
+    layout: defaultPageLayout(),
     view: { selectedId: null, expanded: null },
   };
 }

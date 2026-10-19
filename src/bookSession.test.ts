@@ -45,6 +45,8 @@ test("an unchanged book does not grow a snapshot, and a rename does", () => {
 test("a menu command is one of the known actions", () => {
   assert.deepEqual(menuCommand({ name: "save-as" }), { name: "save-as" });
   assert.deepEqual(menuCommand({ name: "format", command: "bold" }), { name: "format", command: "bold" });
+  assert.deepEqual(menuCommand({ name: "align", align: "left" }), { name: "align", align: "left" });
+  assert.equal(menuCommand({ name: "align", align: "nope" }), null);
   assert.equal(menuCommand({ name: "format", command: "nope" }), null);
   assert.equal(menuCommand({ name: "explode" }), null);
 });

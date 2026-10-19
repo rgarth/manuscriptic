@@ -1,17 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { takePendingFailures } from "./failures.ts";
-import {
-  alignmentById,
-  displayPixels,
-  fontFamily,
-  fontName,
-  getEditorPrefs,
-  nextZoom,
-  pointSize,
-  setEditorFont,
-  zoomPercent,
-} from "./editorPrefs.ts";
+import { getEditorPrefs, nextZoom, setZoom, zoomPercent } from "./editorPrefs.ts";
+import { alignmentById, displayPixels, fontFamily, fontName, pointSize } from "./pageLayout.ts";
 
 test("the book face defaults to garamond and any other face is kept", () => {
   assert.equal(fontName(null), "EB Garamond");
@@ -30,9 +21,9 @@ test("the page defaults to justified and can sit left, center, or right", () => 
   assert.equal(alignmentById("right"), "right");
 });
 
-test("a typeface that cannot be saved stays as it was", () => {
+test("a zoom that cannot be saved stays as it was", () => {
   takePendingFailures();
-  const previous = getEditorPrefs().font;
+  const previous = getEditorPrefs().zoom;
   const original = globalThis.localStorage;
   Object.defineProperty(globalThis, "localStorage", {
     configurable: true,
@@ -44,8 +35,8 @@ test("a typeface that cannot be saved stays as it was", () => {
     },
   });
   try {
-    setEditorFont("Comic Sans MS");
-    assert.equal(getEditorPrefs().font, previous);
+    setZoom(previous === 150 ? 125 : 150);
+    assert.equal(getEditorPrefs().zoom, previous);
     assert.deepEqual(takePendingFailures(), ["quota"]);
   } finally {
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });

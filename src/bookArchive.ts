@@ -277,6 +277,7 @@ function binderValue(project: ProjectFile): unknown {
     version: project.version,
     title: project.title,
     dictionary: project.dictionary,
+    layout: project.layout,
     view: project.view,
     manuscript: binderNode(project.manuscript),
     notes: binderNode(project.notes),

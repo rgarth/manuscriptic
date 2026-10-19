@@ -35,6 +35,7 @@ import {
   renameNode,
   renameProject,
   setDocumentContent,
+  setPageLayout,
   setView,
   type ProjectFile,
 } from "./model/project";
@@ -46,7 +47,7 @@ import {
   applyBookStorage,
   bookFileName,
   booksOnStartup,
-  joinNovelPath,
+  titleFromBookPath,
   markBookClosed,
   readFilePreferences,
   readSnapshotMinutes,
@@ -57,6 +58,7 @@ import { menuCommand, type MenuCommand } from "./menuCommand";
 import { pickNovelSaveAs, pickNovelToOpen, resolveDirectory } from "./novelFile";
 import Settings from "./Settings";
 import { readBook, writeBook } from "./storage";
+import { useBookLock } from "./useBookLock";
 import { bookQuery, openBookWindow, tauriAvailable } from "./windows";
 import "./App.css";
 
@@ -74,8 +76,6 @@ export default function App() {
   const [snapshotMinutes, setSnapshotMinutes] = useState<SnapshotMinutes>(() =>
     readSnapshotMinutes(localStorage),
   );
-  const [naming, setNaming] = useState(false);
-  const [nameDraft, setNameDraft] = useState("");
   const [pendingTrash, setPendingTrash] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -89,7 +89,6 @@ export default function App() {
   const fileBusy = useRef(false);
   const runMenu = useRef<(command: MenuCommand) => void>(() => undefined);
   const dialogs = useRef({
-    naming: false,
     pendingTrash: null as string | null,
     settingsOpen: false,
   });
@@ -97,7 +96,7 @@ export default function App() {
   projectRef.current = project;
   filePathRef.current = filePath;
   historyRef.current = history;
-  dialogs.current = { naming, pendingTrash, settingsOpen };
+  dialogs.current = { pendingTrash, settingsOpen };
 
   useEffect(() => {
     let cancelled = false;
@@ -163,10 +162,6 @@ export default function App() {
           setSettingsOpen(false);
           return;
         }
-        if (dialogs.current.naming) {
-          setNaming(false);
-          return;
-        }
         if (dialogs.current.pendingTrash) {
           setPendingTrash(null);
           return;
@@ -206,6 +201,7 @@ export default function App() {
 
   useEffect(() => {
     function onBlur() {
+      bookLock.onBlur();
       flushSave();
     }
     window.addEventListener("blur", onBlur);
@@ -233,11 +229,17 @@ export default function App() {
     if (!path || !current || !bookHistory) {
       return Promise.resolve();
     }
+    if (bookLock.blockSave()) {
+      return Promise.resolve();
+    }
     const files = filesToSave(current, bookHistory);
     setSaveState("saving");
     const pending = saveQueue.current.then(async () => {
       if (saveGeneration !== generation.current) {
         throw new Error("Save was superseded.");
+      }
+      if (!(await bookLock.stillOurs(path))) {
+        throw new Error("This book is open somewhere else. This window did not save.");
       }
       await writeBook(path, files, true);
       if (saveGeneration !== generation.current) {
@@ -289,42 +291,98 @@ export default function App() {
     }
   }
 
-  async function loadBook(path: string) {
+  function cancelSave() {
+    generation.current += 1;
+    if (pendingSave.current !== null) {
+      window.clearTimeout(pendingSave.current);
+      pendingSave.current = null;
+    }
+  }
+
+  function dropBook() {
+    cancelSave();
+    historyRef.current = null;
+    filePathRef.current = null;
+    setHistory(null);
+    setFilePath(null);
+    setProject(null);
+    setReady(true);
+    setSaveState("saved");
+    setSaveError(null);
+  }
+
+  async function reloadSavedBook(path: string) {
     const opened = bookFromArchive(await readBook(path));
+    if (filePathRef.current !== path) {
+      return;
+    }
     showBook(opened.project, path, opened.history);
   }
 
-  async function createNamedBook(name: string) {
-    const created = newBook(name);
-    if (!created) {
-      showNotice("A book needs a name.");
+  const bookLock = useBookLock(filePath, {
+    showNotice,
+    currentPath: () => filePathRef.current,
+    reload: reloadSavedBook,
+    drop: dropBook,
+    cancelSave,
+    setSaved() {
+      setSaveState("saved");
+      setSaveError(null);
+    },
+    setSaveError(message) {
+      setSaveState("error");
+      setSaveError(message);
+    },
+  });
+
+  async function loadBook(path: string) {
+    if (!(await bookLock.ensure(path))) {
+      setReady(true);
       return;
     }
-    const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
-    const path = joinNovelPath(directory, created.fileName);
+    const opened = bookFromArchive(await readBook(path));
+    showBook(opened.project, path, opened.history);
+    bookLock.held();
+  }
+
+  async function createBook() {
+    if (fileBusy.current) {
+      return;
+    }
+    fileBusy.current = true;
     try {
-      await writeBook(path, created.files, false);
-    } catch (error: unknown) {
-      const taken = takenNameMessage(error);
-      if (taken) {
-        throw new Error(taken);
+      const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
+      const path = await pickNovelSaveAs(directory, bookFileName("Untitled Novel"), "New Book");
+      if (!path) {
+        return;
       }
-      throw error;
+      const created = newBook(titleFromBookPath(path));
+      if (!created) {
+        showNotice("A book needs a name.");
+        return;
+      }
+      await writeBook(path, created.files, false);
+      showNotice(null);
+      if (projectRef.current) {
+        await openBookWindow(path, created.title);
+        return;
+      }
+      if (!(await bookLock.ensure(path))) {
+        return;
+      }
+      showBook(created.project, path, created.history);
+      bookLock.held();
+    } catch (error: unknown) {
+      showNotice(takenNameMessage(error) ?? error, "Could not create a novel.");
+    } finally {
+      fileBusy.current = false;
     }
-    setNaming(false);
-    setNameDraft("");
-    showNotice(null);
-    if (projectRef.current) {
-      await openBookWindow(path, created.title);
-      return;
-    }
-    showBook(created.project, path, created.history);
   }
 
   function recordSnapshot(kind: "manual" | "auto") {
     const current = projectRef.current;
     const bookHistory = historyRef.current;
-    if (!current || !bookHistory || !filePathRef.current) {
+    if (!current || !bookHistory || !filePathRef.current || bookLock.lost()) {
       return;
     }
     const next = recordedSnapshot(bookHistory, current, kind, Date.now(), crypto.randomUUID());
@@ -392,7 +450,7 @@ export default function App() {
   function runMenuCommand(command: MenuCommand) {
     switch (command.name) {
       case "new":
-        setNaming(true);
+        void createBook();
         return;
       case "open":
         void openNovelFile();
@@ -420,6 +478,11 @@ export default function App() {
         return;
       case "format":
         commands().format?.(command.command);
+        return;
+      case "align":
+        setProject((current) =>
+          current ? setPageLayout(current, { ...current.layout, align: command.align }) : current,
+        );
         return;
       default: {
         const unexpected: never = command;
@@ -468,9 +531,17 @@ export default function App() {
       if (!path || !historyRef.current) {
         return;
       }
+      const previous = filePathRef.current;
+      if (previous !== path && !(await bookLock.ensure(path))) {
+        return;
+      }
       await writeBook(path, filesToSave(current, historyRef.current), true);
+      if (previous && previous !== path) {
+        await bookLock.release(previous);
+      }
       filePathRef.current = path;
       setFilePath(path);
+      bookLock.held();
       setSaveState("saved");
       setSaveError(null);
       rememberOpenBook(localStorage, path);
@@ -493,6 +564,7 @@ export default function App() {
       newSection: project ? () => runMenu.current({ name: "new-section" }) : null,
       trash: project ? () => runMenu.current({ name: "trash" }) : null,
       removal: project && selectedId ? removal(project, selectedId) : null,
+      align: project?.layout.align ?? "justify",
       leafLabel: project ? leafAction(project, selectedId).menuLabel : "New Scene",
     });
   }, [project, selectedId]);
@@ -502,6 +574,20 @@ export default function App() {
       showNotice(error, "Could not install the menu.");
     });
   }, []);
+
+  useEffect(() => {
+    if (!tauriAvailable()) {
+      return;
+    }
+    function onFocus() {
+      void installAppMenu().catch((error: unknown) => {
+        showNotice(error, "Could not install the menu.");
+      });
+      bookLock.onFocus();
+    }
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [showNotice]);
 
   useEffect(() => {
     if (!tauriAvailable()) {
@@ -582,42 +668,6 @@ export default function App() {
     );
   }
 
-  function namePanel() {
-    if (!naming) {
-      return null;
-    }
-    return (
-      <div className="dialog-backdrop">
-        <form
-          className="dialog"
-          role="dialog"
-          aria-modal="true"
-          aria-label="New book"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void createNamedBook(nameDraft).catch((error: unknown) => {
-              showNotice(error, "Could not create a novel.");
-            });
-          }}
-        >
-          <p>Name this book. It is saved as a file in the folder you chose.</p>
-          <input
-            aria-label="Book name"
-            value={nameDraft}
-            autoFocus
-            onChange={(event) => setNameDraft(event.currentTarget.value)}
-          />
-          <div>
-            <button type="submit">Create</button>
-            <button type="button" onClick={() => setNaming(false)}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    );
-  }
-
   function insertScene(targetId?: string) {
     if (!project) {
       return;
@@ -687,7 +737,12 @@ export default function App() {
             >
               Open
             </button>
-            <button type="button" onClick={() => setNaming(true)}>
+            <button
+              type="button"
+              onClick={() => {
+                void createBook();
+              }}
+            >
               Create New
             </button>
           </div>
@@ -695,7 +750,6 @@ export default function App() {
           <p>Opening project…</p>
         )}
         {settingsPanel([], () => undefined, () => undefined)}
-        {namePanel()}
       </main>
     );
   }
@@ -761,6 +815,10 @@ export default function App() {
                     current ? setDocumentContent(current, id, content) : current,
                   );
                 }}
+                layout={project.layout}
+                onLayout={(layout) => {
+                  setProject((current) => (current ? setPageLayout(current, layout) : current));
+                }}
                 dictionary={project.dictionary}
                 onAddWord={addWord}
                 onRemoveWord={removeWord}
@@ -798,7 +856,6 @@ export default function App() {
         <span>{saveError ?? saveLabel(saveState)}</span>
       </footer>
       {settingsPanel(project.dictionary, addWord, removeWord)}
-      {namePanel()}
       {pendingTrash && pendingRemoval ? (
         <ConfirmDialog
           message={pendingRemoval.message}

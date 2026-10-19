@@ -81,20 +81,21 @@ export default function Binder({
       {open ? (
         <div className="tree">
           {ROOT_KEYS.map((key) => (
-            <BinderBranch
-              key={project[key].id}
-              node={project[key]}
-              icon={rootIcons[key]}
-              depth={0}
-              selectedId={selectedId}
-              expanded={expanded}
-              onToggle={onToggle}
-              onSelect={onSelect}
-              onContext={setContext}
-              drop={drop}
-              onDropTarget={setDrop}
-              onPlace={onPlace}
-            />
+            <div key={project[key].id} className={key === "manuscript" ? "tree-manuscript" : undefined}>
+              <BinderBranch
+                node={project[key]}
+                icon={rootIcons[key]}
+                depth={0}
+                selectedId={selectedId}
+                expanded={expanded}
+                onToggle={onToggle}
+                onSelect={onSelect}
+                onContext={setContext}
+                drop={drop}
+                onDropTarget={setDrop}
+                onPlace={onPlace}
+              />
+            </div>
           ))}
         </div>
       ) : null}
@@ -183,9 +184,17 @@ function folderIcon(title: string): IconName {
   return folderIcons[title] ?? "section";
 }
 
+let draggedId: string | null = null;
+
 function dragBinderItem(event: DragEvent<HTMLButtonElement>, id: string) {
+  draggedId = id;
   event.dataTransfer.setData("text/plain", id);
   event.dataTransfer.effectAllowed = "move";
+}
+
+function clearBinderDrag(onDropTarget: (drop: null) => void) {
+  draggedId = null;
+  onDropTarget(null);
 }
 
 function openContext(
@@ -239,6 +248,9 @@ function BinderBranch({
   const marked = drop?.id === node.id ? drop.place : null;
 
   function dragOver(event: DragEvent<HTMLDivElement>) {
+    if (!draggedId) {
+      return;
+    }
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     onDropTarget({ id: node.id, place: dropPlace(event.currentTarget, node.kind, depth, event.clientY) });
@@ -246,9 +258,9 @@ function BinderBranch({
 
   function dropOn(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
-    const id = event.dataTransfer.getData("text/plain");
+    const id = event.dataTransfer.getData("text/plain") || draggedId;
     const place = dropPlace(event.currentTarget, node.kind, depth, event.clientY);
-    onDropTarget(null);
+    clearBinderDrag(onDropTarget);
     if (id) {
       onPlace(id, node.id, place);
     }
@@ -261,6 +273,7 @@ function BinderBranch({
           <div
             className={marked ? `tree-row drop-${marked}` : "tree-row"}
             style={{ paddingLeft: 8 + depth * 16 }}
+            onDragEnter={dragOver}
             onDragOver={dragOver}
             onDrop={dropOn}
           >
@@ -281,7 +294,7 @@ function BinderBranch({
                 draggable={depth > 0}
                 onClick={() => onSelect(node.id)}
                 onDragStart={(event) => dragBinderItem(event, node.id)}
-                onDragEnd={() => onDropTarget(null)}
+                onDragEnd={() => clearBinderDrag(onDropTarget)}
                 onContextMenu={(event) => openContext(event, node.id, onSelect, onContext)}
               >
                 <Icon name={icon ?? folderIcon(node.title)} />
@@ -313,6 +326,7 @@ function BinderBranch({
         <div
           className={marked ? `tree-row drop-${marked}` : "tree-row"}
           style={{ paddingLeft: 8 + depth * 16 }}
+          onDragEnter={dragOver}
           onDragOver={dragOver}
           onDrop={dropOn}
         >
@@ -324,7 +338,7 @@ function BinderBranch({
               draggable
               onClick={() => onSelect(node.id)}
               onDragStart={(event) => dragBinderItem(event, node.id)}
-              onDragEnd={() => onDropTarget(null)}
+              onDragEnd={() => clearBinderDrag(onDropTarget)}
               onContextMenu={(event) => openContext(event, node.id, onSelect, onContext)}
             >
               <Icon name={documentIcons[node.role]} />

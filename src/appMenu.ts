@@ -1,4 +1,5 @@
 import { CheckMenuItem, Menu, MenuItem, Submenu } from "@tauri-apps/api/menu";
+import { commands, onCommands } from "./commands";
 import { sendMenuCommand } from "./menuCommand";
 import { installEditCommands } from "./editMenu";
 import { createFormatMenu } from "./formatMenu";
@@ -25,29 +26,43 @@ export async function installAppMenu(): Promise<void> {
       sendMenuCommand({ name: "open" });
     },
   };
-  const saveNovel = {
+  const saveNovel = await MenuItem.new({
     id: "save-novel",
     text: "Save",
     accelerator: "CmdOrCtrl+S",
+    enabled: false,
     action: () => {
       sendMenuCommand({ name: "save" });
     },
-  };
-  const saveNovelAs = {
+  });
+  const saveNovelAs = await MenuItem.new({
     id: "save-novel-as",
     text: "Save As…",
     accelerator: "CmdOrCtrl+Shift+S",
+    enabled: false,
     action: () => {
       sendMenuCommand({ name: "save-as" });
     },
-  };
-  const takeSnapshot = {
+  });
+  const takeSnapshot = await MenuItem.new({
     id: "take-snapshot",
     text: "Take Snapshot",
+    enabled: false,
     action: () => {
       sendMenuCommand({ name: "snapshot" });
     },
-  };
+  });
+  function syncFile() {
+    if (!document.hasFocus()) {
+      return;
+    }
+    const current = commands();
+    void saveNovel.setEnabled(current.saveNovel !== null);
+    void saveNovelAs.setEnabled(current.saveNovelAs !== null);
+    void takeSnapshot.setEnabled(current.takeSnapshot !== null);
+  }
+  onCommands(syncFile);
+  syncFile();
   const items = await menu.items();
   let fileMenu: Submenu | null = null;
   for (const item of items) {
@@ -90,6 +105,10 @@ export async function installAppMenu(): Promise<void> {
   }
   await insertAfter(menu, "Edit", await createViewMenu());
   await insertAfter(menu, "View", await createFormatMenu());
+  if (!document.hasFocus()) {
+    await menu.close();
+    return;
+  }
   const previous = await menu.setAsAppMenu();
   await previous?.close();
   if (!navigator.userAgent.includes("Mac")) {

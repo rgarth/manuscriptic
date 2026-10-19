@@ -1,11 +1,10 @@
 import { CheckMenuItem, MenuItem, Submenu } from "@tauri-apps/api/menu";
 import { commands, onCommands } from "./commands";
 import { sendMenuCommand } from "./menuCommand";
-import { alignments, getEditorPrefs, setAlignment, subscribeEditorPrefs } from "./editorPrefs";
+import { alignments } from "./pageLayout";
 import { formatCommandsIn } from "./formatCommands";
 
 export async function createFormatMenu(): Promise<Submenu> {
-  const prefs = getEditorPrefs();
   const character = await menuItems("character");
   const lists = await menuItems("list");
   const alignItems = await Promise.all(
@@ -13,33 +12,32 @@ export async function createFormatMenu(): Promise<Submenu> {
       CheckMenuItem.new({
         id: `align-${item.id}`,
         text: item.label,
-        checked: item.id === prefs.align,
+        checked: item.id === commands().align,
         enabled: false,
         action: () => {
-          setAlignment(item.id);
+          sendMenuCommand({ name: "align", align: item.id });
         },
       }),
     ),
   );
   const commandsToEnable = [...character, ...lists, ...alignItems];
 
-  function syncEnabled() {
-    const enabled = commands().format !== null;
+  function sync() {
+    if (!document.hasFocus()) {
+      return;
+    }
+    const current = commands();
+    const enabled = current.format !== null;
     for (const item of commandsToEnable) {
       void item.setEnabled(enabled);
     }
-  }
-
-  function syncChecks() {
-    const current = getEditorPrefs();
     for (const [index, item] of alignments.entries()) {
       void alignItems[index]?.setChecked(item.id === current.align);
     }
   }
 
-  onCommands(syncEnabled);
-  subscribeEditorPrefs(syncChecks);
-  syncEnabled();
+  onCommands(sync);
+  sync();
 
   const alignMenu = await Submenu.new({ text: "Alignment", items: alignItems });
   return Submenu.new({

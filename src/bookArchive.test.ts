@@ -12,7 +12,13 @@ import {
 } from "./bookArchive.ts";
 import type { EditorDoc } from "./model/editorDoc.ts";
 import { addLeaf } from "./model/binder.ts";
-import { createNovelProject, renameNode, setDocumentContent, type ProjectFile } from "./model/project.ts";
+import {
+  createNovelProject,
+  renameNode,
+  setDocumentContent,
+  setPageLayout,
+  type ProjectFile,
+} from "./model/project.ts";
 import { decodeScene, encodeScene } from "./sceneText.ts";
 
 const marked: EditorDoc = {
@@ -65,6 +71,14 @@ test("a snapshot can put one scene back and leave the other alone", () => {
   assert.equal(bookAt(again, 1)?.title, "Castus");
   const liveSecond = bookFromFiles(filesForBook(both));
   assert.deepEqual(contentOf(liveSecond, second), paragraph("The gate."));
+});
+
+test("page layout travels in the binder", () => {
+  const project = setPageLayout(createNovelProject(), { font: "Palatino", points: 14, align: "left" });
+  const opened = bookFromFiles(filesForBook(project));
+  assert.equal(opened?.layout.font, "Palatino");
+  assert.equal(opened?.layout.points, 14);
+  assert.equal(opened?.layout.align, "left");
 });
 
 test("old automatic snapshots fold into the checkpoint and a manual one stays", () => {

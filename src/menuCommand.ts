@@ -1,5 +1,6 @@
 import { emit } from "@tauri-apps/api/event";
 import type { SceneCommand } from "./formatCommands.ts";
+import { alignments, type Alignment } from "./pageLayout.ts";
 
 const sceneCommands = {
   bold: true,
@@ -24,7 +25,8 @@ export type MenuCommand =
   | { name: "new-scene" }
   | { name: "new-section" }
   | { name: "trash" }
-  | { name: "format"; command: SceneCommand };
+  | { name: "format"; command: SceneCommand }
+  | { name: "align"; align: Alignment };
 
 export function sendMenuCommand(command: MenuCommand): void {
   void emit("manuscriptic-command", command);
@@ -47,9 +49,23 @@ export function menuCommand(value: unknown): MenuCommand | null {
       return { name: value.name };
     case "format":
       return sceneCommand(value.command);
+    case "align":
+      return alignCommand(value.align);
     default:
       return null;
   }
+}
+
+function alignCommand(value: unknown): MenuCommand | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  for (const item of alignments) {
+    if (item.id === value) {
+      return { name: "align", align: item.id };
+    }
+  }
+  return null;
 }
 
 function sceneCommand(value: unknown): MenuCommand | null {

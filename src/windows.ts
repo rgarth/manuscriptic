@@ -26,6 +26,7 @@ export async function openBookWindow(path: string, title: string): Promise<void>
     height: 760,
     minWidth: 840,
     minHeight: 560,
+    dragDropEnabled: false,
   });
   await new Promise<void>((resolve, reject) => {
     void created.once("tauri://created", () => resolve());

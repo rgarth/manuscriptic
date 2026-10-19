@@ -29,6 +29,9 @@ export async function installEditCommands(edit: Submenu): Promise<void> {
   });
 
   function sync() {
+    if (!document.hasFocus()) {
+      return;
+    }
     const current = commands();
     const open = current.newScene !== null;
     void scene.setEnabled(open);

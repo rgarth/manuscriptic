@@ -180,6 +180,12 @@ input:focus-visible {
   color: var(--faded);
 }
 
+.tree-manuscript {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+
 .disclosure .icon {
   width: 14px;
   height: 14px;
@@ -199,6 +205,14 @@ input:focus-visible {
   text-align: left;
   color: var(--ink);
   border-radius: 3px;
+}
+
+.tree-item[draggable="true"] {
+  -webkit-user-drag: element;
+}
+
+.tree-item[draggable="true"] * {
+  -webkit-user-drag: none;
 }
 
 .tree-item span {

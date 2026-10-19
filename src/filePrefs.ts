@@ -121,6 +121,11 @@ export function bookFileName(title: string): string {
   return `${cleaned.length > 0 ? cleaned : "Untitled Novel"}.manuscriptic`;
 }
 
+export function titleFromBookPath(path: string): string {
+  const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return path.slice(slash + 1).replace(/\.manuscriptic$/i, "").trim();
+}
+
 export function joinNovelPath(directory: string, fileName: string): string {
   const separator = directory.includes("\\") ? "\\" : "/";
   const base = directory.endsWith("/") || directory.endsWith("\\") ? directory.slice(0, -1) : directory;

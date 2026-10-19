@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   applyBookStorage,
   bookFileName,
+  titleFromBookPath,
   booksOnStartup,
   joinNovelPath,
   markBookClosed,
@@ -84,6 +85,8 @@ test("a file name keeps the title and drops characters a folder cannot hold", ()
   assert.equal(bookFileName("Castus"), "Castus.manuscriptic");
   assert.equal(bookFileName("  "), "Untitled Novel.manuscriptic");
   assert.equal(bookFileName("Act/One: Dawn"), "Act One Dawn.manuscriptic");
+  assert.equal(titleFromBookPath("/Users/me/Novels/Act One Dawn.manuscriptic"), "Act One Dawn");
+  assert.equal(titleFromBookPath("C:\\Users\\me\\Documents\\Castus.manuscriptic"), "Castus");
 });
 
 test("startup opens the requested book alone, or every remembered book", () => {

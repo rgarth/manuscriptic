@@ -19,9 +19,13 @@ export async function pickNovelToOpen(directory: string): Promise<string | null>
   return typeof picked === "string" ? picked : null;
 }
 
-export async function pickNovelSaveAs(directory: string, fileName: string): Promise<string | null> {
+export async function pickNovelSaveAs(
+  directory: string,
+  fileName: string,
+  title = "Save As",
+): Promise<string | null> {
   return save({
-    title: "Save As",
+    title,
     defaultPath: joinNovelPath(directory, fileName),
     filters: novelFilter,
   });

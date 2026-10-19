@@ -1,59 +1,13 @@
 import { reportFailure } from "./failures.ts";
 
-export const defaultFont = "EB Garamond";
-
-export const alignments = [
-  { id: "left", label: "Align Left" },
-  { id: "center", label: "Center" },
-  { id: "right", label: "Align Right" },
-  { id: "justify", label: "Justified" },
-] as const;
-
-export type Alignment = (typeof alignments)[number]["id"];
-
 export type EditorPrefs = {
-  font: string;
-  points: number;
   zoom: number;
-  align: Alignment;
 };
 
-const garamondFamily =
-  '"EB Garamond Variable", "EB Garamond", Palatino, "Palatino Linotype", serif';
-const fontKey = "manuscriptic-editor-font";
-const pointsKey = "manuscriptic-editor-points";
 const zoomKey = "manuscriptic-editor-zoom";
-const alignKey = "manuscriptic-editor-align";
-const defaultPoints = 12;
 const defaultZoom = 112.5;
 
 export const zoomStops = [75, 100, 112.5, 125, 150, 175, 200] as const;
-
-export function fontName(id: string | null): string {
-  if (!id || !id.trim() || id === "garamond" || id === "literata" || id === "baskerville") {
-    return defaultFont;
-  }
-  return id.trim();
-}
-
-export function fontFamily(name: string): string {
-  const chosen = fontName(name);
-  if (chosen === defaultFont) {
-    return garamondFamily;
-  }
-  return `"${chosen.replace(/"/g, "")}", ${garamondFamily}`;
-}
-
-export function pointSize(value: string | number | null): number {
-  if (value === null || value === "") {
-    return defaultPoints;
-  }
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) {
-    return defaultPoints;
-  }
-  return Math.min(72, Math.max(8, Math.round(parsed)));
-}
 
 export function zoomPercent(value: string | number | null): number {
   if (value === null || value === "") {
@@ -64,10 +18,6 @@ export function zoomPercent(value: string | number | null): number {
     return defaultZoom;
   }
   return Math.min(200, Math.max(75, Math.round(parsed * 2) / 2));
-}
-
-export function displayPixels(points: number, zoom: number): number {
-  return ((points * 96) / 72) * (zoom / 100);
 }
 
 export function nextZoom(current: number, direction: "in" | "out"): number {
@@ -83,10 +33,6 @@ export function nextZoom(current: number, direction: "in" | "out"): number {
       return unexpected;
     }
   }
-}
-
-export function alignmentById(id: string | null): Alignment {
-  return alignments.find((item) => item.id === id)?.id ?? "justify";
 }
 
 let reportedReadFailure = false;
@@ -113,15 +59,12 @@ function writeSaved(key: string, value: string): boolean {
   }
 }
 
-let font = fontName(readSaved(fontKey));
-let points = pointSize(readSaved(pointsKey));
 let zoom = zoomPercent(readSaved(zoomKey));
-let align = alignmentById(readSaved(alignKey));
-let snapshot: EditorPrefs = { font, points, zoom, align };
+let snapshot: EditorPrefs = { zoom };
 const listeners = new Set<() => void>();
 
 function publish() {
-  snapshot = { font, points, zoom, align };
+  snapshot = { zoom };
   for (const listener of listeners) {
     listener();
   }
@@ -138,50 +81,11 @@ export function subscribeEditorPrefs(listener: () => void): () => void {
   };
 }
 
-function commit(key: string, value: string, apply: () => void) {
-  if (!writeSaved(key, value)) {
-    return;
-  }
-  apply();
-  publish();
-}
-
-export function setEditorFont(id: string) {
-  const next = fontName(id);
-  if (next === font) {
-    return;
-  }
-  commit(fontKey, next, () => {
-    font = next;
-  });
-}
-
-export function setPointSize(value: string | number) {
-  const next = pointSize(value);
-  if (next === points) {
-    return;
-  }
-  commit(pointsKey, String(next), () => {
-    points = next;
-  });
-}
-
 export function setZoom(value: string | number) {
   const next = zoomPercent(value);
-  if (next === zoom) {
+  if (next === zoom || !writeSaved(zoomKey, String(next))) {
     return;
   }
-  commit(zoomKey, String(next), () => {
-    zoom = next;
-  });
-}
-
-export function setAlignment(id: string) {
-  const next = alignmentById(id);
-  if (next === align) {
-    return;
-  }
-  commit(alignKey, next, () => {
-    align = next;
-  });
+  zoom = next;
+  publish();
 }

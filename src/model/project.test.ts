@@ -44,7 +44,10 @@ test("a new novel has the manuscript roots", () => {
   assert.deepEqual(project.manuscript.children, []);
   assert.equal(project.trash.children.length, 0);
   assert.equal(project.view.selectedId, project.manuscript.id);
-  assert.ok(project.view.expanded?.includes(project.manuscript.id));
+  assert.deepEqual(project.view.expanded, [project.manuscript.id]);
+  assert.equal(project.layout.font, "EB Garamond");
+  assert.equal(project.layout.points, 12);
+  assert.equal(project.layout.align, "justify");
   for (const [key, title] of Object.entries(rootTitles)) {
     const node = project[key as keyof typeof rootTitles];
     assert.equal(node.kind, "folder");
@@ -445,6 +448,8 @@ test("a loose acknowledgement moves into back matter and keeps its text", () => 
   }
   assert.equal(project.publishing.children.some((child) => child.id === "syn"), true);
   assert.deepEqual(project.dictionary, ["Castus"]);
+  assert.equal(project.layout.font, "EB Garamond");
+  assert.equal(project.layout.align, "justify");
   const added = addDictionaryWord(project, "  ");
   assert.deepEqual(added.dictionary, ["Castus"]);
   const named = addDictionaryWord(project, "Lyra");

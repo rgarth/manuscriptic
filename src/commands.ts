@@ -1,5 +1,6 @@
-import type { Removal } from "./model/binder";
 import type { SceneCommand } from "./formatCommands";
+import type { Removal } from "./model/binder";
+import type { Alignment } from "./pageLayout";
 
 export type CommandState = {
   newProject: (() => void) | null;
@@ -12,6 +13,7 @@ export type CommandState = {
   trash: (() => void) | null;
   format: ((command: SceneCommand) => void) | null;
   removal: Removal | null;
+  align: Alignment;
   leafLabel: string;
   openSettings: (() => void) | null;
 };
@@ -27,6 +29,7 @@ const initial: CommandState = {
   trash: null,
   format: null,
   removal: null,
+  align: "justify",
   leafLabel: "New Scene",
   openSettings: null,
 };

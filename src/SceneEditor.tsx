@@ -3,18 +3,17 @@ import Superscript from "@tiptap/extension-superscript";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { getEditorPrefs, subscribeEditorPrefs } from "./editorPrefs";
 import {
   alignments,
   defaultFont,
-  fontFamily,
-  getEditorPrefs,
-  setAlignment,
   displayPixels,
-  setEditorFont,
-  setPointSize,
-  subscribeEditorPrefs,
+  fontFamily,
+  fontName,
+  pointSize,
   type Alignment,
-} from "./editorPrefs";
+  type PageLayout,
+} from "./pageLayout";
 import { registerCommands } from "./commands";
 import Hint from "./Hint.tsx";
 import { formatCommands, formatCommandsIn } from "./formatCommands";
@@ -29,6 +28,8 @@ type SceneEditorProps = {
   title: string;
   content: EditorDoc;
   dictionary: string[];
+  layout: PageLayout;
+  onLayout: (layout: PageLayout) => void;
   onTitle: (title: string) => void;
   onContent: (content: EditorDoc) => void;
   onAddWord: (word: string) => void;
@@ -59,6 +60,8 @@ export default function SceneEditor({
   title,
   content,
   dictionary,
+  layout,
+  onLayout,
   onTitle,
   onContent,
   onAddWord,
@@ -97,14 +100,14 @@ export default function SceneEditor({
       }
     },
   });
-  const prefs = useSyncExternalStore(subscribeEditorPrefs, getEditorPrefs, getEditorPrefs);
+  const zoom = useSyncExternalStore(subscribeEditorPrefs, readZoom, readZoom);
   const [fonts, setFonts] = useState<string[]>([defaultFont]);
   const pageStyle = {
-    "--editor-font": fontFamily(prefs.font),
-    "--editor-size": String(displayPixels(prefs.points, prefs.zoom)),
-    "--editor-align": prefs.align,
+    "--editor-font": fontFamily(layout.font),
+    "--editor-size": String(displayPixels(layout.points, zoom)),
+    "--editor-align": layout.align,
   } as CSSProperties;
-  const fontOptions = fonts.includes(prefs.font) ? fonts : [prefs.font, ...fonts];
+  const fontOptions = fonts.includes(layout.font) ? fonts : [layout.font, ...fonts];
 
   useEffect(() => {
     void listFonts()
@@ -149,8 +152,8 @@ export default function SceneEditor({
             <select
               className="font-choice"
               aria-label="Typeface"
-              value={prefs.font}
-              onChange={(event) => setEditorFont(event.currentTarget.value)}
+              value={layout.font}
+              onChange={(event) => onLayout({ ...layout, font: fontName(event.currentTarget.value) })}
             >
               {fontOptions.map((name) => (
                 <option key={name} value={name} style={{ fontFamily: fontFamily(name) }}>
@@ -166,8 +169,8 @@ export default function SceneEditor({
               type="number"
               min={8}
               max={72}
-              value={prefs.points}
-              onChange={(event) => setPointSize(event.currentTarget.value)}
+              value={layout.points}
+              onChange={(event) => onLayout({ ...layout, points: pointSize(event.currentTarget.value) })}
             />
           </Hint>
           <span className="size-unit">pt</span>
@@ -178,8 +181,8 @@ export default function SceneEditor({
                 type="button"
                 className="mark"
                 aria-label={item.label}
-                aria-pressed={prefs.align === item.id}
-                onClick={() => setAlignment(item.id)}
+                aria-pressed={layout.align === item.id}
+                onClick={() => onLayout({ ...layout, align: item.id })}
               >
                 <Icon name={alignmentIcon(item.id)} />
               </button>
@@ -209,6 +212,10 @@ export default function SceneEditor({
       ) : null}
     </div>
   );
+}
+
+function readZoom(): number {
+  return getEditorPrefs().zoom;
 }
 
 function WordMenuPop({

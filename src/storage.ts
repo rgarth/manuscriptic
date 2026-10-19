@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { BookLock } from "./bookLock.ts";
 
 export function listFonts(): Promise<string[]> {
   return invoke<string[]>("list_fonts");
@@ -18,4 +19,20 @@ export function writeBook(
   overwrite: boolean,
 ): Promise<void> {
   return invoke("write_book", { path, files, overwrite });
+}
+
+export function claimBookLock(path: string, holder: string): Promise<BookLock> {
+  return invoke<BookLock>("claim_book_lock", { path, holder });
+}
+
+export function takeBookLock(path: string, holder: string): Promise<BookLock> {
+  return invoke<BookLock>("take_book_lock", { path, holder });
+}
+
+export function refreshBookLock(path: string, holder: string): Promise<boolean> {
+  return invoke<boolean>("refresh_book_lock", { path, holder });
+}
+
+export function releaseBookLock(path: string, holder: string): Promise<void> {
+  return invoke("release_book_lock", { path, holder });
 }
