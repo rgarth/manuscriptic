@@ -4,16 +4,6 @@ export type FilePreferences = {
   lastProject: string | null;
 };
 
-export type StartupChoice =
-  | { kind: "file"; path: string }
-  | { kind: "working-copy" }
-  | { kind: "landing" };
-
-export type SaveStep =
-  | { kind: "write"; path: string }
-  | { kind: "create"; directory: string | null; fileName: string }
-  | { kind: "dialog"; directory: string | null; fileName: string };
-
 type PrefStorage = {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -23,6 +13,9 @@ type PrefStorage = {
 const directoryKey = "manuscriptic-save-directory";
 const openLastKey = "manuscriptic-open-last";
 const lastProjectKey = "manuscriptic-last-project";
+const openBooksKey = "manuscriptic-open-books";
+const liveBooksKey = "manuscriptic-live-books";
+const snapshotMinutesKey = "manuscriptic-snapshot-minutes";
 
 export function readFilePreferences(storage: PrefStorage): FilePreferences {
   return {
@@ -48,61 +41,90 @@ export function preferenceDirectoryLabel(directory: string | null): string {
   return clean(directory) ?? "Documents";
 }
 
-export function novelFileName(title: string): string {
+export function readOpenBooks(storage: PrefStorage): string[] {
+  const raw = storage.getItem(openBooksKey);
+  if (!raw) {
+    const last = clean(storage.getItem(lastProjectKey));
+    return last ? [last] : [];
+  }
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new Error("The list of open books could not be read.");
+  }
+  return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+export function rememberOpenBook(storage: PrefStorage, path: string): void {
+  const books = readOpenBooks(storage).filter((item) => item !== path);
+  books.push(path);
+  storage.setItem(openBooksKey, JSON.stringify(books));
+}
+
+export type StartupBooks = {
+  paths: string[];
+  openRest: boolean;
+};
+
+export function booksOnStartup(storage: PrefStorage, requested: string | null): StartupBooks {
+  if (requested) {
+    return { paths: [requested], openRest: false };
+  }
+  if (!readFilePreferences(storage).openLast) {
+    return { paths: [], openRest: false };
+  }
+  return { paths: readOpenBooks(storage), openRest: true };
+}
+
+export function markBookClosed(storage: PrefStorage, path: string): void {
+  const remaining = readOpenBooks(storage).filter((item) => item !== path);
+  storage.setItem(liveBooksKey, JSON.stringify(remaining));
+}
+
+export function adoptLiveBooks(storage: PrefStorage, raw: string | null): void {
+  if (!raw) {
+    return;
+  }
+  storage.setItem(openBooksKey, raw);
+}
+
+export function applyBookStorage(storage: PrefStorage, key: string | null, value: string | null): void {
+  if (key !== liveBooksKey) {
+    return;
+  }
+  adoptLiveBooks(storage, value);
+}
+
+export const snapshotMinuteChoices = [0, 5, 15, 60] as const;
+
+export type SnapshotMinutes = (typeof snapshotMinuteChoices)[number];
+
+export function readSnapshotMinutes(storage: PrefStorage): SnapshotMinutes {
+  const raw = storage.getItem(snapshotMinutesKey);
+  const parsed = raw === null ? 15 : Number(raw);
+  switch (parsed) {
+    case 0:
+    case 5:
+    case 15:
+    case 60:
+      return parsed;
+    default:
+      return 15;
+  }
+}
+
+export function writeSnapshotMinutes(storage: PrefStorage, minutes: SnapshotMinutes): void {
+  storage.setItem(snapshotMinutesKey, String(minutes));
+}
+
+export function bookFileName(title: string): string {
   const cleaned = title.replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim();
-  return `${cleaned.length > 0 ? cleaned : "Untitled Novel"}.json`;
+  return `${cleaned.length > 0 ? cleaned : "Untitled Novel"}.manuscriptic`;
 }
 
 export function joinNovelPath(directory: string, fileName: string): string {
   const separator = directory.includes("\\") ? "\\" : "/";
   const base = directory.endsWith("/") || directory.endsWith("\\") ? directory.slice(0, -1) : directory;
   return `${base}${separator}${fileName}`;
-}
-
-export function startupChoice(prefs: FilePreferences, hasWorkingCopy: boolean): StartupChoice {
-  if (!prefs.openLast) {
-    return { kind: "landing" };
-  }
-  if (prefs.lastProject) {
-    return { kind: "file", path: prefs.lastProject };
-  }
-  if (hasWorkingCopy) {
-    return { kind: "working-copy" };
-  }
-  return { kind: "landing" };
-}
-
-export function startupAfterUnreadable(hasWorkingCopy: boolean): StartupChoice {
-  if (hasWorkingCopy) {
-    return { kind: "working-copy" };
-  }
-  return { kind: "landing" };
-}
-
-export function saveChoice(prefs: FilePreferences, filePath: string | null, title: string): SaveStep {
-  const path = clean(filePath);
-  if (path) {
-    return { kind: "write", path };
-  }
-  return { kind: "create", directory: prefs.directory, fileName: novelFileName(title) };
-}
-
-export function saveAsChoice(prefs: FilePreferences, title: string): SaveStep {
-  return { kind: "dialog", directory: prefs.directory, fileName: novelFileName(title) };
-}
-
-export function stepAfterOccupied(step: SaveStep): SaveStep {
-  switch (step.kind) {
-    case "create":
-      return { kind: "dialog", directory: step.directory, fileName: step.fileName };
-    case "write":
-    case "dialog":
-      return step;
-    default: {
-      const unexpected: never = step;
-      return unexpected;
-    }
-  }
 }
 
 function clean(value: string | null): string | null {

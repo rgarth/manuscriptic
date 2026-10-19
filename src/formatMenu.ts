@@ -1,5 +1,6 @@
 import { CheckMenuItem, MenuItem, Submenu } from "@tauri-apps/api/menu";
 import { commands, onCommands } from "./commands";
+import { sendMenuCommand } from "./menuCommand";
 import { alignments, getEditorPrefs, setAlignment, subscribeEditorPrefs } from "./editorPrefs";
 import { formatCommandsIn } from "./formatCommands";
 
@@ -56,7 +57,7 @@ function menuItems(group: "character" | "list") {
         accelerator: spec.accelerator,
         enabled: false,
         action: () => {
-          commands().format?.(command);
+          sendMenuCommand({ name: "format", command });
         },
       }),
     ),

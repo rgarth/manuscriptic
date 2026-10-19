@@ -1,5 +1,6 @@
 import { MenuItem, PredefinedMenuItem, type Submenu } from "@tauri-apps/api/menu";
 import { commands, onCommands } from "./commands";
+import { sendMenuCommand } from "./menuCommand";
 
 export async function installEditCommands(edit: Submenu): Promise<void> {
   const scene = await MenuItem.new({
@@ -7,7 +8,7 @@ export async function installEditCommands(edit: Submenu): Promise<void> {
     text: "New Scene",
     enabled: false,
     action: () => {
-      commands().newScene?.();
+      sendMenuCommand({ name: "new-scene" });
     },
   });
   const section = await MenuItem.new({
@@ -15,7 +16,7 @@ export async function installEditCommands(edit: Submenu): Promise<void> {
     text: "New Section",
     enabled: false,
     action: () => {
-      commands().newSection?.();
+      sendMenuCommand({ name: "new-section" });
     },
   });
   const trash = await MenuItem.new({
@@ -23,7 +24,7 @@ export async function installEditCommands(edit: Submenu): Promise<void> {
     text: "Move to Trash",
     enabled: false,
     action: () => {
-      commands().trash?.();
+      sendMenuCommand({ name: "trash" });
     },
   });
 

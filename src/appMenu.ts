@@ -1,5 +1,5 @@
 import { CheckMenuItem, Menu, MenuItem, Submenu } from "@tauri-apps/api/menu";
-import { commands } from "./commands";
+import { sendMenuCommand } from "./menuCommand";
 import { installEditCommands } from "./editMenu";
 import { createFormatMenu } from "./formatMenu";
 import { applyTheme, onTheme, readTheme, readThemes } from "./themes";
@@ -14,7 +14,7 @@ export async function installAppMenu(): Promise<void> {
     text: "New Project…",
     accelerator: "CmdOrCtrl+N",
     action: () => {
-      commands().newProject?.();
+      sendMenuCommand({ name: "new" });
     },
   };
   const openNovel = {
@@ -22,7 +22,7 @@ export async function installAppMenu(): Promise<void> {
     text: "Open…",
     accelerator: "CmdOrCtrl+O",
     action: () => {
-      commands().openNovel?.();
+      sendMenuCommand({ name: "open" });
     },
   };
   const saveNovel = {
@@ -30,7 +30,7 @@ export async function installAppMenu(): Promise<void> {
     text: "Save",
     accelerator: "CmdOrCtrl+S",
     action: () => {
-      commands().saveNovel?.();
+      sendMenuCommand({ name: "save" });
     },
   };
   const saveNovelAs = {
@@ -38,7 +38,14 @@ export async function installAppMenu(): Promise<void> {
     text: "Save As…",
     accelerator: "CmdOrCtrl+Shift+S",
     action: () => {
-      commands().saveNovelAs?.();
+      sendMenuCommand({ name: "save-as" });
+    },
+  };
+  const takeSnapshot = {
+    id: "take-snapshot",
+    text: "Take Snapshot",
+    action: () => {
+      sendMenuCommand({ name: "snapshot" });
     },
   };
   const items = await menu.items();
@@ -55,7 +62,7 @@ export async function installAppMenu(): Promise<void> {
     text: "Settings…",
     accelerator: "CmdOrCtrl+,",
     action: () => {
-      commands().openSettings?.();
+      sendMenuCommand({ name: "settings" });
     },
   });
   if (fileMenu) {
@@ -63,12 +70,13 @@ export async function installAppMenu(): Promise<void> {
     await fileMenu.insert(openNovel, 1);
     await fileMenu.insert(saveNovel, 2);
     await fileMenu.insert(saveNovelAs, 3);
-    await fileMenu.insert(theme, 4);
-    await fileMenu.insert(settings, 5);
+    await fileMenu.insert(takeSnapshot, 4);
+    await fileMenu.insert(theme, 5);
+    await fileMenu.insert(settings, 6);
   } else {
     const file = await Submenu.new({
       text: "File",
-      items: [newProject, openNovel, saveNovel, saveNovelAs, theme, settings],
+      items: [newProject, openNovel, saveNovel, saveNovelAs, takeSnapshot, theme, settings],
     });
     const afterAppMenu = navigator.userAgent.includes("Mac") ? 1 : 0;
     await menu.insert(file, afterAppMenu);

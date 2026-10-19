@@ -3,20 +3,48 @@ import { failureMessage, reportFailure } from "./failures";
 import {
   preferenceDirectoryLabel,
   readFilePreferences,
+  snapshotMinuteChoices,
   writeOpenLast,
   writeSaveDirectory,
+  writeSnapshotMinutes,
+  type SnapshotMinutes,
 } from "./filePrefs";
 import { pickSaveDirectory, resolveDirectory } from "./novelFile";
 import { applyTheme, onTheme, readTheme, readThemes } from "./themes";
+
+export type SnapshotListItem = {
+  id: string;
+  at: number;
+  kind: "manual" | "auto";
+};
 
 type SettingsProps = {
   words: string[];
   onAddWord: (word: string) => void;
   onRemoveWord: (word: string) => void;
   onClose: () => void;
+  snapshotMinutes: SnapshotMinutes;
+  snapshots: SnapshotListItem[];
+  onSnapshotMinutes: (minutes: SnapshotMinutes) => void;
+  onTakeSnapshot: () => void;
+  onRestoreBook: (id: string) => void;
+  onRestoreScene: (id: string) => void;
+  onDeleteSnapshot: (id: string) => void;
 };
 
-export default function Settings({ words, onAddWord, onRemoveWord, onClose }: SettingsProps) {
+export default function Settings({
+  words,
+  onAddWord,
+  onRemoveWord,
+  onClose,
+  snapshotMinutes,
+  snapshots,
+  onSnapshotMinutes,
+  onTakeSnapshot,
+  onRestoreBook,
+  onRestoreScene,
+  onDeleteSnapshot,
+}: SettingsProps) {
   const themes = readThemes();
   const stored = readFilePreferences(localStorage);
   const [theme, setTheme] = useState(() => readTheme(themes));
@@ -145,7 +173,51 @@ export default function Settings({ words, onAddWord, onRemoveWord, onClose }: Se
           <button type="submit">Add</button>
         </form>
         <h2>Snapshots</h2>
-        <p>Dated snapshots are not set up yet. When they are, the timing will be chosen here.</p>
+        <p>A snapshot is a diff of what changed. Older automatic ones thin out. A manual one stays until you delete it.</p>
+        <label className="preference">
+          Keep an automatic snapshot
+          <select
+            aria-label="Automatic snapshot interval"
+            value={String(snapshotMinutes)}
+            onChange={(event) => {
+              const minutes = snapshotMinute(event.currentTarget.value);
+              if (savePreference(() => writeSnapshotMinutes(localStorage, minutes))) {
+                onSnapshotMinutes(minutes);
+              }
+            }}
+          >
+            {snapshotMinuteChoices.map((minutes) => (
+              <option key={minutes} value={minutes}>
+                {snapshotLabel(minutes)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" onClick={onTakeSnapshot}>
+          Take snapshot
+        </button>
+        {snapshots.length === 0 ? (
+          <p>No snapshots yet.</p>
+        ) : (
+          <ul className="word-list">
+            {snapshots.map((snapshot) => (
+              <li key={snapshot.id}>
+                <span>
+                  {new Date(snapshot.at).toLocaleString()} · {snapshot.kind === "manual" ? "Manual" : "Automatic"}
+                </span>
+                <button type="button" onClick={() => onRestoreScene(snapshot.id)}>
+                  Scene
+                </button>
+                <button type="button" onClick={() => onRestoreBook(snapshot.id)}>
+                  Book
+                </button>
+                <button type="button" onClick={() => onDeleteSnapshot(snapshot.id)}>
+                  Delete
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         <div className="row">
           <button type="button" onClick={onClose}>
             Close
@@ -154,4 +226,36 @@ export default function Settings({ words, onAddWord, onRemoveWord, onClose }: Se
       </div>
     </div>
   );
+}
+
+function snapshotLabel(minutes: SnapshotMinutes): string {
+  switch (minutes) {
+    case 0:
+      return "Off";
+    case 5:
+      return "Every 5 minutes";
+    case 15:
+      return "Every 15 minutes";
+    case 60:
+      return "Every hour";
+    default: {
+      const unexpected: never = minutes;
+      return unexpected;
+    }
+  }
+}
+
+function snapshotMinute(value: string): SnapshotMinutes {
+  switch (value) {
+    case "0":
+      return 0;
+    case "5":
+      return 5;
+    case "15":
+      return 15;
+    case "60":
+      return 60;
+    default:
+      return 15;
+  }
 }

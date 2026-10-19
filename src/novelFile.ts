@@ -2,7 +2,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { joinNovelPath } from "./filePrefs.ts";
 import { documentsDirectory } from "./storage.ts";
 
-const novelFilter = [{ name: "Manuscriptic novel", extensions: ["json"] }];
+const novelFilter = [{ name: "Manuscriptic book", extensions: ["manuscriptic"] }];
 
 export async function resolveDirectory(directory: string | null): Promise<string> {
   return directory ?? documentsDirectory();

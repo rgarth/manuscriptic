@@ -1,4 +1,16 @@
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  bookFromArchive,
+  filesToSave,
+  newBook,
+  recordedSnapshot,
+  restoredBook,
+  restoredScene,
+  takenNameMessage,
+  withoutSnapshot,
+  type BookHistory,
+} from "./bookSession";
 import Binder from "./Binder";
 import SceneEditor from "./SceneEditor";
 import {
@@ -13,7 +25,6 @@ import {
 } from "./model/binder";
 import {
   addDictionaryWord,
-  createNovelProject,
   findNode,
   firstDocumentId,
   folderIds,
@@ -31,11 +42,22 @@ import { type EditorDoc, wordCount } from "./model/editorDoc";
 import { installAppMenu } from "./appMenu";
 import { commands, registerCommands } from "./commands";
 import { failureMessage, onFailure, takePendingFailures } from "./failures";
-import { readFilePreferences, saveAsChoice, saveChoice, writeLastProject } from "./filePrefs";
+import {
+  applyBookStorage,
+  bookFileName,
+  booksOnStartup,
+  joinNovelPath,
+  markBookClosed,
+  readFilePreferences,
+  readSnapshotMinutes,
+  rememberOpenBook,
+  type SnapshotMinutes,
+} from "./filePrefs";
+import { menuCommand, type MenuCommand } from "./menuCommand";
 import { pickNovelSaveAs, pickNovelToOpen, resolveDirectory } from "./novelFile";
-import { novelFromText, openAtStartup, placeNovel } from "./novelSession";
 import Settings from "./Settings";
-import { loadProject, readNovelFile, saveProject, writeNovelFile } from "./storage";
+import { readBook, writeBook } from "./storage";
+import { bookQuery, openBookWindow, tauriAvailable } from "./windows";
 import "./App.css";
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
@@ -48,7 +70,12 @@ export default function App() {
   const [notice, showNotice] = useNotice();
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [confirmingNew, setConfirmingNew] = useState(false);
+  const [history, setHistory] = useState<BookHistory | null>(null);
+  const [snapshotMinutes, setSnapshotMinutes] = useState<SnapshotMinutes>(() =>
+    readSnapshotMinutes(localStorage),
+  );
+  const [naming, setNaming] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
   const [pendingTrash, setPendingTrash] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -58,34 +85,36 @@ export default function App() {
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const projectRef = useRef<ProjectFile | null>(null);
   const filePathRef = useRef<string | null>(null);
+  const historyRef = useRef<BookHistory | null>(null);
   const fileBusy = useRef(false);
+  const runMenu = useRef<(command: MenuCommand) => void>(() => undefined);
   const dialogs = useRef({
-    confirmingNew: false,
+    naming: false,
     pendingTrash: null as string | null,
     settingsOpen: false,
   });
   const selectedId = project?.view.selectedId ?? null;
   projectRef.current = project;
   filePathRef.current = filePath;
-  dialogs.current = { confirmingNew, pendingTrash, settingsOpen };
+  historyRef.current = history;
+  dialogs.current = { naming, pendingTrash, settingsOpen };
 
   useEffect(() => {
     let cancelled = false;
-    const prefs = readFilePreferences(localStorage);
-    loadProject()
-      .then((raw) => openAtStartup(prefs, raw, readNovelFile))
-      .then((started) => {
-        if (cancelled) {
+    const startup = booksOnStartup(localStorage, bookQuery());
+    const first = startup.paths[0];
+    if (!first) {
+      setReady(true);
+      return;
+    }
+    loadBook(first)
+      .then(async () => {
+        if (cancelled || !startup.openRest) {
           return;
         }
-        if (started.notice) {
-          showNotice(started.notice);
+        for (const path of startup.paths.slice(1)) {
+          await openBookWindow(path, path);
         }
-        if (started.project) {
-          setFilePath(started.path);
-          openProject(started.project);
-        }
-        setReady(true);
       })
       .catch((error: unknown) => {
         if (!cancelled) {
@@ -111,21 +140,22 @@ export default function App() {
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "o") {
         event.preventDefault();
-        commands().openNovel?.();
+        runMenu.current({ name: "open" });
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        if (event.shiftKey) {
-          commands().saveNovelAs?.();
-        } else {
-          commands().saveNovel?.();
-        }
+        runMenu.current({ name: event.shiftKey ? "save-as" : "save" });
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
         event.preventDefault();
-        setSettingsOpen(true);
+        runMenu.current({ name: "settings" });
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        runMenu.current({ name: "new" });
         return;
       }
       if (event.key === "Escape") {
@@ -133,8 +163,8 @@ export default function App() {
           setSettingsOpen(false);
           return;
         }
-        if (dialogs.current.confirmingNew) {
-          setConfirmingNew(false);
+        if (dialogs.current.naming) {
+          setNaming(false);
           return;
         }
         if (dialogs.current.pendingTrash) {
@@ -149,7 +179,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!project) {
+    if (!project || !filePath) {
       return;
     }
     if (skipNextSave.current) {
@@ -157,7 +187,6 @@ export default function App() {
       return;
     }
     const nextGeneration = ++generation.current;
-    const json = JSON.stringify(project);
     setSaveState("dirty");
     setSaveError(null);
     if (pendingSave.current !== null) {
@@ -165,7 +194,7 @@ export default function App() {
     }
     pendingSave.current = window.setTimeout(() => {
       pendingSave.current = null;
-      enqueueSave(nextGeneration, json);
+      enqueueSave(nextGeneration);
     }, 1000);
     return () => {
       if (pendingSave.current !== null) {
@@ -173,7 +202,7 @@ export default function App() {
         pendingSave.current = null;
       }
     };
-  }, [project]);
+  }, [project, history, filePath]);
 
   useEffect(() => {
     function onBlur() {
@@ -197,13 +226,20 @@ export default function App() {
     );
   }
 
-  function enqueueSave(saveGeneration: number, json: string, previous?: string): Promise<void> {
+  function enqueueSave(saveGeneration: number): Promise<void> {
+    const path = filePathRef.current;
+    const current = projectRef.current;
+    const bookHistory = historyRef.current;
+    if (!path || !current || !bookHistory) {
+      return Promise.resolve();
+    }
+    const files = filesToSave(current, bookHistory);
     setSaveState("saving");
     const pending = saveQueue.current.then(async () => {
       if (saveGeneration !== generation.current) {
         throw new Error("Save was superseded.");
       }
-      await saveProject(json, previous);
+      await writeBook(path, files, true);
       if (saveGeneration !== generation.current) {
         throw new Error("Save was superseded.");
       }
@@ -232,34 +268,166 @@ export default function App() {
     }
     window.clearTimeout(pendingSave.current);
     pendingSave.current = null;
-    enqueueSave(generation.current, JSON.stringify(current));
+    enqueueSave(generation.current);
   }
 
-  async function adoptNovel(next: ProjectFile, path: string | null) {
-    const current = projectRef.current;
+  function showBook(next: ProjectFile, path: string, bookHistory: BookHistory) {
     if (pendingSave.current !== null) {
       window.clearTimeout(pendingSave.current);
       pendingSave.current = null;
     }
-    const nextGeneration = ++generation.current;
-    await enqueueSave(
-      nextGeneration,
-      JSON.stringify(next),
-      current ? JSON.stringify(current) : undefined,
-    );
+    historyRef.current = bookHistory;
+    filePathRef.current = path;
+    setHistory(bookHistory);
     setFilePath(path);
     openProject(next);
     setReady(true);
     try {
-      writeLastProject(localStorage, path);
+      rememberOpenBook(localStorage, path);
     } catch (error: unknown) {
-      showNotice(error, "Could not save this preference.");
+      showNotice(error, "Could not remember this open book.");
     }
   }
 
-  async function beginNewProject() {
-    await adoptNovel(createNovelProject(), null);
+  async function loadBook(path: string) {
+    const opened = bookFromArchive(await readBook(path));
+    showBook(opened.project, path, opened.history);
   }
+
+  async function createNamedBook(name: string) {
+    const created = newBook(name);
+    if (!created) {
+      showNotice("A book needs a name.");
+      return;
+    }
+    const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
+    const path = joinNovelPath(directory, created.fileName);
+    try {
+      await writeBook(path, created.files, false);
+    } catch (error: unknown) {
+      const taken = takenNameMessage(error);
+      if (taken) {
+        throw new Error(taken);
+      }
+      throw error;
+    }
+    setNaming(false);
+    setNameDraft("");
+    showNotice(null);
+    if (projectRef.current) {
+      await openBookWindow(path, created.title);
+      return;
+    }
+    showBook(created.project, path, created.history);
+  }
+
+  function recordSnapshot(kind: "manual" | "auto") {
+    const current = projectRef.current;
+    const bookHistory = historyRef.current;
+    if (!current || !bookHistory || !filePathRef.current) {
+      return;
+    }
+    const next = recordedSnapshot(bookHistory, current, kind, Date.now(), crypto.randomUUID());
+    if (!next) {
+      return;
+    }
+    historyRef.current = next;
+    setHistory(next);
+  }
+
+  function restoreSnapshotBook(id: string) {
+    const bookHistory = historyRef.current;
+    if (!bookHistory) {
+      return;
+    }
+    const restored = restoredBook(bookHistory, id);
+    switch (restored.kind) {
+      case "absent":
+        return;
+      case "unreadable":
+        showNotice("That snapshot could not be read.");
+        return;
+      case "ready":
+        setProject(restored.project);
+        return;
+      default: {
+        const unexpected: never = restored;
+        return unexpected;
+      }
+    }
+  }
+
+  function restoreSnapshotScene(id: string) {
+    const bookHistory = historyRef.current;
+    const current = projectRef.current;
+    if (!bookHistory || !current) {
+      showNotice("Select a scene to restore.");
+      return;
+    }
+    const restored = restoredScene(bookHistory, current, id);
+    switch (restored.kind) {
+      case "notice":
+        showNotice(restored.message);
+        return;
+      case "ready":
+        setProject(restored.project);
+        return;
+      default: {
+        const unexpected: never = restored;
+        return unexpected;
+      }
+    }
+  }
+
+  function removeSnapshot(id: string) {
+    const bookHistory = historyRef.current;
+    if (!bookHistory) {
+      return;
+    }
+    const next = withoutSnapshot(bookHistory, id);
+    historyRef.current = next;
+    setHistory(next);
+  }
+
+  function runMenuCommand(command: MenuCommand) {
+    switch (command.name) {
+      case "new":
+        setNaming(true);
+        return;
+      case "open":
+        void openNovelFile();
+        return;
+      case "save":
+        void saveNovelFile(false);
+        return;
+      case "save-as":
+        void saveNovelFile(true);
+        return;
+      case "snapshot":
+        recordSnapshot("manual");
+        return;
+      case "settings":
+        setSettingsOpen(true);
+        return;
+      case "new-scene":
+        insertScene();
+        return;
+      case "new-section":
+        insertSection();
+        return;
+      case "trash":
+        askTrash(projectRef.current?.view.selectedId ?? null);
+        return;
+      case "format":
+        commands().format?.(command.command);
+        return;
+      default: {
+        const unexpected: never = command;
+        return unexpected;
+      }
+    }
+  }
+  runMenu.current = runMenuCommand;
 
   async function openNovelFile() {
     if (fileBusy.current) {
@@ -272,7 +440,11 @@ export default function App() {
       if (!picked) {
         return;
       }
-      await adoptNovel(novelFromText(await readNovelFile(picked)), picked);
+      if (projectRef.current) {
+        await openBookWindow(picked, picked);
+        return;
+      }
+      await loadBook(picked);
     } catch (error: unknown) {
       showNotice(error, "Could not open that novel.");
     } finally {
@@ -287,22 +459,21 @@ export default function App() {
     }
     fileBusy.current = true;
     try {
-      const prefs = readFilePreferences(localStorage);
-      const step = forceDialog
-        ? saveAsChoice(prefs, current.title)
-        : saveChoice(prefs, filePathRef.current, current.title);
-      const path = await placeNovel(step, JSON.stringify(current), {
-        directory: resolveDirectory,
-        pickSave: pickNovelSaveAs,
-        write: writeNovelFile,
-      });
-      if (!path) {
+      if (!forceDialog) {
+        enqueueSave(++generation.current);
         return;
       }
+      const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
+      const path = await pickNovelSaveAs(directory, bookFileName(current.title));
+      if (!path || !historyRef.current) {
+        return;
+      }
+      await writeBook(path, filesToSave(current, historyRef.current), true);
+      filePathRef.current = path;
       setFilePath(path);
       setSaveState("saved");
       setSaveError(null);
-      writeLastProject(localStorage, path);
+      rememberOpenBook(localStorage, path);
     } catch (error: unknown) {
       showNotice(error, "Could not save.");
     } finally {
@@ -312,38 +483,15 @@ export default function App() {
 
   useEffect(() => {
     return registerCommands({
-      openSettings: () => setSettingsOpen(true),
-    });
-  }, []);
-
-  useEffect(() => {
-    return registerCommands({
-      newProject: () => {
-        if (!projectRef.current) {
-          void beginNewProject().catch((error: unknown) => {
-            showNotice(error, "Could not create a novel.");
-          });
-          return;
-        }
-        setBinderOpen(true);
-        setConfirmingNew(true);
-      },
-      openNovel: () => {
-        void openNovelFile();
-      },
-      saveNovel: project
-        ? () => {
-            void saveNovelFile(false);
-          }
-        : null,
-      saveNovelAs: project
-        ? () => {
-            void saveNovelFile(true);
-          }
-        : null,
-      newScene: project ? () => insertScene() : null,
-      newSection: project ? () => insertSection() : null,
-      trash: project ? () => askTrash(selectedId) : null,
+      openSettings: () => runMenu.current({ name: "settings" }),
+      newProject: () => runMenu.current({ name: "new" }),
+      takeSnapshot: project ? () => runMenu.current({ name: "snapshot" }) : null,
+      openNovel: () => runMenu.current({ name: "open" }),
+      saveNovel: project ? () => runMenu.current({ name: "save" }) : null,
+      saveNovelAs: project ? () => runMenu.current({ name: "save-as" }) : null,
+      newScene: project ? () => runMenu.current({ name: "new-scene" }) : null,
+      newSection: project ? () => runMenu.current({ name: "new-section" }) : null,
+      trash: project ? () => runMenu.current({ name: "trash" }) : null,
       removal: project && selectedId ? removal(project, selectedId) : null,
       leafLabel: project ? leafAction(project, selectedId).menuLabel : "New Scene",
     });
@@ -354,6 +502,121 @@ export default function App() {
       showNotice(error, "Could not install the menu.");
     });
   }, []);
+
+  useEffect(() => {
+    if (!tauriAvailable()) {
+      return;
+    }
+    let unlisten: (() => void) | undefined;
+    void listen("manuscriptic-command", (event) => {
+      const command = menuCommand(event.payload);
+      if (!command || !document.hasFocus()) {
+        return;
+      }
+      runMenu.current(command);
+    }).then((stop) => {
+      unlisten = stop;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!snapshotMinutes || !project) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      recordSnapshot("auto");
+    }, snapshotMinutes * 60 * 1000);
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [snapshotMinutes, project]);
+
+  useEffect(() => {
+    if (!filePath) {
+      return;
+    }
+    const path = filePath;
+    function onHide() {
+      try {
+        markBookClosed(localStorage, path);
+      } catch (error: unknown) {
+        showNotice(error, "Could not update the list of open books.");
+      }
+    }
+    function onStorage(event: StorageEvent) {
+      applyBookStorage(localStorage, event.key, event.newValue);
+    }
+    window.addEventListener("pagehide", onHide);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener("pagehide", onHide);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [filePath]);
+
+  function settingsPanel(
+    words: string[],
+    onAddWord: (word: string) => void,
+    onRemoveWord: (word: string) => void,
+  ) {
+    if (!settingsOpen) {
+      return null;
+    }
+    return (
+      <Settings
+        words={words}
+        onAddWord={onAddWord}
+        onRemoveWord={onRemoveWord}
+        onClose={() => setSettingsOpen(false)}
+        snapshotMinutes={snapshotMinutes}
+        snapshots={history?.snapshots ?? []}
+        onSnapshotMinutes={setSnapshotMinutes}
+        onTakeSnapshot={() => recordSnapshot("manual")}
+        onRestoreBook={restoreSnapshotBook}
+        onRestoreScene={restoreSnapshotScene}
+        onDeleteSnapshot={removeSnapshot}
+      />
+    );
+  }
+
+  function namePanel() {
+    if (!naming) {
+      return null;
+    }
+    return (
+      <div className="dialog-backdrop">
+        <form
+          className="dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-label="New book"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void createNamedBook(nameDraft).catch((error: unknown) => {
+              showNotice(error, "Could not create a novel.");
+            });
+          }}
+        >
+          <p>Name this book. It is saved as a file in the folder you chose.</p>
+          <input
+            aria-label="Book name"
+            value={nameDraft}
+            autoFocus
+            onChange={(event) => setNameDraft(event.currentTarget.value)}
+          />
+          <div>
+            <button type="submit">Create</button>
+            <button type="button" onClick={() => setNaming(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   function insertScene(targetId?: string) {
     if (!project) {
@@ -424,28 +687,15 @@ export default function App() {
             >
               Open
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                void beginNewProject().catch((error: unknown) => {
-                  showNotice(error, "Could not create a novel.");
-                });
-              }}
-            >
+            <button type="button" onClick={() => setNaming(true)}>
               Create New
             </button>
           </div>
         ) : (
           <p>Opening project…</p>
         )}
-        {settingsOpen ? (
-          <Settings
-            words={[]}
-            onAddWord={() => undefined}
-            onRemoveWord={() => undefined}
-            onClose={() => setSettingsOpen(false)}
-          />
-        ) : null}
+        {settingsPanel([], () => undefined, () => undefined)}
+        {namePanel()}
       </main>
     );
   }
@@ -547,30 +797,8 @@ export default function App() {
         {notice ? <span role="alert">{notice}</span> : null}
         <span>{saveError ?? saveLabel(saveState)}</span>
       </footer>
-      {settingsOpen ? (
-        <Settings
-          words={project.dictionary}
-          onAddWord={addWord}
-          onRemoveWord={removeWord}
-          onClose={() => setSettingsOpen(false)}
-        />
-      ) : null}
-      {confirmingNew ? (
-        <ConfirmDialog
-          message="Replace this novel with a blank one? The current book is copied to backups first."
-          confirmLabel="Replace"
-          onCancel={() => setConfirmingNew(false)}
-          onConfirm={() => {
-            void beginNewProject().then(
-              () => setConfirmingNew(false),
-              (error: unknown) => {
-                showNotice(error, "Could not create a novel.");
-                setConfirmingNew(false);
-              },
-            );
-          }}
-        />
-      ) : null}
+      {settingsPanel(project.dictionary, addWord, removeWord)}
+      {namePanel()}
       {pendingTrash && pendingRemoval ? (
         <ConfirmDialog
           message={pendingRemoval.message}
@@ -642,6 +870,10 @@ function ConfirmDialog({
 function useNotice(): [string | null, (error: unknown, fallback?: string) => void] {
   const [notice, setNotice] = useState<string | null>(null);
   const showNotice = useCallback((error: unknown, fallback = "Something went wrong.") => {
+    if (error == null) {
+      setNotice(null);
+      return;
+    }
     setNotice(failureMessage(error, fallback));
   }, []);
   useEffect(() => {
