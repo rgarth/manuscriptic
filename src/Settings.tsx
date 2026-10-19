@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { getEditorPrefs, setTypewriter, subscribeEditorPrefs } from "./editorPrefs";
 import { failureMessage, reportFailure } from "./failures";
 import {
   preferenceDirectoryLabel,
@@ -50,6 +51,7 @@ export default function Settings({
   const [theme, setTheme] = useState(() => readTheme(themes));
   const [directory, setDirectory] = useState(stored.directory);
   const [openLast, setOpenLast] = useState(stored.openLast);
+  const typewriter = useSyncExternalStore(subscribeEditorPrefs, readTypewriter, readTypewriter);
   const [draft, setDraft] = useState("");
   const [folderError, setFolderError] = useState<string | null>(null);
 
@@ -141,6 +143,15 @@ export default function Settings({
             </li>
           ))}
         </ul>
+        <h2>Writing</h2>
+        <label className="preference">
+          <input
+            type="checkbox"
+            checked={typewriter}
+            onChange={(event) => setTypewriter(event.currentTarget.checked)}
+          />
+          Keep the cursor in the middle of the screen
+        </label>
         <h2>Project dictionary</h2>
         <p>Words here are spelled correctly in this novel. The list is saved with the book.</p>
         {words.length === 0 ? (
@@ -226,6 +237,10 @@ export default function Settings({
       </div>
     </div>
   );
+}
+
+function readTypewriter(): boolean {
+  return getEditorPrefs().typewriter;
 }
 
 function snapshotLabel(minutes: SnapshotMinutes): string {

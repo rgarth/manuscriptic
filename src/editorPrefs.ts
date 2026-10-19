@@ -2,9 +2,11 @@ import { reportFailure } from "./failures.ts";
 
 export type EditorPrefs = {
   zoom: number;
+  typewriter: boolean;
 };
 
 const zoomKey = "manuscriptic-editor-zoom";
+const typewriterKey = "manuscriptic-typewriter";
 const defaultZoom = 112.5;
 
 export const zoomStops = [75, 100, 112.5, 125, 150, 175, 200] as const;
@@ -60,11 +62,12 @@ function writeSaved(key: string, value: string): boolean {
 }
 
 let zoom = zoomPercent(readSaved(zoomKey));
-let snapshot: EditorPrefs = { zoom };
+let typewriter = readSaved(typewriterKey) === "true";
+let snapshot: EditorPrefs = { zoom, typewriter };
 const listeners = new Set<() => void>();
 
 function publish() {
-  snapshot = { zoom };
+  snapshot = { zoom, typewriter };
   for (const listener of listeners) {
     listener();
   }
@@ -87,5 +90,13 @@ export function setZoom(value: string | number) {
     return;
   }
   zoom = next;
+  publish();
+}
+
+export function setTypewriter(on: boolean) {
+  if (on === typewriter || !writeSaved(typewriterKey, on ? "true" : "false")) {
+    return;
+  }
+  typewriter = on;
   publish();
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { takePendingFailures } from "./failures.ts";
-import { getEditorPrefs, nextZoom, setZoom, zoomPercent } from "./editorPrefs.ts";
+import { getEditorPrefs, nextZoom, setTypewriter, setZoom, zoomPercent } from "./editorPrefs.ts";
 import { alignmentById, displayPixels, fontFamily, fontName, pointSize } from "./pageLayout.ts";
 
 test("the book face defaults to garamond and any other face is kept", () => {
@@ -38,6 +38,30 @@ test("a zoom that cannot be saved stays as it was", () => {
     setZoom(previous === 150 ? 125 : 150);
     assert.equal(getEditorPrefs().zoom, previous);
     assert.deepEqual(takePendingFailures(), ["quota"]);
+  } finally {
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
+  }
+});
+
+test("typewriter scrolling stays off until the preference is saved", () => {
+  assert.equal(getEditorPrefs().typewriter, false);
+  const original = globalThis.localStorage;
+  const saved = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        saved.set(key, value);
+      },
+    },
+  });
+  try {
+    setTypewriter(true);
+    assert.equal(getEditorPrefs().typewriter, true);
+    assert.equal(saved.get("manuscriptic-typewriter"), "true");
+    setTypewriter(false);
+    assert.equal(getEditorPrefs().typewriter, false);
   } finally {
     Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
   }

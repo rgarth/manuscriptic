@@ -4,6 +4,7 @@ import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { getEditorPrefs, subscribeEditorPrefs } from "./editorPrefs";
+import { scrollTopForCaret } from "./typewriter";
 import {
   alignments,
   defaultFont,
@@ -101,6 +102,7 @@ export default function SceneEditor({
     },
   });
   const zoom = useSyncExternalStore(subscribeEditorPrefs, readZoom, readZoom);
+  const typewriter = useSyncExternalStore(subscribeEditorPrefs, readTypewriter, readTypewriter);
   const [fonts, setFonts] = useState<string[]>([defaultFont]);
   const pageStyle = {
     "--editor-font": fontFamily(layout.font),
@@ -128,6 +130,25 @@ export default function SceneEditor({
   }, [editor, dictionary]);
 
   useEffect(() => {
+    if (!editor || !typewriter) {
+      return;
+    }
+    let frame = 0;
+    const center = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => centerCaret(editor));
+    };
+    editor.on("selectionUpdate", center);
+    editor.on("focus", center);
+    center();
+    return () => {
+      cancelAnimationFrame(frame);
+      editor.off("selectionUpdate", center);
+      editor.off("focus", center);
+    };
+  }, [editor, typewriter]);
+
+  useEffect(() => {
     if (!editor) {
       return;
     }
@@ -139,7 +160,7 @@ export default function SceneEditor({
   }, [editor]);
 
   return (
-    <div className="page" style={pageStyle}>
+    <div className={typewriter ? "page typewriter" : "page"} style={pageStyle}>
       <div className="page-head">
         <input
           className="scene-title"
@@ -216,6 +237,32 @@ export default function SceneEditor({
 
 function readZoom(): number {
   return getEditorPrefs().zoom;
+}
+
+function readTypewriter(): boolean {
+  return getEditorPrefs().typewriter;
+}
+
+function centerCaret(editor: Editor) {
+  if (editor.isDestroyed || !editor.view.hasFocus()) {
+    return;
+  }
+  const scroll = editor.view.dom.closest(".editor-scroll");
+  if (!(scroll instanceof HTMLElement)) {
+    return;
+  }
+  let coords: { top: number; bottom: number };
+  try {
+    coords = editor.view.coordsAtPos(editor.state.selection.head);
+  } catch {
+    return;
+  }
+  const box = scroll.getBoundingClientRect();
+  const next = scrollTopForCaret(scroll.scrollTop, (coords.top + coords.bottom) / 2, box.top, box.height);
+  if (Math.abs(next - scroll.scrollTop) < 1) {
+    return;
+  }
+  scroll.scrollTop = next;
 }
 
 function WordMenuPop({

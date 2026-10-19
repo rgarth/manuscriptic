@@ -462,6 +462,11 @@ input:focus-visible {
   font-family: var(--editor-font, "EB Garamond Variable", "EB Garamond", Palatino, serif);
 }
 
+.page.typewriter {
+  padding-top: 40vh;
+  padding-bottom: 45vh;
+}
+
 .page-head {
   flex: none;
   margin-bottom: 0.4rem;

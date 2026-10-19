@@ -3,12 +3,16 @@ import { test } from "node:test";
 import {
   bookAt,
   bookFromFiles,
+  bookPatch,
   emptyHistory,
   filesForBook,
+  planSave,
+  rememberSave,
+  type BookHistory,
+  type DiskHistory,
   sceneAt,
   takeSnapshot,
   thinHistory,
-  type BookHistory,
 } from "./bookArchive.ts";
 import type { EditorDoc } from "./model/editorDoc.ts";
 import { addLeaf } from "./model/binder.ts";
@@ -71,6 +75,57 @@ test("a snapshot can put one scene back and leave the other alone", () => {
   assert.equal(bookAt(again, 1)?.title, "Castus");
   const liveSecond = bookFromFiles(filesForBook(both));
   assert.deepEqual(contentOf(liveSecond, second), paragraph("The gate."));
+});
+
+test("a save sends the scene that changed and keeps the rest", () => {
+  const stored = {
+    "binder.json": "{\"title\":\"Castus\"}\n",
+    "scenes/opening.prose": "p One\n",
+    "history.json": "{\"snapshots\":[]}\n",
+  };
+  const next = {
+    ...stored,
+    "binder.json": "{\"title\":\"Castus\"}\n",
+    "scenes/opening.prose": "p Two\n",
+  };
+  const patch = bookPatch(stored, next);
+  assert.deepEqual(patch.files, { "scenes/opening.prose": "p Two\n" });
+  assert.deepEqual(patch.keep.sort(), ["binder.json", "history.json"]);
+  assert.equal(patch.rewrite, true);
+  const held = planSave(stored, { ...next, "history.json": "{\"snapshots\":[1]}\n" }, { phase: "unread" });
+  assert.equal(held.files["history.json"], undefined);
+  assert.equal(held.keep.includes("history.json"), true);
+});
+
+test("a keystroke before history arrives does not replace the history that lands", () => {
+  const pages = {
+    "binder.json": "{\"title\":\"Castus\"}\n",
+    "scenes/opening.prose": "p One\n",
+  };
+  const generated = {
+    ...pages,
+    "scenes/opening.prose": "p Two\n",
+    "history.json": "{\"snapshots\":[]}\n",
+  };
+  const unread: DiskHistory = { phase: "unread" };
+  const patch = planSave(pages, generated, unread);
+  assert.equal(patch.files["history.json"], undefined);
+  assert.equal(patch.keep.includes("history.json"), true);
+  assert.equal(patch.files["scenes/opening.prose"], "p Two\n");
+
+  const blank: BookHistory = { checkpoint: {}, snapshots: [] };
+  const kept = "{\"snapshots\":[\"kept\"]}\n";
+  const ready: DiskHistory = { phase: "ready", history: blank, text: kept };
+  const remembered = rememberSave({ ...pages, "history.json": kept }, generated, unread, ready, blank);
+  assert.equal(remembered.files["history.json"], kept);
+  assert.equal(remembered.files["scenes/opening.prose"], "p Two\n");
+  assert.equal(remembered.disk, ready);
+  const waiting = rememberSave(pages, generated, unread, unread, blank);
+  assert.equal(waiting.files["history.json"], undefined);
+  assert.equal(waiting.disk.phase, "unread");
+  const written = rememberSave(pages, generated, { phase: "absent" }, { phase: "absent" }, blank);
+  assert.equal(written.files["history.json"], "{\"snapshots\":[]}\n");
+  assert.deepEqual(written.disk, { phase: "ready", history: blank, text: "{\"snapshots\":[]}\n" });
 });
 
 test("page layout travels in the binder", () => {

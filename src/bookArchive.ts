@@ -30,8 +30,13 @@ export type BookHistory = {
   snapshots: Snapshot[];
 };
 
+export type DiskHistory =
+  | { phase: "unread" }
+  | { phase: "absent" }
+  | { phase: "ready"; history: BookHistory; text: string };
+
 const binderPath = "binder.json";
-const historyPath = "history.json";
+export const historyFile = "history.json";
 
 export function scenePath(id: string): string {
   return `scenes/${id}.prose`;
@@ -76,7 +81,7 @@ export function emptyHistory(files: BookFiles): BookHistory {
 }
 
 export function historyFromFiles(files: BookFiles): BookHistory | null {
-  const raw = files[historyPath];
+  const raw = files[historyFile];
   if (!raw) {
     const book = withoutHistory(files);
     return emptyHistory(book);
@@ -111,8 +116,67 @@ export function historyFromFiles(files: BookFiles): BookHistory | null {
 export function withHistory(files: BookFiles, history: BookHistory): BookFiles {
   return {
     ...withoutHistory(files),
-    [historyPath]: `${JSON.stringify({ checkpoint: history.checkpoint, snapshots: history.snapshots }, null, 2)}\n`,
+    [historyFile]: `${JSON.stringify({ checkpoint: history.checkpoint, snapshots: history.snapshots }, null, 2)}\n`,
   };
+}
+
+export type BookPatch = {
+  files: BookFiles;
+  keep: string[];
+  rewrite: boolean;
+};
+
+export function bookPatch(stored: BookFiles | null, next: BookFiles): BookPatch {
+  if (!stored) {
+    return { files: next, keep: [], rewrite: true };
+  }
+  const files: BookFiles = {};
+  const keep: string[] = [];
+  let removed = false;
+  for (const path of Object.keys(next)) {
+    if (stored[path] === next[path]) {
+      keep.push(path);
+    } else {
+      files[path] = next[path];
+    }
+  }
+  for (const path of Object.keys(stored)) {
+    if (!(path in next)) {
+      removed = true;
+    }
+  }
+  return { files, keep, rewrite: removed || Object.keys(files).length > 0 };
+}
+
+export function planSave(stored: BookFiles | null, next: BookFiles, disk: DiskHistory): BookPatch {
+  if (disk.phase !== "unread") {
+    return bookPatch(stored, next);
+  }
+  const patch = bookPatch(stored ? withoutHistory(stored) : null, withoutHistory(next));
+  patch.keep.push(historyFile);
+  return patch;
+}
+
+export function rememberSave(
+  stored: BookFiles | null,
+  written: BookFiles,
+  started: DiskHistory,
+  now: DiskHistory,
+  bookHistory: BookHistory,
+): { files: BookFiles; disk: DiskHistory } {
+  if (started.phase === "unread") {
+    const pages = withoutHistory(written);
+    const history = stored?.[historyFile];
+    if (history !== undefined) {
+      pages[historyFile] = history;
+    }
+    return { files: pages, disk: now };
+  }
+  const text = written[historyFile];
+  if (text === undefined) {
+    return { files: written, disk: { phase: "absent" } };
+  }
+  return { files: written, disk: { phase: "ready", history: bookHistory, text } };
 }
 
 export function takeSnapshot(
@@ -268,7 +332,7 @@ function applyChanges(files: BookFiles, changes: FileChange[]): BookFiles {
 
 function withoutHistory(files: BookFiles): BookFiles {
   const next = { ...files };
-  delete next[historyPath];
+  delete next[historyFile];
   return next;
 }
 

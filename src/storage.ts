@@ -13,12 +13,17 @@ export function readBook(path: string): Promise<Record<string, string>> {
   return invoke<Record<string, string>>("read_book", { path });
 }
 
+export function readHistory(path: string): Promise<string | null> {
+  return invoke<string | null>("read_history", { path });
+}
+
 export function writeBook(
   path: string,
   files: Record<string, string>,
+  keep: string[],
   overwrite: boolean,
 ): Promise<void> {
-  return invoke("write_book", { path, files, overwrite });
+  return invoke("write_book", { path, files, keep, overwrite });
 }
 
 export function claimBookLock(path: string, holder: string): Promise<BookLock> {
