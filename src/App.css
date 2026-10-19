@@ -154,6 +154,18 @@ input:focus-visible {
   margin: 1px 0;
 }
 
+.tree-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--nib);
+}
+
+.tree-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--nib);
+}
+
+.tree-row.drop-inside {
+  background: var(--wash);
+}
+
 .disclosure,
 .disclosure-gap {
   width: 22px;

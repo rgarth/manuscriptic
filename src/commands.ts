@@ -1,4 +1,4 @@
-import type { Removal } from "./model/project";
+import type { Removal } from "./model/binder";
 import type { SceneCommand } from "./formatCommands";
 
 export type CommandState = {

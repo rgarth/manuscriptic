@@ -2,23 +2,30 @@ import { useEffect, useRef, useState } from "react";
 import Binder from "./Binder";
 import SceneEditor from "./SceneEditor";
 import {
-  addDictionaryWord,
   addLeaf,
-  leafAction,
-  removeDictionaryWord,
   addSection,
-  createNovelProject,
   deleteForever,
+  emptyTrash,
+  moveToTrash,
+  placeNode,
+  removal,
+  restoreNode,
+} from "./model/binder";
+import {
+  addDictionaryWord,
+  createNovelProject,
   findNode,
   firstDocumentId,
   folderIds,
+  isRoot,
+  leafAction,
   manuscriptWordCount,
-  moveToTrash,
   parseProject,
-  removal,
+  removeDictionaryWord,
   renameNode,
   renameProject,
   setDocumentContent,
+  setView,
   type ProjectFile,
 } from "./model/project";
 import { type EditorDoc, wordCount } from "./model/editorDoc";
@@ -32,8 +39,6 @@ type SaveState = "saved" | "dirty" | "saving" | "error";
 
 export default function App() {
   const [project, setProject] = useState<ProjectFile | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [binderOpen, setBinderOpen] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
@@ -52,6 +57,7 @@ export default function App() {
     pendingTrash: null as string | null,
     settingsOpen: false,
   });
+  const selectedId = project?.view.selectedId ?? null;
   projectRef.current = project;
   dialogs.current = { confirmingNew, pendingTrash, settingsOpen };
 
@@ -155,10 +161,17 @@ export default function App() {
   }, []);
 
   function openProject(next: ProjectFile) {
+    const selected =
+      next.view.selectedId && findNode(next, next.view.selectedId)
+        ? next.view.selectedId
+        : firstDocumentId(next.manuscript);
     skipNextSave.current = true;
-    setProject(next);
-    setExpanded(new Set(folderIds(next)));
-    setSelectedId(firstDocumentId(next.manuscript));
+    setProject(
+      setView(next, {
+        selectedId: selected,
+        expanded: next.view.expanded ?? folderIds(next),
+      }),
+    );
     setLoadError(null);
   }
 
@@ -268,18 +281,33 @@ export default function App() {
   }
 
   function selectInserted(next: ProjectFile, id: string) {
-    setProject(next);
-    setSelectedId(id);
     const located = findNode(next, id);
-    setExpanded((current) => {
-      const open = new Set(current);
-      if (located?.parent) {
-        open.add(located.parent.id);
+    const open = new Set(next.view.expanded ?? folderIds(next));
+    if (located?.parent) {
+      open.add(located.parent.id);
+    }
+    if (located?.node.kind === "folder") {
+      open.add(located.node.id);
+    }
+    setProject(setView(next, { selectedId: id, expanded: [...open] }));
+  }
+
+  function selectNode(id: string) {
+    setProject((current) => (current ? setView(current, { selectedId: id }) : current));
+  }
+
+  function toggleSection(id: string) {
+    setProject((current) => {
+      if (!current) {
+        return current;
       }
-      if (located?.node.kind === "folder") {
-        open.add(located.node.id);
+      const open = new Set(current.view.expanded ?? folderIds(current));
+      if (open.has(id)) {
+        open.delete(id);
+      } else {
+        open.add(id);
       }
-      return open;
+      return setView(current, { expanded: [...open] });
     });
   }
 
@@ -327,23 +355,28 @@ export default function App() {
         <Binder
           project={project}
           selectedId={selectedId}
-          expanded={expanded}
-          onToggle={(id) => {
-            setExpanded((current) => {
-              const next = new Set(current);
-              if (next.has(id)) {
-                next.delete(id);
-              } else {
-                next.add(id);
-              }
-              return next;
-            });
-          }}
-          onSelect={setSelectedId}
+          expanded={new Set(project.view.expanded ?? folderIds(project))}
+          onToggle={toggleSection}
+          onSelect={selectNode}
           onRenameProject={(title) => setProject(renameProject(project, title))}
           onAddScene={insertScene}
           onAddSection={insertSection}
           onAskTrash={askTrash}
+          onRestore={(id) => setProject((current) => (current ? restoreNode(current, id) : current))}
+          onPlace={(id, targetId, place) => {
+            setProject((current) => {
+              if (!current) {
+                return current;
+              }
+              const next = placeNode(current, id, targetId, place);
+              if (place !== "inside") {
+                return next;
+              }
+              const open = new Set(next.view.expanded ?? folderIds(next));
+              open.add(targetId);
+              return setView(next, { expanded: [...open] });
+            });
+          }}
           open={binderOpen}
           onToggleOpen={() => setBinderOpen((value) => !value)}
         />
@@ -370,7 +403,20 @@ export default function App() {
               />
             ) : (
               <div className="page section-note">
-                <h1>{selected?.node.title ?? "Manuscript"}</h1>
+                {selected && !isRoot(project, selected.node.id) ? (
+                  <input
+                    className="scene-title"
+                    aria-label="Section title"
+                    value={selected.node.title}
+                    onChange={(event) => {
+                      const id = selected.node.id;
+                      const title = event.currentTarget.value;
+                      setProject((current) => (current ? renameNode(current, id, title) : current));
+                    }}
+                  />
+                ) : (
+                  <h1>{selected?.node.title ?? "Manuscript"}</h1>
+                )}
                 <p>{leaf.empty}</p>
               </div>
             )}
@@ -419,8 +465,17 @@ export default function App() {
             switch (action) {
               case "delete": {
                 const parent = findNode(project, id)?.parent;
-                setProject(deleteForever(project, id));
-                setSelectedId(parent?.id ?? project.trash.id);
+                setProject(
+                  setView(deleteForever(project, id), {
+                    selectedId: parent?.id ?? project.trash.id,
+                  }),
+                );
+                return;
+              }
+              case "empty": {
+                const next = emptyTrash(project);
+                const selected = selectedId && findNode(next, selectedId) ? selectedId : next.trash.id;
+                setProject(setView(next, { selectedId: selected }));
                 return;
               }
               case "move":

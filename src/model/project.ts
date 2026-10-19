@@ -1,10 +1,17 @@
 import { uniqueWords } from "../dictionary.ts";
 import { emptyDoc, parseEditorDoc, wordCount, type EditorDoc } from "./editorDoc.ts";
 
+export type TrashOrigin = {
+  parentId: string;
+  index: number;
+  root: RootKey;
+};
+
 type BinderFields = {
   id: string;
   title: string;
   includeInCompile: boolean;
+  origin?: TrashOrigin;
 };
 
 export type FolderNode = BinderFields & {
@@ -26,6 +33,11 @@ export const ROOT_KEYS = ["manuscript", "notes", "publishing", "trash"] as const
 
 export type RootKey = (typeof ROOT_KEYS)[number];
 
+export type ProjectView = {
+  selectedId: string | null;
+  expanded: string[] | null;
+};
+
 export type ProjectFile = {
   version: 2;
   title: string;
@@ -34,6 +46,7 @@ export type ProjectFile = {
   publishing: FolderNode;
   trash: FolderNode;
   dictionary: string[];
+  view: ProjectView;
 };
 
 export type LocatedNode = {
@@ -48,12 +61,11 @@ export type InsertedNode = {
 };
 
 export function createNovelProject(): ProjectFile {
-  const opening = documentNode("Opening", "scene");
-  const chapter = folderNode("Chapter One", [opening]);
-  return {
+  const manuscript = folderNode("Manuscript");
+  const novel: ProjectFile = {
     version: 2,
     title: "Untitled Novel",
-    manuscript: folderNode("Manuscript", [chapter]),
+    manuscript,
     notes: folderNode(
       "Notes",
       [
@@ -69,7 +81,13 @@ export function createNovelProject(): ProjectFile {
     ),
     trash: folderNode("Trash"),
     dictionary: [],
+    view: { selectedId: manuscript.id, expanded: null },
   };
+  return setView(novel, { expanded: folderIds(novel) });
+}
+
+export function setView(project: ProjectFile, view: Partial<ProjectView>): ProjectFile {
+  return { ...project, view: { ...project.view, ...view } };
 }
 
 export function addDictionaryWord(project: ProjectFile, word: string): ProjectFile {
@@ -183,91 +201,11 @@ export function leafAction(project: ProjectFile, selectedId: string | null): Lea
   return leafCopy[leafRole(project, selectedId)];
 }
 
-export function addLeaf(project: ProjectFile, selectedId: string | null): InsertedNode {
-  const action = leafAction(project, selectedId);
-  return addNode(project, selectedId, documentNode(action.label, action.role));
-}
-
-export function addSection(project: ProjectFile, selectedId: string | null): InsertedNode {
-  return addNode(project, selectedId, folderNode("New section"));
-}
-
-export type Removal = {
-  action: "move" | "delete";
-  title: string;
-  folder: boolean;
-  label: string;
-  message: string;
-};
-
-export function removal(project: ProjectFile, id: string): Removal | null {
-  if (isRoot(project, id)) {
-    return null;
-  }
-  const located = findNode(project, id);
-  if (!located) {
-    return null;
-  }
-  const title = located.node.title;
-  const folder = located.node.kind === "folder";
-  if (isStoredInTrash(project, id)) {
-    return {
-      action: "delete",
-      title,
-      folder,
-      label: "Delete",
-      message: folder
-        ? `Delete “${title}” and everything inside it? This cannot be undone.`
-        : `Delete “${title}”? This cannot be undone.`,
-    };
-  }
-  const plural = leafCopy[roleForRoot[located.root]].plural;
-  return {
-    action: "move",
-    title,
-    folder,
-    label: "Move to Trash",
-    message: folder
-      ? `Move “${title}” to the trash? Its sections and ${plural} move with it.`
-      : `Move “${title}” to the trash?`,
-  };
-}
-
-export function moveToTrash(project: ProjectFile, id: string): ProjectFile {
-  if (isRoot(project, id) || isStoredInTrash(project, id)) {
-    return project;
-  }
-  const removed = removeFromProject(project, id);
-  const node = removed.node;
-  if (!node) {
-    return project;
-  }
-  return editNode(removed.project, removed.project.trash.id, (trash) => {
-    switch (trash.kind) {
-      case "folder":
-        return { ...trash, children: [...trash.children, node] };
-      case "document":
-        return trash;
-      default: {
-        const unexpected: never = trash;
-        return unexpected;
-      }
-    }
-  });
-}
-
-export function deleteForever(project: ProjectFile, id: string): ProjectFile {
-  if (isRoot(project, id) || !isStoredInTrash(project, id)) {
-    return project;
-  }
-  return removeFromProject(project, id).project;
-}
-
 export function manuscriptWordCount(project: ProjectFile): number {
   return treeWordCount(project.manuscript);
 }
 
-function folderNode(
+export function folderNode(
   title: string,
   children: BinderNode[] = [],
   includeInCompile = true,
@@ -281,7 +219,7 @@ function folderNode(
   };
 }
 
-function documentNode(title: string, role: DocumentRole): DocumentNode {
+export function documentNode(title: string, role: DocumentRole): DocumentNode {
   return {
     id: crypto.randomUUID(),
     title,
@@ -292,14 +230,14 @@ function documentNode(title: string, role: DocumentRole): DocumentNode {
   };
 }
 
-const roleForRoot: Record<RootKey, DocumentRole> = {
+export const roleForRoot: Record<RootKey, DocumentRole> = {
   manuscript: "scene",
   notes: "note",
   publishing: "page",
   trash: "scene",
 };
 
-const leafCopy: Record<DocumentRole, LeafAction & { plural: string }> = {
+export const leafCopy: Record<DocumentRole, LeafAction & { plural: string }> = {
   scene: {
     role: "scene",
     label: "New scene",
@@ -343,74 +281,7 @@ function leafRole(project: ProjectFile, selectedId: string | null): DocumentRole
   return roleForRoot[located.root];
 }
 
-function addNode(project: ProjectFile, selectedId: string | null, child: BinderNode): InsertedNode {
-  const located = selectedId ? findNode(project, selectedId) : null;
-  const afterId =
-    child.kind === "document" && located?.node.kind === "document" ? located.node.id : undefined;
-  const parentId =
-    located && afterId && located.parent
-      ? located.parent.id
-      : destinationId(project, selectedId);
-  const next = insertChild(project, parentId, child, afterId);
-  if (!next) {
-    throw new Error("Could not insert into the binder.");
-  }
-  return { project: next, id: child.id };
-}
-
-function destinationId(project: ProjectFile, selectedId: string | null): string {
-  if (!selectedId) {
-    return project.manuscript.id;
-  }
-  const located = findNode(project, selectedId);
-  if (!located) {
-    return project.manuscript.id;
-  }
-  switch (located.node.kind) {
-    case "folder":
-      return located.node.id;
-    case "document":
-      return located.parent?.id ?? project.manuscript.id;
-    default: {
-      const unexpected: never = located.node;
-      return unexpected;
-    }
-  }
-}
-
-function insertChild(
-  project: ProjectFile,
-  parentId: string,
-  child: BinderNode,
-  afterId?: string,
-): ProjectFile | null {
-  const parent = findNode(project, parentId);
-  if (!parent || parent.node.kind !== "folder") {
-    return null;
-  }
-  return editNode(project, parentId, (node) => {
-    switch (node.kind) {
-      case "folder": {
-        const children = [...node.children];
-        const after = afterId ? children.findIndex((item) => item.id === afterId) : -1;
-        if (after >= 0) {
-          children.splice(after + 1, 0, child);
-        } else {
-          children.push(child);
-        }
-        return { ...node, children };
-      }
-      case "document":
-        return node;
-      default: {
-        const unexpected: never = node;
-        return unexpected;
-      }
-    }
-  });
-}
-
-function editNode(
+export function editNode(
   project: ProjectFile,
   id: string,
   updater: (node: BinderNode) => BinderNode,
@@ -458,61 +329,6 @@ function mapNode(
   }
 }
 
-function removeFromProject(
-  project: ProjectFile,
-  id: string,
-): { project: ProjectFile; node: BinderNode | null } {
-  const next = { ...project };
-  let removed: BinderNode | null = null;
-  for (const key of ROOT_KEYS) {
-    const result = removeNode(project[key], id);
-    if (result.node.kind !== "folder") {
-      return { project, node: null };
-    }
-    next[key] = result.node;
-    if (result.removed) {
-      removed = result.removed;
-    }
-  }
-  return { project: next, node: removed };
-}
-
-function removeNode(
-  node: BinderNode,
-  id: string,
-): { node: BinderNode; removed: BinderNode | null } {
-  switch (node.kind) {
-    case "document":
-      return { node, removed: null };
-    case "folder": {
-      let removed: BinderNode | null = null;
-      const children: BinderNode[] = [];
-      let changed = false;
-      for (const child of node.children) {
-        if (child.id === id) {
-          removed = child;
-          changed = true;
-          continue;
-        }
-        const nested = removeNode(child, id);
-        if (nested.removed) {
-          removed = nested.removed;
-          changed = true;
-        }
-        children.push(nested.node);
-      }
-      if (!changed) {
-        return { node, removed: null };
-      }
-      return { node: { ...node, children }, removed };
-    }
-    default: {
-      const unexpected: never = node;
-      return { node: unexpected, removed: null };
-    }
-  }
-}
-
 function search(
   node: BinderNode,
   parent: FolderNode | null,
@@ -539,7 +355,7 @@ function search(
   }
 }
 
-function contains(node: BinderNode, id: string): boolean {
+export function contains(node: BinderNode, id: string): boolean {
   if (node.id === id) {
     return true;
   }
@@ -616,6 +432,7 @@ function parseVersion2(value: Record<string, unknown>): ProjectFile | null {
     ...roots,
     publishing: arrangePublishing(roots.publishing),
     dictionary: parseDictionary(value.dictionary),
+    view: parseView(value.view),
   };
 }
 
@@ -663,6 +480,7 @@ function migrateVersion1(value: Record<string, unknown>): ProjectFile | null {
     ),
     trash: assignFolder(trash, "scene", null),
     dictionary: [],
+    view: { selectedId: null, expanded: null },
   };
 }
 
@@ -732,7 +550,7 @@ function assignFolder(node: FolderNode, role: DocumentRole, compile: boolean | n
   };
 }
 
-function assignRole(
+export function assignRole(
   node: BinderNode,
   role: DocumentRole,
   compile: boolean | null,
@@ -751,6 +569,31 @@ function assignRole(
       return unexpected;
     }
   }
+}
+
+function parseView(value: unknown): ProjectView {
+  if (!isRecord(value)) {
+    return { selectedId: null, expanded: null };
+  }
+  const selectedId = typeof value.selectedId === "string" ? value.selectedId : null;
+  const expanded = Array.isArray(value.expanded)
+    ? value.expanded.filter((id): id is string => typeof id === "string")
+    : null;
+  return { selectedId, expanded };
+}
+
+function parseOrigin(value: unknown): TrashOrigin | undefined {
+  if (!isRecord(value) || typeof value.parentId !== "string" || typeof value.index !== "number") {
+    return undefined;
+  }
+  if (!isRootKey(value.root)) {
+    return undefined;
+  }
+  return { parentId: value.parentId, index: value.index, root: value.root };
+}
+
+function isRootKey(value: unknown): value is RootKey {
+  return ROOT_KEYS.some((key) => key === value);
 }
 
 function parseDictionary(value: unknown): string[] {
@@ -778,10 +621,12 @@ function parseBinderNode(value: unknown, requireRole: boolean): BinderNode | nul
   if (typeof value.includeInCompile !== "boolean") {
     return null;
   }
+  const origin = parseOrigin(value.origin);
   const fields = {
     id: value.id,
     title: value.title,
     includeInCompile: value.includeInCompile,
+    ...(origin ? { origin } : {}),
   };
   switch (value.kind) {
     case "folder": {

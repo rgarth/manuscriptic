@@ -1,17 +1,25 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  addDictionaryWord,
   addLeaf,
   addSection,
-  createNovelProject,
   deleteForever,
+  emptyTrash,
+  moveToTrash,
+  placeNode,
+  removal,
+  restoreNode,
+} from "./binder.ts";
+import {
+  addDictionaryWord,
+  createNovelProject,
   isStoredInTrash,
   manuscriptWordCount,
-  moveToTrash,
+  findNode,
   parseProject,
-  removal,
+  renameNode,
   setDocumentContent,
+  type ProjectFile,
 } from "./project.ts";
 import { parseEditorDoc, wordCount, type EditorDoc, type TextRun } from "./editorDoc.ts";
 
@@ -33,19 +41,14 @@ test("a new novel has the manuscript roots", () => {
   const project = createNovelProject();
   assert.equal(project.version, 2);
   assert.equal(project.title, "Untitled Novel");
+  assert.deepEqual(project.manuscript.children, []);
+  assert.equal(project.trash.children.length, 0);
+  assert.equal(project.view.selectedId, project.manuscript.id);
+  assert.ok(project.view.expanded?.includes(project.manuscript.id));
   for (const [key, title] of Object.entries(rootTitles)) {
     const node = project[key as keyof typeof rootTitles];
     assert.equal(node.kind, "folder");
     assert.equal(node.title, title);
-  }
-  const chapter = project.manuscript.children[0];
-  assert.equal(chapter?.kind, "folder");
-  assert.equal(chapter?.title, "Chapter One");
-  const opening = chapter?.kind === "folder" ? chapter.children[0] : undefined;
-  assert.equal(opening?.kind, "document");
-  assert.equal(opening?.title, "Opening");
-  if (opening?.kind === "document") {
-    assert.equal(opening.role, "scene");
   }
   assert.deepEqual(
     project.notes.children.map((child) => child.title),
@@ -78,18 +81,66 @@ test("a new novel has the manuscript roots", () => {
   }
 });
 
+test("a worked example has ordered chapters, scenes, and trash", () => {
+  const project = sampleNovel();
+  assert.deepEqual(
+    project.manuscript.children.map((child) => child.title),
+    ["Chapter One", "Chapter Two"],
+  );
+  const chapterOne = project.manuscript.children[0];
+  const chapterTwo = project.manuscript.children[1];
+  assert.equal(chapterOne?.kind, "folder");
+  assert.equal(chapterTwo?.kind, "folder");
+  if (chapterOne?.kind === "folder") {
+    assert.deepEqual(
+      chapterOne.children.map((child) => child.title),
+      ["Opening", "The road"],
+    );
+  }
+  if (chapterTwo?.kind === "folder") {
+    assert.deepEqual(
+      chapterTwo.children.map((child) => child.title),
+      ["Morning", "The gate"],
+    );
+  }
+  const opening = chapterOne?.kind === "folder" ? chapterOne.children[0] : undefined;
+  assert.equal(opening?.kind, "document");
+  if (opening?.kind === "document") {
+    assert.equal(wordCount(opening.content), 2);
+  }
+  assert.deepEqual(
+    project.trash.children.map((child) => child.title),
+    ["Cut scene", "Discarded chapter"],
+  );
+  const cut = project.trash.children[0];
+  assert.equal(cut?.kind, "document");
+  assert.equal(cut?.origin?.parentId, chapterOne?.id);
+  assert.equal(cut?.origin?.index, 2);
+  assert.equal(cut?.origin?.root, "manuscript");
+  const discarded = project.trash.children[1];
+  assert.equal(discarded?.kind, "folder");
+  if (discarded?.kind === "folder") {
+    assert.deepEqual(
+      discarded.children.map((child) => child.title),
+      ["Epilogue draft"],
+    );
+  }
+});
+
 test("a new scene lands in the selected section, or just below the selected scene", () => {
-  const project = createNovelProject();
+  const project = sampleNovel();
   const chapter = project.manuscript.children[0];
   assert.ok(chapter?.kind === "folder");
   const opening = chapter.children[0];
+  const road = chapter.children[1];
   assert.ok(opening);
+  assert.ok(road);
   const below = addLeaf(project, opening.id);
   const afterScene = below.project.manuscript.children[0];
   assert.ok(afterScene?.kind === "folder");
   assert.deepEqual(
     afterScene.children.map((child) => child.id),
-    [opening.id, below.id],
+    [opening.id, below.id, road.id],
   );
   const inside = addLeaf(below.project, chapter.id);
   const afterSection = inside.project.manuscript.children[0];
@@ -99,7 +150,7 @@ test("a new scene lands in the selected section, or just below the selected scen
 });
 
 test("adding a scene returns the id that was inserted", () => {
-  const project = createNovelProject();
+  const project = sampleNovel();
   const chapter = project.manuscript.children[0];
   assert.ok(chapter);
   const inserted = addLeaf(project, chapter.id);
@@ -142,7 +193,7 @@ test("sections nest down to a scene", () => {
 });
 
 test("a scene stays a leaf", () => {
-  const project = createNovelProject();
+  const project = sampleNovel();
   const chapter = project.manuscript.children[0];
   assert.ok(chapter?.kind === "folder");
   const opening = chapter.children[0];
@@ -442,7 +493,7 @@ test("prose cannot be written onto a folder", () => {
 });
 
 test("a root cannot be removed and trash deletes instead of moving", () => {
-  const project = createNovelProject();
+  const project = sampleNovel();
   assert.equal(removal(project, project.manuscript.id), null);
   const chapter = project.manuscript.children[0];
   assert.ok(chapter?.kind === "folder");
@@ -456,23 +507,130 @@ test("a root cannot be removed and trash deletes instead of moving", () => {
   const trashed = moveToTrash(project, opening.id);
   const deleting = removal(trashed, opening.id);
   assert.equal(deleting?.action, "delete");
-  assert.equal(deleting?.label, "Delete");
+  assert.equal(deleting?.label, "Delete Permanently");
+  assert.equal(removal(trashed, trashed.trash.id)?.action, "empty");
+});
+
+test("a trashed scene returns to its place, and emptying the trash keeps the book", () => {
+  const project = sampleNovel();
+  const cut = project.trash.children[0];
+  const discarded = project.trash.children[1];
+  assert.ok(cut);
+  assert.ok(discarded);
+  const restored = restoreNode(project, cut.id);
+  const chapter = restored.manuscript.children[0];
+  assert.ok(chapter?.kind === "folder");
+  assert.deepEqual(
+    chapter.children.map((child) => child.title),
+    ["Opening", "The road", "Cut scene"],
+  );
+  assert.equal(findNode(restored, cut.id)?.node.origin, undefined);
+  assert.equal(restored.trash.children[0]?.id, discarded.id);
+
+  const emptied = emptyTrash(restored);
+  assert.equal(emptied.trash.children.length, 0);
+  assert.equal(findNode(emptied, discarded.id), null);
+  assert.equal(findNode(emptied, cut.id)?.parent?.id, chapter.id);
+  assert.equal(removal(emptied, emptied.trash.id), null);
+});
+
+test("a scene moves ahead of its neighbor and adopts the folder it lands in", () => {
+  let project = sampleNovel();
+  const chapter = project.manuscript.children[0];
+  assert.ok(chapter?.kind === "folder");
+  const opening = chapter.children[0];
+  const road = chapter.children[1];
+  assert.ok(opening);
+  assert.ok(road);
+  const swapped = placeNode(project, road.id, opening.id, "before");
+  const order = swapped.manuscript.children[0];
+  assert.ok(order?.kind === "folder");
+  assert.deepEqual(
+    order.children.map((child) => child.id),
+    [road.id, opening.id],
+  );
+
+  const stuck = placeNode(swapped, chapter.id, opening.id, "inside");
+  assert.equal(stuck.manuscript.children[0]?.id, chapter.id);
+  const rooted = placeNode(swapped, swapped.manuscript.id, chapter.id, "before");
+  assert.equal(rooted.manuscript.children[0]?.id, chapter.id);
+
+  const characters = swapped.notes.children[0];
+  assert.ok(characters);
+  const moved = placeNode(swapped, opening.id, characters.id, "inside");
+  const note = findNode(moved, opening.id);
+  assert.equal(note?.root, "notes");
+  assert.equal(note?.node.kind, "document");
+  if (note?.node.kind === "document") {
+    assert.equal(note.node.role, "note");
+    assert.equal(note.node.includeInCompile, false);
+    assert.equal(wordCount(note.node.content), 2);
+  }
+
+  const trashed = placeNode(swapped, opening.id, swapped.trash.id, "inside");
+  const kept = findNode(trashed, opening.id);
+  assert.equal(kept?.root, "trash");
+  assert.equal(kept?.node.kind, "document");
+  if (kept?.node.kind === "document") {
+    assert.equal(kept.node.role, "scene");
+  }
+
+  const part = addSection(swapped, chapter.id);
+  const blocked = placeNode(part.project, chapter.id, part.id, "inside");
+  assert.equal(findNode(blocked, part.id)?.parent?.id, chapter.id);
 });
 
 test("trash keeps a scene until it is deleted", () => {
-  const project = createNovelProject();
-  const chapter = project.manuscript.children[0];
-  const opening = chapter?.kind === "folder" ? chapter.children[0] : undefined;
-  if (!opening) {
-    throw new Error("opening scene missing");
+  const project = sampleNovel();
+  const cut = project.trash.children[0];
+  const discarded = project.trash.children[1];
+  assert.ok(cut);
+  assert.ok(discarded);
+  assert.equal(isStoredInTrash(project, cut.id), true);
+  const gone = deleteForever(project, cut.id);
+  assert.equal(isStoredInTrash(gone, cut.id), false);
+  assert.deepEqual(
+    gone.trash.children.map((child) => child.id),
+    [discarded.id],
+  );
+  const chapter = gone.manuscript.children[0];
+  assert.equal(chapter?.kind, "folder");
+  if (chapter?.kind === "folder") {
+    assert.deepEqual(
+      chapter.children.map((child) => child.title),
+      ["Opening", "The road"],
+    );
   }
-  const trashed = moveToTrash(project, opening.id);
-  assert.equal(isStoredInTrash(trashed, opening.id), true);
-  assert.equal(trashed.manuscript.children[0]?.kind === "folder" && trashed.manuscript.children[0].children.length, 0);
-  const gone = deleteForever(trashed, opening.id);
-  assert.equal(isStoredInTrash(gone, opening.id), false);
-  assert.equal(gone.trash.children.length, 0);
 });
+
+function sampleNovel(): ProjectFile {
+  let project = createNovelProject();
+  const first = addSection(project, project.manuscript.id);
+  project = renameNode(first.project, first.id, "Chapter One");
+  const second = addSection(project, project.manuscript.id);
+  project = renameNode(second.project, second.id, "Chapter Two");
+
+  const opening = addLeaf(project, first.id);
+  project = renameNode(opening.project, opening.id, "Opening");
+  project = setDocumentContent(project, opening.id, textDoc("Castus waited"));
+  const road = addLeaf(project, opening.id);
+  project = renameNode(road.project, road.id, "The road");
+
+  const morning = addLeaf(project, second.id);
+  project = renameNode(morning.project, morning.id, "Morning");
+  const gate = addLeaf(project, morning.id);
+  project = renameNode(gate.project, gate.id, "The gate");
+
+  const cut = addLeaf(project, road.id);
+  project = renameNode(cut.project, cut.id, "Cut scene");
+  project = moveToTrash(project, cut.id);
+
+  const discarded = addSection(project, project.manuscript.id);
+  project = renameNode(discarded.project, discarded.id, "Discarded chapter");
+  const draft = addLeaf(project, discarded.id);
+  project = renameNode(draft.project, draft.id, "Epilogue draft");
+  return moveToTrash(project, discarded.id);
+}
 
 function emptyFolder(id: string, title: string) {
   return {
