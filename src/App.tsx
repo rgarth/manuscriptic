@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Binder from "./Binder";
 import SceneEditor from "./SceneEditor";
 import {
@@ -20,7 +20,6 @@ import {
   isRoot,
   leafAction,
   manuscriptWordCount,
-  parseProject,
   removeDictionaryWord,
   renameNode,
   renameProject,
@@ -30,17 +29,23 @@ import {
 } from "./model/project";
 import { type EditorDoc, wordCount } from "./model/editorDoc";
 import { installAppMenu } from "./appMenu";
-import { registerCommands } from "./commands";
+import { commands, registerCommands } from "./commands";
+import { failureMessage, onFailure, takePendingFailures } from "./failures";
+import { readFilePreferences, saveAsChoice, saveChoice, writeLastProject } from "./filePrefs";
+import { pickNovelSaveAs, pickNovelToOpen, resolveDirectory } from "./novelFile";
+import { novelFromText, openAtStartup, placeNovel } from "./novelSession";
 import Settings from "./Settings";
-import { loadProject, saveProject } from "./storage";
+import { loadProject, readNovelFile, saveProject, writeNovelFile } from "./storage";
 import "./App.css";
 
 type SaveState = "saved" | "dirty" | "saving" | "error";
 
 export default function App() {
   const [project, setProject] = useState<ProjectFile | null>(null);
+  const [filePath, setFilePath] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   const [binderOpen, setBinderOpen] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  const [notice, showNotice] = useNotice();
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmingNew, setConfirmingNew] = useState(false);
@@ -52,6 +57,8 @@ export default function App() {
   const pendingSave = useRef<number | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const projectRef = useRef<ProjectFile | null>(null);
+  const filePathRef = useRef<string | null>(null);
+  const fileBusy = useRef(false);
   const dialogs = useRef({
     confirmingNew: false,
     pendingTrash: null as string | null,
@@ -59,29 +66,31 @@ export default function App() {
   });
   const selectedId = project?.view.selectedId ?? null;
   projectRef.current = project;
+  filePathRef.current = filePath;
   dialogs.current = { confirmingNew, pendingTrash, settingsOpen };
 
   useEffect(() => {
     let cancelled = false;
+    const prefs = readFilePreferences(localStorage);
     loadProject()
-      .then((raw) => {
+      .then((raw) => openAtStartup(prefs, raw, readNovelFile))
+      .then((started) => {
         if (cancelled) {
           return;
         }
-        if (raw === null) {
-          openProject(createNovelProject());
-          return;
+        if (started.notice) {
+          showNotice(started.notice);
         }
-        const parsed = parseProject(raw);
-        if (!parsed) {
-          setLoadError("The saved project could not be read.");
-          return;
+        if (started.project) {
+          setFilePath(started.path);
+          openProject(started.project);
         }
-        openProject(parsed);
+        setReady(true);
       })
       .catch((error: unknown) => {
         if (!cancelled) {
-          setLoadError(error instanceof Error ? error.message : "Could not open the project.");
+          showNotice(error, "Could not open the project.");
+          setReady(true);
         }
       });
     return () => {
@@ -98,6 +107,20 @@ export default function App() {
       ) {
         event.preventDefault();
         setBinderOpen((value) => !value);
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        commands().openNovel?.();
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (event.shiftKey) {
+          commands().saveNovelAs?.();
+        } else {
+          commands().saveNovel?.();
+        }
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
@@ -172,7 +195,6 @@ export default function App() {
         expanded: next.view.expanded ?? folderIds(next),
       }),
     );
-    setLoadError(null);
   }
 
   function enqueueSave(saveGeneration: number, json: string, previous?: string): Promise<void> {
@@ -196,7 +218,7 @@ export default function App() {
       (error: unknown) => {
         if (saveGeneration === generation.current) {
           setSaveState("error");
-          setSaveError(error instanceof Error ? error.message : "Could not save.");
+          setSaveError(failureMessage(error, "Could not save."));
         }
       },
     );
@@ -213,20 +235,79 @@ export default function App() {
     enqueueSave(generation.current, JSON.stringify(current));
   }
 
-  async function beginNewProject() {
+  async function adoptNovel(next: ProjectFile, path: string | null) {
     const current = projectRef.current;
     if (pendingSave.current !== null) {
       window.clearTimeout(pendingSave.current);
       pendingSave.current = null;
     }
     const nextGeneration = ++generation.current;
-    const next = createNovelProject();
     await enqueueSave(
       nextGeneration,
       JSON.stringify(next),
       current ? JSON.stringify(current) : undefined,
     );
+    setFilePath(path);
     openProject(next);
+    setReady(true);
+    try {
+      writeLastProject(localStorage, path);
+    } catch (error: unknown) {
+      showNotice(error, "Could not save this preference.");
+    }
+  }
+
+  async function beginNewProject() {
+    await adoptNovel(createNovelProject(), null);
+  }
+
+  async function openNovelFile() {
+    if (fileBusy.current) {
+      return;
+    }
+    fileBusy.current = true;
+    try {
+      const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
+      const picked = await pickNovelToOpen(directory);
+      if (!picked) {
+        return;
+      }
+      await adoptNovel(novelFromText(await readNovelFile(picked)), picked);
+    } catch (error: unknown) {
+      showNotice(error, "Could not open that novel.");
+    } finally {
+      fileBusy.current = false;
+    }
+  }
+
+  async function saveNovelFile(forceDialog: boolean) {
+    const current = projectRef.current;
+    if (!current || fileBusy.current) {
+      return;
+    }
+    fileBusy.current = true;
+    try {
+      const prefs = readFilePreferences(localStorage);
+      const step = forceDialog
+        ? saveAsChoice(prefs, current.title)
+        : saveChoice(prefs, filePathRef.current, current.title);
+      const path = await placeNovel(step, JSON.stringify(current), {
+        directory: resolveDirectory,
+        pickSave: pickNovelSaveAs,
+        write: writeNovelFile,
+      });
+      if (!path) {
+        return;
+      }
+      setFilePath(path);
+      setSaveState("saved");
+      setSaveError(null);
+      writeLastProject(localStorage, path);
+    } catch (error: unknown) {
+      showNotice(error, "Could not save.");
+    } finally {
+      fileBusy.current = false;
+    }
   }
 
   useEffect(() => {
@@ -239,12 +320,27 @@ export default function App() {
     return registerCommands({
       newProject: () => {
         if (!projectRef.current) {
-          void beginNewProject().catch(() => undefined);
+          void beginNewProject().catch((error: unknown) => {
+            showNotice(error, "Could not create a novel.");
+          });
           return;
         }
         setBinderOpen(true);
         setConfirmingNew(true);
       },
+      openNovel: () => {
+        void openNovelFile();
+      },
+      saveNovel: project
+        ? () => {
+            void saveNovelFile(false);
+          }
+        : null,
+      saveNovelAs: project
+        ? () => {
+            void saveNovelFile(true);
+          }
+        : null,
       newScene: project ? () => insertScene() : null,
       newSection: project ? () => insertSection() : null,
       trash: project ? () => askTrash(selectedId) : null,
@@ -254,7 +350,9 @@ export default function App() {
   }, [project, selectedId]);
 
   useEffect(() => {
-    void installAppMenu().catch(() => undefined);
+    void installAppMenu().catch((error: unknown) => {
+      showNotice(error, "Could not install the menu.");
+    });
   }, []);
 
   function insertScene(targetId?: string) {
@@ -311,27 +409,43 @@ export default function App() {
     });
   }
 
-  if (loadError && !project) {
-    return (
-      <main className="gate">
-        <h1>Manuscriptic</h1>
-        <p>{loadError}</p>
-        <button
-          type="button"
-          onClick={() => {
-            void beginNewProject().catch(() => undefined);
-          }}
-        >
-          Start a new project
-        </button>
-      </main>
-    );
-  }
-
   if (!project) {
     return (
       <main className="gate">
-        <p>Opening project…</p>
+        <h1>Manuscriptic</h1>
+        {notice ? <p role="alert">{notice}</p> : null}
+        {ready ? (
+          <div className="gate-actions">
+            <button
+              type="button"
+              onClick={() => {
+                void openNovelFile();
+              }}
+            >
+              Open
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void beginNewProject().catch((error: unknown) => {
+                  showNotice(error, "Could not create a novel.");
+                });
+              }}
+            >
+              Create New
+            </button>
+          </div>
+        ) : (
+          <p>Opening project…</p>
+        )}
+        {settingsOpen ? (
+          <Settings
+            words={[]}
+            onAddWord={() => undefined}
+            onRemoveWord={() => undefined}
+            onClose={() => setSettingsOpen(false)}
+          />
+        ) : null}
       </main>
     );
   }
@@ -430,7 +544,8 @@ export default function App() {
             : leaf.idle}
         </span>
         <span>Manuscript · {bookWords.toLocaleString()} words</span>
-        <span title={saveError ?? undefined}>{saveLabel(saveState)}</span>
+        {notice ? <span role="alert">{notice}</span> : null}
+        <span>{saveError ?? saveLabel(saveState)}</span>
       </footer>
       {settingsOpen ? (
         <Settings
@@ -448,7 +563,10 @@ export default function App() {
           onConfirm={() => {
             void beginNewProject().then(
               () => setConfirmingNew(false),
-              () => undefined,
+              (error: unknown) => {
+                showNotice(error, "Could not create a novel.");
+                setConfirmingNew(false);
+              },
             );
           }}
         />
@@ -519,6 +637,22 @@ function ConfirmDialog({
       </div>
     </div>
   );
+}
+
+function useNotice(): [string | null, (error: unknown, fallback?: string) => void] {
+  const [notice, setNotice] = useState<string | null>(null);
+  const showNotice = useCallback((error: unknown, fallback = "Something went wrong.") => {
+    setNotice(failureMessage(error, fallback));
+  }, []);
+  useEffect(() => {
+    for (const message of takePendingFailures()) {
+      showNotice(message, message);
+    }
+    return onFailure((message) => {
+      showNotice(message, message);
+    });
+  }, [showNotice]);
+  return [notice, showNotice];
 }
 
 function saveLabel(state: SaveState): string {

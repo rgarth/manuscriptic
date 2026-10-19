@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { takePendingFailures } from "./failures.ts";
 import {
   alignmentById,
   displayPixels,
   fontFamily,
   fontName,
+  getEditorPrefs,
   nextZoom,
   pointSize,
+  setEditorFont,
   zoomPercent,
 } from "./editorPrefs.ts";
 
@@ -25,6 +28,28 @@ test("the page defaults to justified and can sit left, center, or right", () => 
   assert.equal(alignmentById("left"), "left");
   assert.equal(alignmentById("center"), "center");
   assert.equal(alignmentById("right"), "right");
+});
+
+test("a typeface that cannot be saved stays as it was", () => {
+  takePendingFailures();
+  const previous = getEditorPrefs().font;
+  const original = globalThis.localStorage;
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("quota");
+      },
+    },
+  });
+  try {
+    setEditorFont("Comic Sans MS");
+    assert.equal(getEditorPrefs().font, previous);
+    assert.deepEqual(takePendingFailures(), ["quota"]);
+  } finally {
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
+  }
 });
 
 test("a book defaults to 12 point and zoom keeps that page the size it is now", () => {

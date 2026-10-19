@@ -3,6 +3,9 @@ import type { SceneCommand } from "./formatCommands";
 
 export type CommandState = {
   newProject: (() => void) | null;
+  openNovel: (() => void) | null;
+  saveNovel: (() => void) | null;
+  saveNovelAs: (() => void) | null;
   newScene: (() => void) | null;
   newSection: (() => void) | null;
   trash: (() => void) | null;
@@ -14,6 +17,9 @@ export type CommandState = {
 
 const initial: CommandState = {
   newProject: null,
+  openNovel: null,
+  saveNovel: null,
+  saveNovelAs: null,
   newScene: null,
   newSection: null,
   trash: null,

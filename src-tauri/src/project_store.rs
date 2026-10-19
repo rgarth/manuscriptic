@@ -12,6 +12,43 @@ fn project_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
+pub fn documents_directory(app: AppHandle) -> Result<String, String> {
+    let path = app.path().document_dir().map_err(|err| err.to_string())?;
+    path.into_os_string()
+        .into_string()
+        .map_err(|_| "Could not find the Documents folder.".to_string())
+}
+
+#[tauri::command]
+pub fn read_novel_file(path: String) -> Result<String, String> {
+    let contents = fs::read_to_string(&path).map_err(|err| err.to_string())?;
+    serde_json::from_str::<Value>(&contents).map_err(|err| err.to_string())?;
+    Ok(contents)
+}
+
+#[tauri::command]
+pub fn write_novel_file(path: String, contents: String, overwrite: bool) -> Result<(), String> {
+    write_novel_at(Path::new(&path), &contents, overwrite)
+}
+
+pub fn write_novel_at(path: &Path, contents: &str, overwrite: bool) -> Result<(), String> {
+    serde_json::from_str::<Value>(contents).map_err(|err| err.to_string())?;
+    if path.exists() && !overwrite {
+        return Err("already-exists".to_string());
+    }
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+    }
+    let mut temporary = path.as_os_str().to_owned();
+    temporary.push(".tmp");
+    let tmp = PathBuf::from(temporary);
+    fs::write(&tmp, contents).map_err(|err| err.to_string())?;
+    replace_file(&tmp, path)
+}
+
+#[tauri::command]
 pub fn load_project(app: AppHandle) -> Result<Option<String>, String> {
     let path = project_dir(&app)?.join("current-project.json");
     if !path.exists() {
@@ -111,7 +148,7 @@ fn newest_backup_age(dir: &Path) -> Result<Option<Duration>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{store_project, write_backup, write_backup_if_due};
+    use super::{store_project, write_backup, write_backup_if_due, write_novel_at};
     use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -177,6 +214,19 @@ mod tests {
             fs::read_to_string(dir.join("backups").join(&names[0])).unwrap(),
             "{\"prev\":true}"
         );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_new_novel_file_is_written_once_until_overwrite_is_allowed() {
+        let dir = temp_project_dir();
+        let path = dir.join("Castus.json");
+        write_novel_at(&path, "{\"title\":\"Castus\"}", false).unwrap();
+        let refused = write_novel_at(&path, "{\"title\":\"Other\"}", false);
+        assert_eq!(refused.unwrap_err(), "already-exists");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{\"title\":\"Castus\"}");
+        write_novel_at(&path, "{\"title\":\"Other\"}", true).unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{\"title\":\"Other\"}");
         fs::remove_dir_all(dir).unwrap();
     }
 }

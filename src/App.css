@@ -246,6 +246,18 @@ input:focus-visible {
   background: var(--wash);
 }
 
+.gate-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.preference {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
 .gate button,
 .dialog button {
   background: var(--wash);

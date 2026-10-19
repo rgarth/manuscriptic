@@ -1,3 +1,5 @@
+import { reportFailure } from "../failures.ts";
+
 export type Theme = {
   id: string;
   label: string;
@@ -32,13 +34,39 @@ export function collectThemes(rules: ThemeRule[]): Theme[] {
   return themes;
 }
 
+export function stylesheetAccess(href: string | null, pageOrigin: string): "read" | "skip" | "unreadable" {
+  if (!href) {
+    return "read";
+  }
+  try {
+    return new URL(href).origin === pageOrigin ? "read" : "skip";
+  } catch {
+    return "unreadable";
+  }
+}
+
 export function readThemes(): Theme[] {
   const rules: ThemeRule[] = [];
   for (const sheet of document.styleSheets) {
+    const access = stylesheetAccess(sheet.href, window.location.origin);
+    switch (access) {
+      case "skip":
+        continue;
+      case "unreadable":
+        reportFailure("A theme stylesheet could not be read.", "A theme stylesheet could not be read.");
+        continue;
+      case "read":
+        break;
+      default: {
+        const unexpected: never = access;
+        return unexpected;
+      }
+    }
     let cssRules: CSSRuleList;
     try {
       cssRules = sheet.cssRules;
-    } catch {
+    } catch (error: unknown) {
+      reportFailure(error, "A theme stylesheet could not be read.");
       continue;
     }
     for (const rule of cssRules) {
@@ -62,7 +90,8 @@ export function readTheme(available = readThemes()): string {
     if (saved && (available.length === 0 || available.some((theme) => theme.id === saved))) {
       return saved;
     }
-  } catch {
+  } catch (error: unknown) {
+    reportFailure(error, "The saved theme could not be read.");
     return fallback;
   }
   return fallback;
@@ -78,12 +107,15 @@ export function onTheme(listener: (id: string) => void): () => void {
 }
 
 export function applyTheme(id: string): void {
-  document.documentElement.dataset.theme = id;
   try {
     localStorage.setItem(storageKey, id);
-  } catch {
-    // Keep the applied theme when storage is unavailable.
+  } catch (error: unknown) {
+    reportFailure(error, "Could not save the theme.");
+    if (document.documentElement.dataset.theme) {
+      return;
+    }
   }
+  document.documentElement.dataset.theme = id;
   for (const listener of themeListeners) {
     listener(id);
   }

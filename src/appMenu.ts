@@ -17,6 +17,30 @@ export async function installAppMenu(): Promise<void> {
       commands().newProject?.();
     },
   };
+  const openNovel = {
+    id: "open-novel",
+    text: "Open…",
+    accelerator: "CmdOrCtrl+O",
+    action: () => {
+      commands().openNovel?.();
+    },
+  };
+  const saveNovel = {
+    id: "save-novel",
+    text: "Save",
+    accelerator: "CmdOrCtrl+S",
+    action: () => {
+      commands().saveNovel?.();
+    },
+  };
+  const saveNovelAs = {
+    id: "save-novel-as",
+    text: "Save As…",
+    accelerator: "CmdOrCtrl+Shift+S",
+    action: () => {
+      commands().saveNovelAs?.();
+    },
+  };
   const items = await menu.items();
   let fileMenu: Submenu | null = null;
   for (const item of items) {
@@ -36,10 +60,16 @@ export async function installAppMenu(): Promise<void> {
   });
   if (fileMenu) {
     await fileMenu.prepend(newProject);
-    await fileMenu.insert(theme, 1);
-    await fileMenu.insert(settings, 2);
+    await fileMenu.insert(openNovel, 1);
+    await fileMenu.insert(saveNovel, 2);
+    await fileMenu.insert(saveNovelAs, 3);
+    await fileMenu.insert(theme, 4);
+    await fileMenu.insert(settings, 5);
   } else {
-    const file = await Submenu.new({ text: "File", items: [newProject, theme, settings] });
+    const file = await Submenu.new({
+      text: "File",
+      items: [newProject, openNovel, saveNovel, saveNovelAs, theme, settings],
+    });
     const afterAppMenu = navigator.userAgent.includes("Mac") ? 1 : 0;
     await menu.insert(file, afterAppMenu);
   }

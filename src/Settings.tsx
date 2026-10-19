@@ -1,4 +1,12 @@
 import { useEffect, useState } from "react";
+import { failureMessage, reportFailure } from "./failures";
+import {
+  preferenceDirectoryLabel,
+  readFilePreferences,
+  writeOpenLast,
+  writeSaveDirectory,
+} from "./filePrefs";
+import { pickSaveDirectory, resolveDirectory } from "./novelFile";
 import { applyTheme, onTheme, readTheme, readThemes } from "./themes";
 
 type SettingsProps = {
@@ -10,14 +18,87 @@ type SettingsProps = {
 
 export default function Settings({ words, onAddWord, onRemoveWord, onClose }: SettingsProps) {
   const themes = readThemes();
+  const stored = readFilePreferences(localStorage);
   const [theme, setTheme] = useState(() => readTheme(themes));
+  const [directory, setDirectory] = useState(stored.directory);
+  const [openLast, setOpenLast] = useState(stored.openLast);
   const [draft, setDraft] = useState("");
+  const [folderError, setFolderError] = useState<string | null>(null);
+
+  function savePreference(write: () => void): boolean {
+    try {
+      write();
+      setFolderError(null);
+      return true;
+    } catch (error: unknown) {
+      const message = failureMessage(error, "Could not save this preference.");
+      setFolderError(message);
+      reportFailure(message, message);
+      return false;
+    }
+  }
+
+  async function chooseFolder() {
+    setFolderError(null);
+    try {
+      const picked = await pickSaveDirectory(await resolveDirectory(directory));
+      if (!picked) {
+        return;
+      }
+      if (!savePreference(() => writeSaveDirectory(localStorage, picked))) {
+        return;
+      }
+      setDirectory(readFilePreferences(localStorage).directory);
+    } catch (error: unknown) {
+      const message = failureMessage(error, "Could not choose a folder.");
+      setFolderError(message);
+      reportFailure(message, message);
+    }
+  }
 
   useEffect(() => onTheme(setTheme), []);
 
   return (
     <div className="dialog-backdrop">
       <div className="dialog settings" role="dialog" aria-modal="true" aria-label="Settings">
+        <h2>Files</h2>
+        <p>Open and Save As start in this folder. Save writes the novel’s own file.</p>
+        <p>{preferenceDirectoryLabel(directory)}</p>
+        {folderError ? <p role="alert">{folderError}</p> : null}
+        <div className="row">
+          <button
+            type="button"
+            onClick={() => {
+              void chooseFolder();
+            }}
+          >
+            Choose folder
+          </button>
+          <button
+            type="button"
+            disabled={directory === null}
+            onClick={() => {
+              if (savePreference(() => writeSaveDirectory(localStorage, null))) {
+                setDirectory(null);
+              }
+            }}
+          >
+            Use Documents
+          </button>
+        </div>
+        <label className="preference">
+          <input
+            type="checkbox"
+            checked={openLast}
+            onChange={(event) => {
+              const next = event.currentTarget.checked;
+              if (savePreference(() => writeOpenLast(localStorage, next))) {
+                setOpenLast(next);
+              }
+            }}
+          />
+          Open last project on start
+        </label>
         <h2>Theme</h2>
         <ul className="choice-list">
           {themes.map((item) => (

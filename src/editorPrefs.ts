@@ -1,3 +1,5 @@
+import { reportFailure } from "./failures.ts";
+
 export const defaultFont = "EB Garamond";
 
 export const alignments = [
@@ -87,19 +89,27 @@ export function alignmentById(id: string | null): Alignment {
   return alignments.find((item) => item.id === id)?.id ?? "justify";
 }
 
+let reportedReadFailure = false;
+
 function readSaved(key: string): string | null {
   try {
     return localStorage.getItem(key);
-  } catch {
+  } catch (error: unknown) {
+    if (!reportedReadFailure) {
+      reportedReadFailure = true;
+      reportFailure(error, "Saved preferences could not be read.");
+    }
     return null;
   }
 }
 
-function writeSaved(key: string, value: string) {
+function writeSaved(key: string, value: string): boolean {
   try {
     localStorage.setItem(key, value);
-  } catch {
-    return;
+    return true;
+  } catch (error: unknown) {
+    reportFailure(error, "Could not save this preference.");
+    return false;
   }
 }
 
@@ -128,14 +138,22 @@ export function subscribeEditorPrefs(listener: () => void): () => void {
   };
 }
 
+function commit(key: string, value: string, apply: () => void) {
+  if (!writeSaved(key, value)) {
+    return;
+  }
+  apply();
+  publish();
+}
+
 export function setEditorFont(id: string) {
   const next = fontName(id);
   if (next === font) {
     return;
   }
-  font = next;
-  writeSaved(fontKey, font);
-  publish();
+  commit(fontKey, next, () => {
+    font = next;
+  });
 }
 
 export function setPointSize(value: string | number) {
@@ -143,9 +161,9 @@ export function setPointSize(value: string | number) {
   if (next === points) {
     return;
   }
-  points = next;
-  writeSaved(pointsKey, String(points));
-  publish();
+  commit(pointsKey, String(next), () => {
+    points = next;
+  });
 }
 
 export function setZoom(value: string | number) {
@@ -153,9 +171,9 @@ export function setZoom(value: string | number) {
   if (next === zoom) {
     return;
   }
-  zoom = next;
-  writeSaved(zoomKey, String(zoom));
-  publish();
+  commit(zoomKey, String(next), () => {
+    zoom = next;
+  });
 }
 
 export function setAlignment(id: string) {
@@ -163,7 +181,7 @@ export function setAlignment(id: string) {
   if (next === align) {
     return;
   }
-  align = next;
-  writeSaved(alignKey, align);
-  publish();
+  commit(alignKey, next, () => {
+    align = next;
+  });
 }

@@ -22,6 +22,7 @@ import Icon, { type IconName } from "./icons";
 import { includesWord } from "./dictionary.ts";
 import { parseEditorDoc, type EditorDoc } from "./model/editorDoc";
 import { dictionarySpellcheckKey, projectDictionary, wordFromPoint } from "./spellcheck";
+import { reportFailure } from "./failures";
 import { listFonts } from "./storage";
 
 type SceneEditorProps = {
@@ -111,7 +112,9 @@ export default function SceneEditor({
         const available = new Set([defaultFont, ...names]);
         setFonts([...available].sort((a, b) => a.localeCompare(b)));
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        reportFailure(error, "Could not list fonts.");
+      });
   }, []);
 
   useEffect(() => {
