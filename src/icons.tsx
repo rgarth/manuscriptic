@@ -1,6 +1,7 @@
 export type IconName =
   | "chevron"
   | "scene"
+  | "note"
   | "section"
   | "book"
   | "people"
@@ -10,8 +11,7 @@ export type IconName =
   | "trash"
   | "bold"
   | "italic"
-  | "focus"
-  | "binder"
+  | "menu"
   | "alignLeft"
   | "alignCenter"
   | "alignRight"
@@ -46,6 +46,13 @@ function mark(name: IconName) {
         <>
           <path d="M7 4.5h7.2L18.5 9v10.2a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1z" />
           <path d="M14 4.6V9h4.4" />
+        </>
+      );
+    case "note":
+      return (
+        <>
+          <path d="M6.5 5.5h11v13h-11z" />
+          <path d="M9 9.5h6M9 12.5h4.5" />
         </>
       );
     case "section":
@@ -107,17 +114,12 @@ function mark(name: IconName) {
           I
         </text>
       );
-    case "focus":
+    case "menu":
       return (
         <>
-          <path d="M4.5 9.5v-5h5M19.5 9.5v-5h-5M4.5 14.5v5h5M19.5 14.5v5h-5" />
-        </>
-      );
-    case "binder":
-      return (
-        <>
-          <path d="M4.5 5.5h5v13h-5z" />
-          <path d="M12 5.5h7.5v13H12z" />
+          <path d="M5 7h14" />
+          <path d="M5 12h14" />
+          <path d="M5 17h14" />
         </>
       );
     case "alignLeft":

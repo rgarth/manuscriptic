@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  addScene,
+  addDictionaryWord,
+  addLeaf,
   addSection,
   createNovelProject,
   deleteForever,
@@ -16,10 +17,8 @@ import { parseEditorDoc, wordCount, type EditorDoc, type TextRun } from "./edito
 
 const rootTitles = {
   manuscript: "Manuscript",
-  characters: "Characters",
-  places: "Places",
-  frontMatter: "Front Matter",
-  research: "Research",
+  notes: "Notes",
+  publishing: "Publishing",
   trash: "Trash",
 } as const;
 
@@ -32,7 +31,7 @@ function textDoc(text: string, marks?: TextRun[]): EditorDoc {
 
 test("a new novel has the manuscript roots", () => {
   const project = createNovelProject();
-  assert.equal(project.version, 1);
+  assert.equal(project.version, 2);
   assert.equal(project.title, "Untitled Novel");
   for (const [key, title] of Object.entries(rootTitles)) {
     const node = project[key as keyof typeof rootTitles];
@@ -45,6 +44,38 @@ test("a new novel has the manuscript roots", () => {
   const opening = chapter?.kind === "folder" ? chapter.children[0] : undefined;
   assert.equal(opening?.kind, "document");
   assert.equal(opening?.title, "Opening");
+  if (opening?.kind === "document") {
+    assert.equal(opening.role, "scene");
+  }
+  assert.deepEqual(
+    project.notes.children.map((child) => child.title),
+    ["Characters", "Places", "Misc.", "Research"],
+  );
+  assert.deepEqual(
+    project.publishing.children.map((child) => child.title),
+    ["Front Matter", "Back Matter", "Synopsis", "Back page"],
+  );
+  const front = project.publishing.children.find((child) => child.title === "Front Matter");
+  const back = project.publishing.children.find((child) => child.title === "Back Matter");
+  assert.equal(front?.kind, "folder");
+  assert.equal(back?.kind, "folder");
+  if (front?.kind === "folder") {
+    assert.deepEqual(
+      front.children.map((child) => child.title),
+      ["Title page", "Copyright", "Dedication", "Epigraph"],
+    );
+  }
+  if (back?.kind === "folder") {
+    assert.deepEqual(
+      back.children.map((child) => child.title),
+      ["Acknowledgements", "About the Author"],
+    );
+  }
+  const synopsis = project.publishing.children.find((child) => child.title === "Synopsis");
+  assert.equal(synopsis?.kind, "document");
+  if (synopsis?.kind === "document") {
+    assert.equal(synopsis.role, "page");
+  }
 });
 
 test("a new scene lands in the selected section, or just below the selected scene", () => {
@@ -53,14 +84,14 @@ test("a new scene lands in the selected section, or just below the selected scen
   assert.ok(chapter?.kind === "folder");
   const opening = chapter.children[0];
   assert.ok(opening);
-  const below = addScene(project, opening.id);
+  const below = addLeaf(project, opening.id);
   const afterScene = below.project.manuscript.children[0];
   assert.ok(afterScene?.kind === "folder");
   assert.deepEqual(
     afterScene.children.map((child) => child.id),
     [opening.id, below.id],
   );
-  const inside = addScene(below.project, chapter.id);
+  const inside = addLeaf(below.project, chapter.id);
   const afterSection = inside.project.manuscript.children[0];
   assert.ok(afterSection?.kind === "folder");
   assert.equal(afterSection.children[afterSection.children.length - 1]?.id, inside.id);
@@ -71,7 +102,7 @@ test("adding a scene returns the id that was inserted", () => {
   const project = createNovelProject();
   const chapter = project.manuscript.children[0];
   assert.ok(chapter);
-  const inserted = addScene(project, chapter.id);
+  const inserted = addLeaf(project, chapter.id);
   const nextChapter = inserted.project.manuscript.children[0];
   assert.equal(nextChapter?.kind, "folder");
   assert.ok(
@@ -87,7 +118,7 @@ test("sections nest down to a scene", () => {
   project = part.project;
   const chapter = addSection(project, part.id);
   project = chapter.project;
-  const scene = addScene(project, chapter.id);
+  const scene = addLeaf(project, chapter.id);
   project = scene.project;
 
   const volumeNode = project.manuscript.children.find((child) => child.id === volume.id);
@@ -288,15 +319,118 @@ test("an older project file loads into folders and documents", () => {
   const opening = project.manuscript.children[0];
   assert.equal(opening?.kind, "document");
   if (opening?.kind === "document") {
+    assert.equal(opening.role, "scene");
     assert.equal(wordCount(opening.content), 2);
   }
   assert.equal(manuscriptWordCount(project), 2);
+  assert.deepEqual(
+    project.notes.children.map((child) => child.title),
+    ["Characters", "Places", "Misc.", "Research"],
+  );
+  const frontMatter = project.publishing.children.find((child) => child.id === "f");
+  assert.equal(frontMatter?.kind, "folder");
+  assert.equal(frontMatter?.title, "Front Matter");
+  if (frontMatter?.kind === "folder") {
+    assert.deepEqual(
+      frontMatter.children.map((child) => child.title),
+      ["Title page", "Copyright", "Dedication", "Epigraph"],
+    );
+  }
+  const backMatter = project.publishing.children.find((child) => child.title === "Back Matter");
+  assert.equal(backMatter?.kind, "folder");
+  if (backMatter?.kind === "folder") {
+    assert.deepEqual(
+      backMatter.children.map((child) => child.title),
+      ["Acknowledgements", "About the Author"],
+    );
+  }
+});
+
+test("a loose acknowledgement moves into back matter and keeps its text", () => {
+  const raw = JSON.stringify({
+    version: 2,
+    title: "Novel",
+    dictionary: ["Castus", "castus"],
+    manuscript: emptyFolder("m", "Manuscript"),
+    notes: emptyFolder("n", "Notes"),
+    trash: emptyFolder("t", "Trash"),
+    publishing: {
+      id: "pub",
+      title: "Publishing",
+      kind: "folder",
+      includeInCompile: true,
+      children: [
+        emptyFolder("front", "Front Matter"),
+        emptyFolder("back", "Back Matter"),
+        {
+          id: "thanks",
+          title: "Acknowledgements",
+          kind: "document",
+          role: "page",
+          includeInCompile: true,
+          content: textDoc("For Castus"),
+        },
+        {
+          id: "syn",
+          title: "Synopsis",
+          kind: "document",
+          role: "page",
+          includeInCompile: true,
+          content: textDoc("A story"),
+        },
+      ],
+    },
+  });
+  const project = parseProject(raw);
+  if (!project) {
+    throw new Error("project did not parse");
+  }
+  const back = project.publishing.children.find((child) => child.title === "Back Matter");
+  assert.equal(back?.kind, "folder");
+  const thanks = back?.kind === "folder" ? back.children.find((child) => child.id === "thanks") : undefined;
+  assert.equal(thanks?.kind, "document");
+  if (thanks?.kind === "document") {
+    assert.equal(wordCount(thanks.content), 2);
+  }
+  assert.equal(project.publishing.children.some((child) => child.id === "syn"), true);
+  assert.deepEqual(project.dictionary, ["Castus"]);
+  const added = addDictionaryWord(project, "  ");
+  assert.deepEqual(added.dictionary, ["Castus"]);
+  const named = addDictionaryWord(project, "Lyra");
+  assert.deepEqual(named.dictionary, ["Castus", "Lyra"]);
+});
+
+test("a note stays a note, and a page stays a page", () => {
+  const project = createNovelProject();
+  const characters = project.notes.children.find((child) => child.title === "Characters");
+  assert.ok(characters);
+  const note = addLeaf(project, characters.id);
+  const notes = note.project.notes.children.find((child) => child.id === characters.id);
+  assert.equal(notes?.kind, "folder");
+  const written = notes?.kind === "folder" ? notes.children.find((child) => child.id === note.id) : undefined;
+  assert.equal(written?.kind, "document");
+  if (written?.kind === "document") {
+    assert.equal(written.role, "note");
+    assert.equal(written.title, "New note");
+  }
+  const frontMatter = project.publishing.children.find((child) => child.title === "Front Matter");
+  assert.ok(frontMatter);
+  const page = addLeaf(project, frontMatter.id);
+  const section = page.project.publishing.children.find((child) => child.id === frontMatter.id);
+  const added = section?.kind === "folder" ? section.children.find((child) => child.id === page.id) : undefined;
+  assert.equal(added?.kind, "document");
+  if (added?.kind === "document") {
+    assert.equal(added.role, "page");
+    assert.equal(added.title, "New page");
+  }
 });
 
 test("manuscript word count ignores research", () => {
   const project = createNovelProject();
-  const researchScene = addScene(project, project.research.id);
-  const withResearch = setDocumentContent(researchScene.project, researchScene.id, textDoc("secret notes"));
+  const research = project.notes.children.find((child) => child.title === "Research");
+  assert.ok(research);
+  const researchNote = addLeaf(project, research.id);
+  const withResearch = setDocumentContent(researchNote.project, researchNote.id, textDoc("secret notes"));
   assert.equal(manuscriptWordCount(withResearch), 0);
 });
 

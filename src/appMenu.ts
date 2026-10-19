@@ -1,8 +1,8 @@
-import { CheckMenuItem, Menu, Submenu } from "@tauri-apps/api/menu";
+import { CheckMenuItem, Menu, MenuItem, Submenu } from "@tauri-apps/api/menu";
 import { commands } from "./commands";
 import { installEditCommands } from "./editMenu";
 import { createFormatMenu } from "./formatMenu";
-import { applyTheme, readTheme, readThemes } from "./themes";
+import { applyTheme, onTheme, readTheme, readThemes } from "./themes";
 import { createViewMenu } from "./viewMenu";
 
 let installed: Menu | null = null;
@@ -26,11 +26,20 @@ export async function installAppMenu(): Promise<void> {
     }
   }
   const theme = await themeSubmenu();
+  const settings = await MenuItem.new({
+    id: "settings",
+    text: "Settings…",
+    accelerator: "CmdOrCtrl+,",
+    action: () => {
+      commands().openSettings?.();
+    },
+  });
   if (fileMenu) {
     await fileMenu.prepend(newProject);
     await fileMenu.insert(theme, 1);
+    await fileMenu.insert(settings, 2);
   } else {
-    const file = await Submenu.new({ text: "File", items: [newProject, theme] });
+    const file = await Submenu.new({ text: "File", items: [newProject, theme, settings] });
     const afterAppMenu = navigator.userAgent.includes("Mac") ? 1 : 0;
     await menu.insert(file, afterAppMenu);
   }
@@ -72,10 +81,12 @@ async function themeSubmenu(): Promise<Submenu> {
   let items: CheckMenuItem[] = [];
   function choose(id: string) {
     applyTheme(id);
+  }
+  onTheme((id) => {
     for (const [index, theme] of available.entries()) {
       void items[index]?.setChecked(theme.id === id);
     }
-  }
+  });
   items = await Promise.all(
     available.map((theme) =>
       CheckMenuItem.new({

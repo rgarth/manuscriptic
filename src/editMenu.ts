@@ -31,6 +31,7 @@ export async function installEditCommands(edit: Submenu): Promise<void> {
     const current = commands();
     const open = current.newScene !== null;
     void scene.setEnabled(open);
+    void scene.setText(current.leafLabel);
     void section.setEnabled(open);
     void trash.setEnabled(current.removal !== null);
     void trash.setText(current.removal?.label ?? "Move to Trash");

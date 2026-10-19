@@ -68,11 +68,23 @@ export function readTheme(available = readThemes()): string {
   return fallback;
 }
 
+const themeListeners = new Set<(id: string) => void>();
+
+export function onTheme(listener: (id: string) => void): () => void {
+  themeListeners.add(listener);
+  return () => {
+    themeListeners.delete(listener);
+  };
+}
+
 export function applyTheme(id: string): void {
   document.documentElement.dataset.theme = id;
   try {
     localStorage.setItem(storageKey, id);
   } catch {
-    return;
+    // Keep the applied theme when storage is unavailable.
+  }
+  for (const listener of themeListeners) {
+    listener(id);
   }
 }

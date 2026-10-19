@@ -1,19 +1,20 @@
 import { useState, type MouseEvent } from "react";
+import Hint from "./Hint.tsx";
 import Icon, { type IconName } from "./icons";
 import {
+  leafAction,
   removal,
   ROOT_KEYS,
   type BinderNode,
+  type DocumentRole,
   type ProjectFile,
   type RootKey,
 } from "./model/project";
 
 const rootIcons: Record<RootKey, IconName> = {
   manuscript: "book",
-  characters: "people",
-  places: "place",
-  frontMatter: "front",
-  research: "research",
+  notes: "note",
+  publishing: "front",
   trash: "trash",
 };
 
@@ -27,6 +28,8 @@ type BinderProps = {
   onAddScene: (targetId?: string) => void;
   onAddSection: (targetId?: string) => void;
   onAskTrash: (id: string) => void;
+  open: boolean;
+  onToggleOpen: () => void;
 };
 
 export default function Binder({
@@ -39,34 +42,54 @@ export default function Binder({
   onAddScene,
   onAddSection,
   onAskTrash,
+  open,
+  onToggleOpen,
 }: BinderProps) {
   const [context, setContext] = useState<ContextMenu | null>(null);
   const selectedRemoval = selectedId ? removal(project, selectedId) : null;
+  const leaf = leafAction(project, selectedId);
 
   return (
-    <aside className="binder">
-      <input
-        className="project-title"
-        aria-label="Project title"
-        value={project.title}
-        onChange={(event) => onRenameProject(event.currentTarget.value)}
-      />
-      <div className="tree">
-        {ROOT_KEYS.map((key) => (
-          <BinderBranch
-            key={project[key].id}
-            node={project[key]}
-            icon={rootIcons[key]}
-            depth={0}
-            selectedId={selectedId}
-            expanded={expanded}
-            onToggle={onToggle}
-            onSelect={onSelect}
-            onContext={setContext}
+    <aside className={open ? "binder" : "binder collapsed"}>
+      <div className="binder-bar">
+        {open ? (
+          <input
+            className="project-title"
+            aria-label="Project title"
+            value={project.title}
+            onChange={(event) => onRenameProject(event.currentTarget.value)}
           />
-        ))}
+        ) : null}
+        <Hint label={open ? "Hide the binder" : "Show the binder"}>
+          <button
+            type="button"
+            className="binder-toggle"
+            aria-label={open ? "Hide the binder" : "Show the binder"}
+            aria-expanded={open}
+            onClick={onToggleOpen}
+          >
+            <Icon name="menu" />
+          </button>
+        </Hint>
       </div>
-      {context ? (
+      {open ? (
+        <div className="tree">
+          {ROOT_KEYS.map((key) => (
+            <BinderBranch
+              key={project[key].id}
+              node={project[key]}
+              icon={rootIcons[key]}
+              depth={0}
+              selectedId={selectedId}
+              expanded={expanded}
+              onToggle={onToggle}
+              onSelect={onSelect}
+              onContext={setContext}
+            />
+          ))}
+        </div>
+      ) : null}
+      {open && context ? (
         <BinderContextMenu
           project={project}
           context={context}
@@ -76,29 +99,37 @@ export default function Binder({
           onAskTrash={onAskTrash}
         />
       ) : null}
-      <div className="binder-actions">
-        <button type="button" className="binder-action" onClick={() => onAddScene()}>
-          <Icon name="scene" />
-          New scene
-        </button>
-        <button type="button" className="binder-action" onClick={() => onAddSection()}>
-          <Icon name="section" />
-          New section
-        </button>
-        <button
-          type="button"
-          className="binder-action"
-          onClick={() => {
-            if (selectedId) {
-              onAskTrash(selectedId);
-            }
-          }}
-          disabled={selectedRemoval === null}
-        >
-          <Icon name="trash" />
-          {selectedRemoval?.label ?? "Move to Trash"}
-        </button>
-      </div>
+      {open ? (
+        <div className="binder-actions">
+          <Hint label={leaf.hint}>
+            <button type="button" className="binder-action" onClick={() => onAddScene()}>
+              <Icon name={documentIcons[leaf.role]} />
+              {leaf.label}
+            </button>
+          </Hint>
+          <Hint label="Add a section">
+            <button type="button" className="binder-action" onClick={() => onAddSection()}>
+              <Icon name="section" />
+              New section
+            </button>
+          </Hint>
+          <Hint label={selectedRemoval?.label ?? "Move to Trash"}>
+            <button
+              type="button"
+              className="binder-action"
+              onClick={() => {
+                if (selectedId) {
+                  onAskTrash(selectedId);
+                }
+              }}
+              disabled={selectedRemoval === null}
+            >
+              <Icon name="trash" />
+              {selectedRemoval?.label ?? "Move to Trash"}
+            </button>
+          </Hint>
+        </div>
+      ) : null}
     </aside>
   );
 }
@@ -119,6 +150,25 @@ type BranchProps = {
   onSelect: (id: string) => void;
   onContext: (menu: ContextMenu) => void;
 };
+
+const documentIcons: Record<DocumentRole, IconName> = {
+  scene: "scene",
+  note: "note",
+  page: "front",
+};
+
+const folderIcons: Record<string, IconName> = {
+  Characters: "people",
+  Places: "place",
+  Research: "research",
+  "Misc.": "note",
+  "Front Matter": "front",
+  "Back Matter": "front",
+};
+
+function folderIcon(title: string): IconName {
+  return folderIcons[title] ?? "section";
+}
 
 function openContext(
   event: MouseEvent,
@@ -153,23 +203,27 @@ function BinderBranch({
       return (
         <div>
           <div className="tree-row" style={{ paddingLeft: 8 + depth * 16 }}>
-            <button
-              type="button"
-              className={open ? "disclosure open" : "disclosure"}
-              aria-label={open ? "Collapse section" : "Expand section"}
-              onClick={() => onToggle(node.id)}
-            >
-              <Icon name="chevron" />
-            </button>
-            <button
-              type="button"
-              className={selected ? "tree-item selected" : "tree-item"}
-              onClick={() => onSelect(node.id)}
-              onContextMenu={(event) => openContext(event, node.id, onSelect, onContext)}
-            >
-              <Icon name={icon ?? "section"} />
-              <span>{node.title}</span>
-            </button>
+            <Hint label={open ? "Collapse section" : "Expand section"}>
+              <button
+                type="button"
+                className={open ? "disclosure open" : "disclosure"}
+                aria-label={open ? "Collapse section" : "Expand section"}
+                onClick={() => onToggle(node.id)}
+              >
+                <Icon name="chevron" />
+              </button>
+            </Hint>
+            <Hint label={node.title}>
+              <button
+                type="button"
+                className={selected ? "tree-item selected" : "tree-item"}
+                onClick={() => onSelect(node.id)}
+                onContextMenu={(event) => openContext(event, node.id, onSelect, onContext)}
+              >
+                <Icon name={icon ?? folderIcon(node.title)} />
+                <span>{node.title}</span>
+              </button>
+            </Hint>
           </div>
           {open
             ? node.children.map((child) => (
@@ -191,15 +245,17 @@ function BinderBranch({
       return (
         <div className="tree-row" style={{ paddingLeft: 8 + depth * 16 }}>
           <span className="disclosure-gap" />
-          <button
-            type="button"
-            className={selected ? "tree-item selected" : "tree-item"}
-            onClick={() => onSelect(node.id)}
-            onContextMenu={(event) => openContext(event, node.id, onSelect, onContext)}
-          >
-            <Icon name="scene" />
-            <span>{node.title}</span>
-          </button>
+          <Hint label={node.title}>
+            <button
+              type="button"
+              className={selected ? "tree-item selected" : "tree-item"}
+              onClick={() => onSelect(node.id)}
+              onContextMenu={(event) => openContext(event, node.id, onSelect, onContext)}
+            >
+              <Icon name={documentIcons[node.role]} />
+              <span>{node.title}</span>
+            </button>
+          </Hint>
         </div>
       );
     default: {
@@ -225,8 +281,9 @@ function BinderContextMenu({
   onAskTrash: (id: string) => void;
 }) {
   const choice = removal(project, context.id);
+  const leaf = leafAction(project, context.id);
   const items = [
-    { label: "New Scene", disabled: false, run: () => onAddScene(context.id) },
+    { label: leaf.menuLabel, disabled: false, run: () => onAddScene(context.id) },
     { label: "New Section", disabled: false, run: () => onAddSection(context.id) },
     {
       label: choice?.label ?? "Move to Trash",

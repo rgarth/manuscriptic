@@ -8,6 +8,8 @@ export type CommandState = {
   trash: (() => void) | null;
   format: ((command: SceneCommand) => void) | null;
   removal: Removal | null;
+  leafLabel: string;
+  openSettings: (() => void) | null;
 };
 
 const initial: CommandState = {
@@ -17,6 +19,8 @@ const initial: CommandState = {
   trash: null,
   format: null,
   removal: null,
+  leafLabel: "New Scene",
+  openSettings: null,
 };
 
 let state: CommandState = { ...initial };
