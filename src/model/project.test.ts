@@ -539,7 +539,7 @@ test("a trashed scene returns to its place, and emptying the trash keeps the boo
   assert.equal(removal(emptied, emptied.trash.id), null);
 });
 
-test("a scene moves ahead of its neighbor and adopts the folder it lands in", () => {
+test("a scene moves ahead of its neighbor, and a folder cannot contain itself", () => {
   let project = sampleNovel();
   const chapter = project.manuscript.children[0];
   assert.ok(chapter?.kind === "folder");
@@ -560,29 +560,59 @@ test("a scene moves ahead of its neighbor and adopts the folder it lands in", ()
   const rooted = placeNode(swapped, swapped.manuscript.id, chapter.id, "before");
   assert.equal(rooted.manuscript.children[0]?.id, chapter.id);
 
-  const characters = swapped.notes.children[0];
-  assert.ok(characters);
-  const moved = placeNode(swapped, opening.id, characters.id, "inside");
-  const note = findNode(moved, opening.id);
-  assert.equal(note?.root, "notes");
-  assert.equal(note?.node.kind, "document");
-  if (note?.node.kind === "document") {
-    assert.equal(note.node.role, "note");
-    assert.equal(note.node.includeInCompile, false);
-    assert.equal(wordCount(note.node.content), 2);
-  }
-
-  const trashed = placeNode(swapped, opening.id, swapped.trash.id, "inside");
-  const kept = findNode(trashed, opening.id);
-  assert.equal(kept?.root, "trash");
-  assert.equal(kept?.node.kind, "document");
-  if (kept?.node.kind === "document") {
-    assert.equal(kept.node.role, "scene");
-  }
-
   const part = addSection(swapped, chapter.id);
   const blocked = placeNode(part.project, chapter.id, part.id, "inside");
   assert.equal(findNode(blocked, part.id)?.parent?.id, chapter.id);
+});
+
+test("binder roots do not rename", () => {
+  const project = createNovelProject();
+  assert.equal(renameNode(project, project.manuscript.id, "Draft").manuscript.title, "Manuscript");
+  assert.equal(renameNode(project, project.notes.id, "Research").notes.title, "Notes");
+  assert.equal(renameNode(project, project.publishing.id, "Print").publishing.title, "Publishing");
+  assert.equal(renameNode(project, project.trash.id, "Bin").trash.title, "Trash");
+});
+
+test("sections stay separate, trash accepts anything, and trash returns only to its origin section", () => {
+  let project = createNovelProject();
+  const chapter = addSection(project, project.manuscript.id);
+  project = chapter.project;
+  const scene = addLeaf(project, chapter.id);
+  project = scene.project;
+  const note = addLeaf(project, project.notes.id);
+  project = note.project;
+  const page = addLeaf(project, project.publishing.id);
+  project = page.project;
+
+  const toNotes = placeNode(project, scene.id, note.id, "before");
+  assert.equal(findNode(toNotes, scene.id)?.root, "manuscript");
+  const toPages = placeNode(project, scene.id, page.id, "after");
+  assert.equal(findNode(toPages, scene.id)?.root, "manuscript");
+  const toBook = placeNode(project, note.id, chapter.id, "inside");
+  assert.equal(findNode(toBook, note.id)?.root, "notes");
+  const pageToBook = placeNode(project, page.id, project.manuscript.id, "inside");
+  assert.equal(findNode(pageToBook, page.id)?.root, "publishing");
+
+  const trashed = placeNode(project, scene.id, project.trash.id, "inside");
+  const held = findNode(trashed, scene.id);
+  assert.equal(held?.root, "trash");
+  assert.equal(held?.node.kind, "document");
+  if (held?.node.kind === "document") {
+    assert.equal(held.node.role, "scene");
+  }
+
+  const refused = placeNode(trashed, scene.id, project.notes.id, "inside");
+  assert.equal(findNode(refused, scene.id)?.root, "trash");
+
+  const returned = placeNode(trashed, scene.id, chapter.id, "inside");
+  const back = findNode(returned, scene.id);
+  assert.equal(back?.root, "manuscript");
+  assert.equal(back?.parent?.id, chapter.id);
+  assert.equal(back?.node.kind, "document");
+  if (back?.node.kind === "document") {
+    assert.equal(back.node.role, "scene");
+  }
+  assert.equal(back?.node.origin, undefined);
 });
 
 test("trash keeps a scene until it is deleted", () => {
@@ -606,6 +636,38 @@ test("trash keeps a scene until it is deleted", () => {
       ["Opening", "The road"],
     );
   }
+});
+
+test("a trash origin cannot name the trash", () => {
+  const raw = JSON.stringify({
+    version: 2,
+    title: "Novel",
+    manuscript: emptyFolder("m", "Manuscript"),
+    notes: emptyFolder("n", "Notes"),
+    publishing: emptyFolder("p", "Publishing"),
+    trash: {
+      id: "t",
+      title: "Trash",
+      kind: "folder",
+      includeInCompile: true,
+      children: [
+        {
+          id: "cut",
+          title: "Cut scene",
+          kind: "document",
+          role: "scene",
+          includeInCompile: true,
+          content: textDoc("Gone"),
+          origin: { parentId: "m", index: 0, root: "trash" },
+        },
+      ],
+    },
+  });
+  const project = parseProject(raw);
+  if (!project) {
+    throw new Error("project did not parse");
+  }
+  assert.equal(project.trash.children[0]?.origin, undefined);
 });
 
 function sampleNovel(): ProjectFile {

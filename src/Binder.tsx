@@ -1,7 +1,7 @@
 import { useState, type DragEvent, type MouseEvent } from "react";
 import Hint from "./Hint.tsx";
 import Icon, { type IconName } from "./icons";
-import { removal, type DropPlace } from "./model/binder";
+import { dropAllowed, removal, type DropPlace } from "./model/binder";
 import {
   isStoredInTrash,
   leafAction,
@@ -94,6 +94,7 @@ export default function Binder({
                 drop={drop}
                 onDropTarget={setDrop}
                 onPlace={onPlace}
+                project={project}
               />
             </div>
           ))}
@@ -163,6 +164,7 @@ type BranchProps = {
   drop: { id: string; place: DropPlace } | null;
   onDropTarget: (drop: { id: string; place: DropPlace } | null) => void;
   onPlace: (id: string, targetId: string, place: DropPlace) => void;
+  project: ProjectFile;
 };
 
 const documentIcons: Record<DocumentRole, IconName> = {
@@ -242,6 +244,7 @@ function BinderBranch({
   drop,
   onDropTarget,
   onPlace,
+  project,
 }: BranchProps) {
   const open = expanded.has(node.id);
   const selected = node.id === selectedId;
@@ -251,17 +254,23 @@ function BinderBranch({
     if (!draggedId) {
       return;
     }
+    const place = dropPlace(event.currentTarget, node.kind, depth, event.clientY);
+    if (!dropAllowed(project, draggedId, node.id, place)) {
+      onDropTarget(null);
+      return;
+    }
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    onDropTarget({ id: node.id, place: dropPlace(event.currentTarget, node.kind, depth, event.clientY) });
+    onDropTarget({ id: node.id, place });
   }
 
   function dropOn(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
     const id = event.dataTransfer.getData("text/plain") || draggedId;
     const place = dropPlace(event.currentTarget, node.kind, depth, event.clientY);
+    const allowed = id !== null && id !== "" && dropAllowed(project, id, node.id, place);
     clearBinderDrag(onDropTarget);
-    if (id) {
+    if (id && allowed) {
       onPlace(id, node.id, place);
     }
   }
@@ -316,6 +325,7 @@ function BinderBranch({
                   drop={drop}
                   onDropTarget={onDropTarget}
                   onPlace={onPlace}
+                  project={project}
                 />
               ))
             : null}

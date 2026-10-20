@@ -1,5 +1,4 @@
 import {
-  assignRole,
   contains,
   documentNode,
   editNode,
@@ -12,6 +11,7 @@ import {
   roleForRoot,
   ROOT_KEYS,
   type BinderNode,
+  type FolderNode,
   type InsertedNode,
   type LocatedNode,
   type ProjectFile,
@@ -83,25 +83,26 @@ export function removal(project: ProjectFile, id: string): Removal | null {
   };
 }
 
+export function dropAllowed(
+  project: ProjectFile,
+  id: string,
+  targetId: string,
+  place: DropPlace,
+): boolean {
+  return landingFor(project, id, targetId, place) !== null;
+}
+
 export function placeNode(
   project: ProjectFile,
   id: string,
   targetId: string,
   place: DropPlace,
 ): ProjectFile {
-  if (id === targetId || isRoot(project, id)) {
-    return project;
-  }
-  const moving = findNode(project, id);
-  const target = findNode(project, targetId);
-  if (!moving || !target || contains(moving.node, targetId)) {
-    return project;
-  }
-  const landing = dropLanding(target, moving.node.id, place);
+  const landing = landingFor(project, id, targetId, place);
   if (!landing) {
     return project;
   }
-  return relocate(project, moving, landing.parentId, landing.index);
+  return relocate(project, landing.moving, landing.parentId, landing.index);
 }
 
 export function moveToTrash(project: ProjectFile, id: string): ProjectFile {
@@ -135,7 +136,7 @@ export function restoreNode(project: ProjectFile, id: string): ProjectFile {
   ) {
     return insertNode(removed.project, parent.node.id, node, origin.index) ?? project;
   }
-  const root = origin && origin.root !== "trash" ? origin.root : homeRoot(node);
+  const root = belongsIn(moving.node);
   const home = removed.project[root];
   return insertNode(removed.project, home.id, node, home.children.length) ?? project;
 }
@@ -195,18 +196,48 @@ function destinationId(project: ProjectFile, selectedId: string | null): string 
   }
 }
 
+function landingFor(
+  project: ProjectFile,
+  id: string,
+  targetId: string,
+  place: DropPlace,
+): { moving: LocatedNode; parentId: string; index: number } | null {
+  if (id === targetId || isRoot(project, id)) {
+    return null;
+  }
+  const moving = findNode(project, id);
+  const target = findNode(project, targetId);
+  if (!moving || !target || contains(moving.node, targetId)) {
+    return null;
+  }
+  const landing = dropLanding(target, moving.node.id, place);
+  if (!landing || (landing.root !== "trash" && landing.root !== sectionOf(moving))) {
+    return null;
+  }
+  return { moving, parentId: landing.parent.id, index: landing.index };
+}
+
+function sectionOf(located: LocatedNode): Exclude<RootKey, "trash"> {
+  return located.root === "trash" ? belongsIn(located.node) : located.root;
+}
+
+function belongsIn(node: BinderNode): Exclude<RootKey, "trash"> {
+  return node.origin?.root ?? homeRoot(node);
+}
+
 function dropLanding(
   target: LocatedNode,
   movingId: string,
   place: DropPlace,
-): { parentId: string; index: number } | null {
+): { parent: FolderNode; root: RootKey; index: number } | null {
   switch (place) {
     case "inside":
       if (target.node.kind !== "folder") {
         return null;
       }
       return {
-        parentId: target.node.id,
+        parent: target.node,
+        root: target.root,
         index: indexAfterRemoval(target.node.children, movingId, target.node.children.length),
       };
     case "before":
@@ -218,7 +249,8 @@ function dropLanding(
       const targetIndex = siblings.findIndex((child) => child.id === target.node.id);
       const raw = place === "before" ? targetIndex : targetIndex + 1;
       return {
-        parentId: target.parent.id,
+        parent: target.parent,
+        root: target.root,
         index: indexAfterRemoval(siblings, movingId, raw),
       };
     }
@@ -268,11 +300,7 @@ function nodeForDestination(
       root: moving.root,
     });
   }
-  const cleared = setOrigin(node, undefined);
-  if (parent.root === moving.root) {
-    return cleared;
-  }
-  return adoptRoot(cleared, parent.root);
+  return setOrigin(node, undefined);
 }
 
 function setOrigin(node: BinderNode, origin: TrashOrigin | undefined): BinderNode {
@@ -286,7 +314,7 @@ function setOrigin(node: BinderNode, origin: TrashOrigin | undefined): BinderNod
   return rest;
 }
 
-function homeRoot(node: BinderNode): RootKey {
+function homeRoot(node: BinderNode): Exclude<RootKey, "trash"> {
   switch (node.kind) {
     case "document":
       switch (node.role) {
@@ -308,11 +336,6 @@ function homeRoot(node: BinderNode): RootKey {
       return unexpected;
     }
   }
-}
-
-function adoptRoot(node: BinderNode, root: RootKey): BinderNode {
-  const role = roleForRoot[root];
-  return assignRole(node, role, role !== "note");
 }
 
 function insertNode(

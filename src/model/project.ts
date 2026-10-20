@@ -5,7 +5,7 @@ import { emptyDoc, parseEditorDoc, wordCount, type EditorDoc } from "./editorDoc
 export type TrashOrigin = {
   parentId: string;
   index: number;
-  root: RootKey;
+  root: Exclude<RootKey, "trash">;
 };
 
 type BinderFields = {
@@ -183,6 +183,9 @@ export function renameProject(project: ProjectFile, title: string): ProjectFile 
 }
 
 export function renameNode(project: ProjectFile, id: string, title: string): ProjectFile {
+  if (isRoot(project, id)) {
+    return project;
+  }
   return editNode(project, id, (node) => ({ ...node, title }));
 }
 
@@ -605,14 +608,14 @@ function parseOrigin(value: unknown): TrashOrigin | undefined {
   if (!isRecord(value) || typeof value.parentId !== "string" || typeof value.index !== "number") {
     return undefined;
   }
-  if (!isRootKey(value.root)) {
+  if (!isLivingRoot(value.root)) {
     return undefined;
   }
   return { parentId: value.parentId, index: value.index, root: value.root };
 }
 
-function isRootKey(value: unknown): value is RootKey {
-  return ROOT_KEYS.some((key) => key === value);
+function isLivingRoot(value: unknown): value is Exclude<RootKey, "trash"> {
+  return value === "manuscript" || value === "notes" || value === "publishing";
 }
 
 function parseDictionary(value: unknown): string[] {
