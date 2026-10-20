@@ -9,6 +9,8 @@ import {
 } from "./binderActions";
 import SceneEditor from "./SceneEditor";
 import Settings from "./Settings";
+import Snapshots from "./Snapshots";
+import WritingClock from "./WritingClock";
 import type { BookHistory } from "./bookSession";
 import type { SnapshotMinutes } from "./filePrefs";
 import { removal, restoreNode } from "./model/binder";
@@ -38,8 +40,11 @@ type DeskProps = {
   pendingTrash: string | null;
   onAskTrash: (id: string) => void;
   onPendingTrash: (id: string | null) => void;
+  filePath: string | null;
   settingsOpen: boolean;
   onSettingsOpen: (open: boolean) => void;
+  snapshotsOpen: boolean;
+  onSnapshotsOpen: (open: boolean) => void;
   notice: string | null;
   saveState: SaveState;
   saveError: string | null;
@@ -60,8 +65,11 @@ export default function Desk({
   pendingTrash,
   onAskTrash,
   onPendingTrash,
+  filePath,
   settingsOpen,
   onSettingsOpen,
+  snapshotsOpen,
+  onSnapshotsOpen,
   notice,
   saveState,
   saveError,
@@ -147,6 +155,18 @@ export default function Desk({
           </div>
         </section>
       </div>
+      {snapshotsOpen ? (
+        <Snapshots
+          snapshotMinutes={snapshotMinutes}
+          snapshots={history?.snapshots ?? []}
+          onSnapshotMinutes={onSnapshotMinutes}
+          onTakeSnapshot={onTakeSnapshot}
+          onRestoreBook={onRestoreBook}
+          onRestoreScene={onRestoreScene}
+          onDeleteSnapshot={onDeleteSnapshot}
+          onClose={() => onSnapshotsOpen(false)}
+        />
+      ) : null}
       <footer className="status">
         <span>
           {selected?.node.kind === "document"
@@ -155,21 +175,28 @@ export default function Desk({
         </span>
         <span>Manuscript · {bookWords.toLocaleString()} words</span>
         {notice ? <span role="alert">{notice}</span> : null}
-        <span>{saveError ?? saveLabel(saveState)}</span>
+        <span className="status-actions">
+          <WritingClock
+            bookKey={filePath}
+            sceneId={selected?.node.kind === "document" ? selected.node.id : null}
+            content={selected?.node.kind === "document" ? selected.node.content : null}
+            manuscriptWords={bookWords}
+          />
+          <button
+            type="button"
+            className="status-button"
+            aria-expanded={snapshotsOpen}
+            onClick={() => onSnapshotsOpen(!snapshotsOpen)}
+          >
+            Snapshots
+          </button>
+          <span>{saveError ?? saveLabel(saveState)}</span>
+        </span>
       </footer>
       {settingsOpen ? (
         <Settings
-          words={project.dictionary}
-          onAddWord={addWord}
-          onRemoveWord={removeWord}
+          dictionary={{ words: project.dictionary, onAddWord: addWord, onRemoveWord: removeWord }}
           onClose={() => onSettingsOpen(false)}
-          snapshotMinutes={snapshotMinutes}
-          snapshots={history?.snapshots ?? []}
-          onSnapshotMinutes={onSnapshotMinutes}
-          onTakeSnapshot={onTakeSnapshot}
-          onRestoreBook={onRestoreBook}
-          onRestoreScene={onRestoreScene}
-          onDeleteSnapshot={onDeleteSnapshot}
         />
       ) : null}
       {pendingTrash && pendingRemoval ? (

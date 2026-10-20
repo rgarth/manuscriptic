@@ -23,7 +23,9 @@ export type IconName =
   | "superscript"
   | "subscript"
   | "indent"
-  | "outdent";
+  | "outdent"
+  | "clock"
+  | "pause";
 
 type IconProps = {
   name: IconName;
@@ -238,6 +240,20 @@ function mark(name: IconName) {
           <path d="M4.5 12h9.5" />
           <path d="M4.5 17h9.5" />
           <path d="M19.5 7.5 16 12l3.5 4.5" />
+        </>
+      );
+    case "clock":
+      return (
+        <>
+          <path d="M12 4.75a7.25 7.25 0 1 1 0 14.5 7.25 7.25 0 0 1 0-14.5z" />
+          <path d="M12 8.25V12l2.4 1.6" />
+        </>
+      );
+    case "pause":
+      return (
+        <>
+          <path d="M9 7.5v9" />
+          <path d="M15 7.5v9" />
         </>
       );
     default: {

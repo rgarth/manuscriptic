@@ -269,14 +269,40 @@ input:focus-visible {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 0 16px;
+  margin: 0;
 }
 
-.gate button,
-.dialog button {
+.dialog.settings .preference input {
+  flex: none;
+  width: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.gate button {
   background: var(--wash);
   color: var(--ink);
   padding: 6px 10px;
+}
+
+.dialog button {
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, var(--rule));
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--paper), color-mix(in srgb, var(--paper) 78%, var(--wash)));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 55%, var(--paper));
+  color: var(--ink);
+}
+
+.dialog button:hover:not(:disabled) {
+  background: var(--paper);
+}
+
+.dialog button:active:not(:disabled) {
+  background: var(--wash);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--ink) 18%, transparent);
 }
 
 .menu-dismiss {
@@ -318,15 +344,21 @@ input:focus-visible {
 
 .dialog {
   width: min(28rem, calc(100% - 48px));
-  padding: 22px 22px 16px;
-  background: var(--paper);
+  padding: 16px;
+  background: var(--board);
   color: var(--ink);
-  border: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 1.35;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--rule));
+  border-radius: 12px;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 40%, var(--board)),
+    0 22px 50px color-mix(in srgb, var(--ink) 28%, transparent);
 }
 
 .dialog p {
-  margin: 0 0 16px;
-  line-height: 1.5;
+  margin: 0 0 12px;
+  line-height: 1.35;
 }
 
 .dialog div {
@@ -335,35 +367,139 @@ input:focus-visible {
 }
 
 .dialog.settings {
-  width: min(36rem, calc(100% - 48px));
-  max-height: min(78vh, 720px);
-  overflow: auto;
+  width: min(40rem, calc(100% - 40px));
+  height: auto;
+  min-height: 22rem;
+  max-height: min(32rem, calc(100% - 48px));
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.dialog.settings h2 {
-  margin: 22px 0 8px;
-  font-size: 1rem;
+.dialog.settings .settings-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px 8px 14px;
+  background: color-mix(in srgb, var(--board) 82%, var(--ink));
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, var(--rule));
+}
+
+.dialog.settings .settings-bar h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.dialog.settings .settings-body {
+  flex: 1;
+  min-height: 16rem;
+  align-items: stretch;
+}
+
+.settings-nav {
+  width: 11.5rem;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: transparent;
+}
+
+.dialog.settings .settings-nav button {
+  width: 100%;
+  padding: 5px 8px;
+  text-align: left;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink);
+}
+
+.dialog.settings .settings-nav button:hover {
+  background: color-mix(in srgb, var(--paper) 55%, transparent);
+}
+
+.dialog.settings .settings-nav button[aria-current="page"] {
+  background: var(--paper);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 50%, var(--paper)),
+    0 1px 2px color-mix(in srgb, var(--ink) 16%, transparent);
+}
+
+.settings-pane {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  margin: 0 10px 10px 0;
+  padding: 14px 16px;
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, var(--rule));
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 45%, var(--paper));
+}
+
+.settings-pane h3 {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.dialog.settings .setting {
+  display: block;
+  margin: 0 0 14px;
+}
+
+.setting-label {
+  display: block;
+  margin: 0 0 4px;
   font-weight: 600;
 }
 
-.dialog.settings h2:first-child {
-  margin-top: 0;
+.settings-value {
+  margin: 0 0 8px;
+  color: var(--faded);
+  font-weight: 450;
 }
 
-.choice-list,
+.theme-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dialog.settings .theme-list button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: left;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dialog.settings .theme-list button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--wash) 70%, transparent);
+}
+
+.dialog.settings .theme-list button[aria-selected="true"] {
+  background: var(--wash);
+  font-weight: 650;
+}
+
 .word-list {
   list-style: none;
   margin: 0 0 12px;
   padding: 0;
 }
 
-.choice-list button,
 .word-list li {
   width: 100%;
-}
-
-.choice-list button[aria-pressed="true"] {
-  box-shadow: inset 2px 0 0 var(--nib);
 }
 
 .word-list li {
@@ -382,7 +518,7 @@ input:focus-visible {
   margin-bottom: 8px;
 }
 
-.dialog.settings input {
+.dialog.settings input:not([type="checkbox"]) {
   flex: 1;
   min-width: 0;
   padding: 6px 8px;
@@ -606,12 +742,209 @@ input:focus-visible {
 .status {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   padding: 7px 14px 8px;
   color: var(--faded);
   font-size: 0.75rem;
   letter-spacing: 0.04em;
+}
+
+.status-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.status-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  color: inherit;
+  letter-spacing: inherit;
+  font-size: inherit;
+  background: transparent;
+}
+
+.status-button:hover,
+.status-button[aria-expanded="true"] {
+  color: var(--ink);
+  background: var(--wash);
+}
+
+.status-button .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.status-clock {
+  position: relative;
+  display: inline-flex;
+}
+
+.clock-card {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 25;
+  width: 16rem;
+  padding: 12px 14px 10px;
+  background: var(--board);
+  color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--rule));
+  border-radius: 10px;
+  letter-spacing: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 40%, var(--board)),
+    0 16px 36px color-mix(in srgb, var(--ink) 24%, transparent);
+}
+
+.clock-card p {
+  margin: 0 0 6px;
+}
+
+.clock-note {
+  margin-top: 8px;
+  color: var(--faded);
+  line-height: 1.4;
+}
+
+.snapshot-shelf {
+  flex: none;
+  padding: 12px 14px 10px;
+  background: var(--board);
+  border-top: 1px solid color-mix(in srgb, var(--ink) 12%, var(--rule));
+  font-size: 13px;
+}
+
+.snapshot-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.snapshot-bar h2 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.snapshot-bar p,
+.snapshot-empty {
+  margin: 0;
+  color: var(--faded);
+  line-height: 1.4;
+}
+
+.snapshot-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.segmented {
+  display: flex;
+  width: fit-content;
+  padding: 2px;
+  background: var(--wash);
+  border-radius: 6px;
+}
+
+.segmented button {
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--faded);
+}
+
+.segmented button[aria-pressed="true"] {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.snapshot-take {
+  background: var(--nib);
+  color: var(--paper);
+  padding: 3px 10px;
+  border-radius: 6px;
+}
+
+.snapshot-take:hover {
+  color: var(--paper);
+}
+
+.snapshot-strip {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 4px;
+}
+
+.snapshot-card {
+  width: 8.5rem;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 12px 10px;
+  text-align: left;
+  scroll-snap-align: start;
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, var(--rule));
+  border-radius: 8px;
+  color: var(--ink);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 45%, var(--paper));
+}
+
+.snapshot-card.selected {
+  background: var(--wash);
+  box-shadow: inset 0 -2px 0 var(--nib);
+}
+
+.snapshot-when {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.snapshot-day,
+.snapshot-kind {
+  color: var(--faded);
+  font-size: 0.75rem;
+}
+
+.snapshot-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.snapshot-actions p {
+  margin: 0 auto 0 0;
+  color: var(--faded);
+}
+
+.snapshot-actions button,
+.snapshot-controls > button:not(.snapshot-take) {
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, var(--rule));
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--paper), color-mix(in srgb, var(--paper) 78%, var(--wash)));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 55%, var(--paper));
+  color: var(--ink);
+  padding: 3px 10px;
+}
+
+.snapshot-empty {
+  margin-top: 14px;
 }
 
 .gate {

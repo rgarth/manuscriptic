@@ -20,12 +20,17 @@ export default function App() {
   const [binderOpen, setBinderOpen] = useState(true);
   const [pendingTrash, setPendingTrash] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
   const [snapshotMinutes, setSnapshotMinutes] = useState<SnapshotMinutes>(() =>
     readSnapshotMinutes(localStorage),
   );
   const runMenu = useRef<(command: MenuCommand) => void>(() => undefined);
-  const dialogs = useRef({ pendingTrash: null as string | null, settingsOpen: false });
-  dialogs.current = { pendingTrash, settingsOpen };
+  const dialogs = useRef({
+    pendingTrash: null as string | null,
+    settingsOpen: false,
+    snapshotsOpen: false,
+  });
+  dialogs.current = { pendingTrash, settingsOpen, snapshotsOpen };
 
   const file = useBookFile(showNotice);
   const project = file.project;
@@ -42,6 +47,7 @@ export default function App() {
     }
     hadBook.current = false;
     setSettingsOpen(false);
+    setSnapshotsOpen(false);
     setPendingTrash(null);
   }, [project]);
 
@@ -103,6 +109,10 @@ export default function App() {
       if (event.key === "Escape") {
         if (dialogs.current.settingsOpen) {
           setSettingsOpen(false);
+          return;
+        }
+        if (dialogs.current.snapshotsOpen) {
+          setSnapshotsOpen(false);
           return;
         }
         if (dialogs.current.pendingTrash) {
@@ -177,9 +187,12 @@ export default function App() {
         void file.saveNovelFile(true);
         return;
       case "snapshot":
+        setSettingsOpen(false);
+        setSnapshotsOpen(true);
         file.recordSnapshot("manual");
         return;
       case "settings":
+        setSnapshotsOpen(false);
         setSettingsOpen(true);
         return;
       case "new-scene":
@@ -294,19 +307,7 @@ export default function App() {
   }, [file.filePath]);
 
   const gateSettings = settingsOpen ? (
-    <Settings
-      words={[]}
-      onAddWord={() => undefined}
-      onRemoveWord={() => undefined}
-      onClose={() => setSettingsOpen(false)}
-      snapshotMinutes={snapshotMinutes}
-      snapshots={[]}
-      onSnapshotMinutes={setSnapshotMinutes}
-      onTakeSnapshot={() => file.recordSnapshot("manual")}
-      onRestoreBook={file.restoreSnapshotBook}
-      onRestoreScene={file.restoreSnapshotScene}
-      onDeleteSnapshot={file.removeSnapshot}
-    />
+    <Settings dictionary={null} onClose={() => setSettingsOpen(false)} />
   ) : null;
 
   if (!project) {
@@ -336,6 +337,9 @@ export default function App() {
       onPendingTrash={setPendingTrash}
       settingsOpen={settingsOpen}
       onSettingsOpen={setSettingsOpen}
+      snapshotsOpen={snapshotsOpen}
+      onSnapshotsOpen={setSnapshotsOpen}
+      filePath={file.filePath}
       notice={notice}
       saveState={file.saveState}
       saveError={file.saveError}
