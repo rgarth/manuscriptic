@@ -1,17 +1,12 @@
 import { listen } from "@tauri-apps/api/event";
+import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEffect, useRef, useState } from "react";
 import { installAppMenu } from "./appMenu";
 import { insertScene, insertSection } from "./binderActions";
 import { commands, registerCommands } from "./commands";
 import Desk, { Gate } from "./Desk";
 import Settings from "./Settings";
-import {
-  applyBookStorage,
-  booksOnStartup,
-  markBookClosed,
-  readSnapshotMinutes,
-  type SnapshotMinutes,
-} from "./filePrefs";
+import { booksOnStartup, markBookClosed, readSnapshotMinutes, type SnapshotMinutes } from "./filePrefs";
 import { menuCommand, type MenuCommand } from "./menuCommand";
 import { removal } from "./model/binder";
 import { leafAction, setPageLayout } from "./model/project";
@@ -35,6 +30,20 @@ export default function App() {
   const file = useBookFile(showNotice);
   const project = file.project;
   const selectedId = project?.view.selectedId ?? null;
+  const hadBook = useRef(false);
+
+  useEffect(() => {
+    if (project) {
+      hadBook.current = true;
+      return;
+    }
+    if (!hadBook.current) {
+      return;
+    }
+    hadBook.current = false;
+    setSettingsOpen(false);
+    setPendingTrash(null);
+  }, [project]);
 
   useEffect(() => {
     let cancelled = false;
@@ -113,6 +122,37 @@ export default function App() {
     }
     window.addEventListener("blur", onBlur);
     return () => window.removeEventListener("blur", onBlur);
+  }, []);
+
+  useEffect(() => {
+    if (!tauriAvailable()) {
+      return;
+    }
+    let stop = () => {};
+    let cancelled = false;
+    void getCurrentWebviewWindow()
+      .onCloseRequested(async (event) => {
+        const openWindows = (await getAllWebviewWindows()).length;
+        if (openWindows > 1 || !file.hasBook()) {
+          return;
+        }
+        event.preventDefault();
+        await file.leaveBook();
+      })
+      .then((unlisten) => {
+        if (cancelled) {
+          unlisten();
+          return;
+        }
+        stop = unlisten;
+      })
+      .catch((error: unknown) => {
+        showNotice(error, "Could not watch the window closing.");
+      });
+    return () => {
+      cancelled = true;
+      stop();
+    };
   }, []);
 
   function askTrash(id: string | null) {
@@ -247,14 +287,9 @@ export default function App() {
         showNotice(error, "Could not update the list of open books.");
       }
     }
-    function onStorage(event: StorageEvent) {
-      applyBookStorage(localStorage, event.key, event.newValue);
-    }
     window.addEventListener("pagehide", onHide);
-    window.addEventListener("storage", onStorage);
     return () => {
       window.removeEventListener("pagehide", onHide);
-      window.removeEventListener("storage", onStorage);
     };
   }, [file.filePath]);
 

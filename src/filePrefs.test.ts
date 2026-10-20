@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  applyBookStorage,
   bookFileName,
   titleFromBookPath,
   booksOnStartup,
@@ -9,7 +8,6 @@ import {
   markBookClosed,
   preferenceDirectoryLabel,
   readFilePreferences,
-  readOpenBooks,
   rememberOpenBook,
   writeLastProject,
   writeOpenLast,
@@ -104,17 +102,20 @@ test("startup opens the requested book alone, or every remembered book", () => {
   assert.deepEqual(booksOnStartup(storage, null), { paths: [], openRest: false });
 });
 
-test("closing one book tells the others, and they keep the shorter list", () => {
+test("closing one book leaves the others for the next launch", () => {
   const storage = memory();
   rememberOpenBook(storage, "/Users/me/Novels/Castus.manuscriptic");
   rememberOpenBook(storage, "/Users/me/Novels/Harbor.manuscriptic");
   markBookClosed(storage, "/Users/me/Novels/Harbor.manuscriptic");
-  assert.deepEqual(readOpenBooks(storage), [
-    "/Users/me/Novels/Castus.manuscriptic",
-    "/Users/me/Novels/Harbor.manuscriptic",
-  ]);
-  applyBookStorage(storage, "manuscriptic-live-books", storage.getItem("manuscriptic-live-books"));
-  assert.deepEqual(readOpenBooks(storage), ["/Users/me/Novels/Castus.manuscriptic"]);
-  applyBookStorage(storage, "other", "[]");
-  assert.deepEqual(readOpenBooks(storage), ["/Users/me/Novels/Castus.manuscriptic"]);
+  assert.deepEqual(booksOnStartup(storage, null), {
+    paths: ["/Users/me/Novels/Castus.manuscriptic"],
+    openRest: true,
+  });
+});
+
+test("closing the last book leaves the landing page for the next launch", () => {
+  const storage = memory();
+  rememberOpenBook(storage, "/Users/me/Novels/Castus.manuscriptic");
+  markBookClosed(storage, "/Users/me/Novels/Castus.manuscriptic");
+  assert.deepEqual(booksOnStartup(storage, null), { paths: [], openRest: true });
 });

@@ -14,7 +14,6 @@ const directoryKey = "manuscriptic-save-directory";
 const openLastKey = "manuscriptic-open-last";
 const lastProjectKey = "manuscriptic-last-project";
 const openBooksKey = "manuscriptic-open-books";
-const liveBooksKey = "manuscriptic-live-books";
 const snapshotMinutesKey = "manuscriptic-snapshot-minutes";
 
 export function readFilePreferences(storage: PrefStorage): FilePreferences {
@@ -77,21 +76,7 @@ export function booksOnStartup(storage: PrefStorage, requested: string | null): 
 
 export function markBookClosed(storage: PrefStorage, path: string): void {
   const remaining = readOpenBooks(storage).filter((item) => item !== path);
-  storage.setItem(liveBooksKey, JSON.stringify(remaining));
-}
-
-export function adoptLiveBooks(storage: PrefStorage, raw: string | null): void {
-  if (!raw) {
-    return;
-  }
-  storage.setItem(openBooksKey, raw);
-}
-
-export function applyBookStorage(storage: PrefStorage, key: string | null, value: string | null): void {
-  if (key !== liveBooksKey) {
-    return;
-  }
-  adoptLiveBooks(storage, value);
+  storage.setItem(openBooksKey, JSON.stringify(remaining));
 }
 
 export const snapshotMinuteChoices = [0, 5, 15, 60] as const;

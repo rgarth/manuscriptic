@@ -1,3 +1,4 @@
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useEffect, useRef, useState } from "react";
 import {
   bookFromFiles,
@@ -26,6 +27,7 @@ import { failureMessage } from "./failures";
 import { createBookLock, heldElsewhere } from "./bookLock";
 import {
   bookFileName,
+  markBookClosed,
   rememberOpenBook,
   titleFromBookPath,
   readFilePreferences,
@@ -33,7 +35,7 @@ import {
 import { findNode, firstDocumentId, folderIds, setView, type ProjectFile } from "./model/project";
 import { pickNovelSaveAs, pickNovelToOpen, resolveDirectory } from "./novelFile";
 import { readBook, readHistory, writeBook } from "./storage";
-import { openBookWindow } from "./windows";
+import { clearBookQuery, openBookWindow, tauriAvailable } from "./windows";
 
 export type SaveState = "saved" | "dirty" | "saving" | "error";
 
@@ -149,13 +151,45 @@ export function useBookFile(showNotice: Notice) {
     return pending;
   }
 
-  function flushSave() {
-    if (!projectRef.current || pendingSave.current === null) {
+  function flushSave(): Promise<void> {
+    if (projectRef.current && pendingSave.current !== null) {
+      window.clearTimeout(pendingSave.current);
+      pendingSave.current = null;
+      return enqueueSave(generation.current);
+    }
+    return saveQueue.current;
+  }
+
+  async function leaveBook() {
+    const path = filePathRef.current;
+    if (!path) {
       return;
     }
-    window.clearTimeout(pendingSave.current);
-    pendingSave.current = null;
-    enqueueSave(generation.current);
+    try {
+      await flushSave();
+    } catch (error: unknown) {
+      noticeRef.current(error, "Could not save.");
+    }
+    try {
+      await bookLock.release(path);
+    } catch (error: unknown) {
+      noticeRef.current(error, "Could not release the book lock.");
+    }
+    try {
+      markBookClosed(localStorage, path);
+    } catch (error: unknown) {
+      noticeRef.current(error, "Could not update the list of open books.");
+    }
+    clearBookQuery();
+    dropBook();
+    if (!tauriAvailable()) {
+      return;
+    }
+    try {
+      await getCurrentWebviewWindow().setTitle("Manuscriptic");
+    } catch (error: unknown) {
+      noticeRef.current(error, "Could not retitle the window.");
+    }
   }
 
   function openProject(next: ProjectFile) {
@@ -517,6 +551,8 @@ export function useBookFile(showNotice: Notice) {
     onWindowFocus() {
       bookLock.onFocus();
     },
+    hasBook: () => filePathRef.current !== null,
+    leaveBook,
     markReady,
     recordSnapshot,
     restoreSnapshotBook,

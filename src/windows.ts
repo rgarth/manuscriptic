@@ -4,6 +4,15 @@ export function bookQuery(): string | null {
   return new URLSearchParams(window.location.search).get("book");
 }
 
+export function clearBookQuery(): void {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("book")) {
+    return;
+  }
+  url.searchParams.delete("book");
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 export function tauriAvailable(): boolean {
   return "__TAURI_INTERNALS__" in window;
 }
