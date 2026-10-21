@@ -44,6 +44,13 @@
   border-radius: 10px;
 }
 
+.page-hint {
+  margin: 0.4rem 0 0;
+  color: var(--faded);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.9rem;
+}
+
 .page-head {
   flex: none;
   margin-bottom: 0.4rem;

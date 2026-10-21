@@ -8,6 +8,7 @@ import {
   ROOT_KEYS,
   type BinderNode,
   type DocumentRole,
+  type FolderNode,
   type ProjectFile,
   type RootKey,
 } from "./model/project";
@@ -178,12 +179,20 @@ const folderIcons: Record<string, IconName> = {
   Places: "place",
   Research: "research",
   "Misc.": "note",
-  "Front Matter": "front",
-  "Back Matter": "front",
 };
 
-function folderIcon(title: string): IconName {
-  return folderIcons[title] ?? "section";
+function folderIcon(node: FolderNode): IconName {
+  switch (node.matter) {
+    case "front":
+    case "back":
+      return "front";
+    case undefined:
+      return folderIcons[node.title] ?? "section";
+    default: {
+      const unexpected: never = node.matter;
+      return unexpected;
+    }
+  }
 }
 
 let draggedId: string | null = null;
@@ -306,7 +315,7 @@ function BinderBranch({
                 onDragEnd={() => clearBinderDrag(onDropTarget)}
                 onContextMenu={(event) => openContext(event, node.id, onSelect, onContext)}
               >
-                <Icon name={icon ?? folderIcon(node.title)} />
+                <Icon name={icon ?? folderIcon(node)} />
                 <span>{node.title}</span>
               </button>
             </Hint>

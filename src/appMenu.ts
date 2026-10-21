@@ -59,6 +59,14 @@ export async function installAppMenu(): Promise<void> {
       sendMenuCommand({ name: "snapshot" });
     },
   });
+  const compileBook = await MenuItem.new({
+    id: "compile-book",
+    text: "Compile…",
+    enabled: false,
+    action: () => {
+      sendMenuCommand({ name: "compile" });
+    },
+  });
   function syncFile() {
     if (!document.hasFocus()) {
       return;
@@ -67,6 +75,7 @@ export async function installAppMenu(): Promise<void> {
     void saveNovel.setEnabled(current.saveNovel !== null);
     void saveNovelAs.setEnabled(current.saveNovelAs !== null);
     void takeSnapshot.setEnabled(current.takeSnapshot !== null);
+    void compileBook.setEnabled(current.compile !== null);
   }
   onCommands(syncFile);
   syncFile();
@@ -94,12 +103,13 @@ export async function installAppMenu(): Promise<void> {
     await fileMenu.insert(saveNovel, 3);
     await fileMenu.insert(saveNovelAs, 4);
     await fileMenu.insert(takeSnapshot, 5);
-    await fileMenu.insert(theme, 6);
-    await fileMenu.insert(settings, 7);
+    await fileMenu.insert(compileBook, 6);
+    await fileMenu.insert(theme, 7);
+    await fileMenu.insert(settings, 8);
   } else {
     const file = await Submenu.new({
       text: "File",
-      items: [newProject, openNovel, importScrivener, saveNovel, saveNovelAs, takeSnapshot, theme, settings],
+      items: [newProject, openNovel, importScrivener, saveNovel, saveNovelAs, takeSnapshot, compileBook, theme, settings],
     });
     const afterAppMenu = navigator.userAgent.includes("Mac") ? 1 : 0;
     await menu.insert(file, afterAppMenu);

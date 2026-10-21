@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import Binder from "./Binder";
+import ExportDialog from "./ExportDialog";
 import {
   applyTrash,
   insertScene,
@@ -32,11 +33,13 @@ import {
   removeDictionaryWord,
   renameNode,
   renameProject,
+  setBookCompile,
   setDocumentContent,
   setPageLayout,
   setView,
   type ProjectFile,
 } from "./model/project";
+import { publishingHint } from "./publishingPages";
 import type { SaveState } from "./useBookFile";
 
 type DeskProps = {
@@ -52,6 +55,8 @@ type DeskProps = {
   onSettingsOpen: (open: boolean) => void;
   snapshotsOpen: boolean;
   onSnapshotsOpen: (open: boolean) => void;
+  compileOpen: boolean;
+  onCompileOpen: (open: boolean) => void;
   notice: string | null;
   saveState: SaveState;
   saveError: string | null;
@@ -77,6 +82,8 @@ export default function Desk({
   onSettingsOpen,
   snapshotsOpen,
   onSnapshotsOpen,
+  compileOpen,
+  onCompileOpen,
   notice,
   saveState,
   saveError,
@@ -134,6 +141,7 @@ export default function Desk({
                   const id = selected.node.id;
                   onProject((current) => setDocumentContent(current, id, content));
                 }}
+                hint={publishingHint(selected.node.role, selected.node.title, selected.node.content)}
                 layout={project.layout}
                 onLayout={(layout) => onProject((current) => setPageLayout(current, layout))}
                 dictionary={project.dictionary}
@@ -206,9 +214,20 @@ export default function Desk({
           <span>{saveError ?? saveLabel(saveState)}</span>
         </span>
       </footer>
+      {compileOpen ? (
+        <ExportDialog
+          project={project}
+          onRemember={(next) => onProject(() => next)}
+          onClose={() => onCompileOpen(false)}
+        />
+      ) : null}
       {settingsOpen ? (
         <Settings
           dictionary={{ words: project.dictionary, onAddWord: addWord, onRemoveWord: removeWord }}
+          book={{
+            compile: project.compile,
+            onCompile: (compile) => onProject((current) => setBookCompile(current, compile)),
+          }}
           onClose={() => onSettingsOpen(false)}
         />
       ) : null}

@@ -386,6 +386,39 @@ input:focus-visible {
   gap: 8px;
 }
 
+.dialog.compile {
+  width: min(28rem, calc(100% - 40px));
+  max-height: min(32rem, calc(100% - 48px));
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.compile-body {
+  padding: 0 16px 16px;
+  overflow: auto;
+}
+
+.compile-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0.4rem 0 0.8rem;
+}
+
+.compile-rows label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .dialog.settings {
   width: min(40rem, calc(100% - 40px));
   height: auto;
@@ -484,6 +517,15 @@ input:focus-visible {
   margin: 0 0 8px;
   color: var(--faded);
   font-weight: 450;
+}
+
+.structure-level {
+  margin: 0 0 8px;
+  padding-top: 8px;
+}
+
+.structure-level + .structure-level {
+  border-top: 1px solid var(--rule);
 }
 
 .theme-list {

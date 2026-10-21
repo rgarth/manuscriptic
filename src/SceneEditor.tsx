@@ -35,6 +35,7 @@ type SceneEditorProps = {
   onContent: (content: EditorDoc) => void;
   onAddWord: (word: string) => void;
   onRemoveWord: (word: string) => void;
+  hint?: string | null;
 };
 
 type WordMenu = {
@@ -67,6 +68,7 @@ export default function SceneEditor({
   onContent,
   onAddWord,
   onRemoveWord,
+  hint = null,
 }: SceneEditorProps) {
   const [wordMenu, setWordMenu] = useState<WordMenu | null>(null);
   const editor = useEditor({
@@ -188,6 +190,7 @@ export default function SceneEditor({
           value={title}
           onChange={(event) => onTitle(event.currentTarget.value)}
         />
+        {hint ? <p className="page-hint">{hint}</p> : null}
         <div className="marks">
           <Hint label="Typeface">
             <select
