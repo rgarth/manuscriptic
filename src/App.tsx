@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { installAppMenu } from "./appMenu";
 import { insertScene, insertSection } from "./binderActions";
 import { commands, registerCommands } from "./commands";
-import Desk, { Gate } from "./Desk";
+import Desk, { Gate, preloadSceneEditor } from "./Desk";
 import Settings from "./Settings";
 import { booksOnStartup, markBookClosed, readSnapshotMinutes, type SnapshotMinutes } from "./filePrefs";
 import { menuCommand, type MenuCommand } from "./menuCommand";
@@ -60,6 +60,7 @@ export default function App() {
       file.markReady();
       return;
     }
+    preloadSceneEditor();
     file.loadBook(first)
       .then(async () => {
         if (cancelled || !startup.openRest) {

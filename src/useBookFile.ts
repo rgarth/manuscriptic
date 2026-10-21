@@ -108,9 +108,14 @@ export function useBookFile(showNotice: Notice) {
     const current = projectRef.current;
     const bookHistory = historyRef.current;
     if (!path || !current || !bookHistory) {
+      const message = "Could not save. The book is not ready.";
+      setSaveState("error");
+      setSaveError(message);
+      noticeRef.current(message);
       return Promise.resolve();
     }
     if (bookLock.blockSave()) {
+      noticeRef.current(heldElsewhere);
       return Promise.resolve();
     }
     const started = disk.current;
@@ -145,10 +150,12 @@ export function useBookFile(showNotice: Notice) {
         }
       },
       (error: unknown) => {
-        if (saveGeneration === generation.current) {
-          setSaveState("error");
-          setSaveError(failureMessage(error, "Could not save."));
+        if (error instanceof Error && error.message === "Save was superseded.") {
+          return;
         }
+        setSaveState("error");
+        setSaveError(failureMessage(error, "Could not save."));
+        noticeRef.current(error, "Could not save.");
       },
     );
     return pending;
@@ -442,6 +449,7 @@ export function useBookFile(showNotice: Notice) {
         noticeRef.current("That snapshot could not be read.");
         return;
       case "ready":
+        noticeRef.current(null);
         setProject(restored.project);
         return;
       default: {
@@ -464,6 +472,7 @@ export function useBookFile(showNotice: Notice) {
         noticeRef.current(restored.message);
         return;
       case "ready":
+        noticeRef.current(null);
         setProject(restored.project);
         return;
       default: {
@@ -573,14 +582,8 @@ export function useBookFile(showNotice: Notice) {
     }
     pendingSave.current = window.setTimeout(() => {
       pendingSave.current = null;
-      enqueueSave(nextGeneration);
+      void enqueueSave(nextGeneration);
     }, 1000);
-    return () => {
-      if (pendingSave.current !== null) {
-        window.clearTimeout(pendingSave.current);
-        pendingSave.current = null;
-      }
-    };
   }, [project, history, filePath]);
 
   api.current = {

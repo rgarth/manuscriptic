@@ -8,6 +8,11 @@
   border-left: 1px solid var(--rule);
 }
 
+.editor-column > .opening {
+  flex: 1;
+  min-height: 0;
+}
+
 .editor-scroll {
   flex: 1;
   min-height: 0;
@@ -153,6 +158,13 @@
 
 .page.typewriter .ProseMirror {
   padding-bottom: 50vh;
+}
+
+.ProseMirror .misspelled {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-color: #c23b22;
+  text-underline-offset: 0.18em;
 }
 
 .ProseMirror p {

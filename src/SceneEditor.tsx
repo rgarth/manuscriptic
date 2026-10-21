@@ -2,7 +2,7 @@ import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { getEditorPrefs, indentEm, paragraphGap, spacingLine, subscribeEditorPrefs } from "./editorPrefs";
 import { scrollTopForCaret } from "./typewriter";
 import {
@@ -96,11 +96,26 @@ export default function SceneEditor({
     },
     onUpdate: ({ editor: current }) => {
       const parsed = parseEditorDoc(current.getJSON());
-      if (parsed) {
-        onContent(parsed);
+      if (!parsed) {
+        reportFailure("This scene could not be recorded.", "This scene could not be recorded.");
+        return;
       }
+      onContent(parsed);
     },
   });
+  useLayoutEffect(() => {
+    if (!editor || editor.isDestroyed) {
+      return;
+    }
+    const current = parseEditorDoc(editor.getJSON());
+    if (!current) {
+      return;
+    }
+    if (JSON.stringify(current) === JSON.stringify(content)) {
+      return;
+    }
+    editor.commands.setContent(content, { emitUpdate: false });
+  }, [editor, content]);
   const zoom = useSyncExternalStore(subscribeEditorPrefs, readZoom, readZoom);
   const typewriter = useSyncExternalStore(subscribeEditorPrefs, readTypewriter, readTypewriter);
   const indent = useSyncExternalStore(subscribeEditorPrefs, readIndent, readIndent);

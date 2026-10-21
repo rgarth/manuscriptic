@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import Binder from "./Binder";
 import {
   applyTrash,
@@ -7,7 +7,14 @@ import {
   placeOpened,
   toggleSection,
 } from "./binderActions";
-import SceneEditor from "./SceneEditor";
+
+// The editor stays out of the startup script so a new window can paint first.
+const loadSceneEditor = () => import("./SceneEditor");
+const SceneEditor = lazy(loadSceneEditor);
+
+export function preloadSceneEditor(): void {
+  void loadSceneEditor();
+}
 import Settings from "./Settings";
 import Snapshots from "./Snapshots";
 import WritingClock from "./WritingClock";
@@ -114,24 +121,26 @@ export default function Desk({
         />
         <section className="editor-column">
           {selected?.node.kind === "document" ? (
-            <SceneEditor
-              key={selected.node.id}
-              title={selected.node.title}
-              content={selected.node.content}
-              onTitle={(title) => {
-                const id = selected.node.id;
-                onProject((current) => renameNode(current, id, title));
-              }}
-              onContent={(content: EditorDoc) => {
-                const id = selected.node.id;
-                onProject((current) => setDocumentContent(current, id, content));
-              }}
-              layout={project.layout}
-              onLayout={(layout) => onProject((current) => setPageLayout(current, layout))}
-              dictionary={project.dictionary}
-              onAddWord={addWord}
-              onRemoveWord={removeWord}
-            />
+            <Suspense fallback={<Opening />}>
+              <SceneEditor
+                key={selected.node.id}
+                title={selected.node.title}
+                content={selected.node.content}
+                onTitle={(title) => {
+                  const id = selected.node.id;
+                  onProject((current) => renameNode(current, id, title));
+                }}
+                onContent={(content: EditorDoc) => {
+                  const id = selected.node.id;
+                  onProject((current) => setDocumentContent(current, id, content));
+                }}
+                layout={project.layout}
+                onLayout={(layout) => onProject((current) => setPageLayout(current, layout))}
+                dictionary={project.dictionary}
+                onAddWord={addWord}
+                onRemoveWord={removeWord}
+              />
+            </Suspense>
           ) : (
             <div className="editor-scroll">
               <div className="page section-note">
@@ -159,6 +168,10 @@ export default function Desk({
         <Snapshots
           snapshotMinutes={snapshotMinutes}
           snapshots={history?.snapshots ?? []}
+          history={history}
+          openDocument={
+            selected?.node.kind === "document" ? { id: selected.node.id, title: selected.node.title } : null
+          }
           onSnapshotMinutes={onSnapshotMinutes}
           onTakeSnapshot={onTakeSnapshot}
           onRestoreBook={onRestoreBook}
@@ -216,6 +229,17 @@ export default function Desk({
   );
 }
 
+export function Opening() {
+  return (
+    <div className="opening" role="status" aria-live="polite">
+      <div className="opening-track" aria-hidden="true">
+        <span />
+      </div>
+      <p>Opening…</p>
+    </div>
+  );
+}
+
 export function Gate({
   notice,
   ready,
@@ -231,25 +255,24 @@ export function Gate({
   onCreate: () => void;
   onImport: () => void;
 }) {
+  if (!ready) {
+    return <Opening />;
+  }
   return (
     <main className="gate">
       <h1>Manuscriptic</h1>
       {notice ? <p role="alert">{notice}</p> : null}
-      {ready ? (
-        <div className="gate-actions">
-          <button type="button" onClick={onOpen}>
-            Open
-          </button>
-          <button type="button" onClick={onCreate}>
-            Create New
-          </button>
-          <button type="button" onClick={onImport}>
-            Import Scrivener
-          </button>
-        </div>
-      ) : (
-        <p>Opening project…</p>
-      )}
+      <div className="gate-actions">
+        <button type="button" onClick={onOpen}>
+          Open
+        </button>
+        <button type="button" onClick={onCreate}>
+          Create New
+        </button>
+        <button type="button" onClick={onImport}>
+          Import Scrivener
+        </button>
+      </div>
       {settings}
     </main>
   );

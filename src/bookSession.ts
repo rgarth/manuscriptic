@@ -15,6 +15,7 @@ import {
 import { bookFileName } from "./filePrefs.ts";
 import {
   createNovelProject,
+  findNode,
   renameProject,
   setDocumentContent,
   type ProjectFile,
@@ -118,14 +119,25 @@ export function restoredBook(history: BookHistory, id: string): BookRestore {
 export function restoredScene(history: BookHistory, project: ProjectFile, id: string): SceneRestore {
   const sceneId = project.view.selectedId;
   const index = history.snapshots.findIndex((snapshot) => snapshot.id === id);
-  if (!sceneId || index < 0) {
+  const located = sceneId ? findNode(project, sceneId) : null;
+  if (!located || index < 0) {
     return { kind: "notice", message: "Select a scene to restore." };
   }
-  const content = sceneAt(history, index, sceneId);
-  if (!content) {
-    return { kind: "notice", message: "That scene is not in this snapshot." };
+  switch (located.node.kind) {
+    case "folder":
+      return { kind: "notice", message: "Select a scene to restore." };
+    case "document": {
+      const content = sceneAt(history, index, located.node.id);
+      if (!content) {
+        return { kind: "notice", message: `${located.node.title} is not in this snapshot.` };
+      }
+      return { kind: "ready", project: setDocumentContent(project, located.node.id, content) };
+    }
+    default: {
+      const unexpected: never = located.node;
+      return unexpected;
+    }
   }
-  return { kind: "ready", project: setDocumentContent(project, sceneId, content) };
 }
 
 export function withoutSnapshot(history: BookHistory, id: string): BookHistory {

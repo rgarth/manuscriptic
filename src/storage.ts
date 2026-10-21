@@ -54,3 +54,7 @@ export function refreshBookLock(path: string, holder: string): Promise<boolean> 
 export function releaseBookLock(path: string, holder: string): Promise<void> {
   return invoke("release_book_lock", { path, holder });
 }
+
+export function misspellings(text: string): Promise<{ from: number; to: number }[]> {
+  return invoke("misspellings", { text });
+}

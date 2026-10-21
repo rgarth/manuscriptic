@@ -3,12 +3,14 @@ mod book_lock;
 mod documents;
 mod fonts;
 mod scrivener;
+mod spellcheck;
 
 use book_file::{file_exists, read_book, read_history, write_book};
 use scrivener::read_scrivener;
 use book_lock::{claim_book_lock, refresh_book_lock, release_book_lock, release_window, take_book_lock};
 use documents::documents_directory;
 use fonts::list_fonts;
+use spellcheck::misspellings;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -26,7 +28,8 @@ pub fn run() {
             claim_book_lock,
             take_book_lock,
             refresh_book_lock,
-            release_book_lock
+            release_book_lock,
+            misspellings
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {

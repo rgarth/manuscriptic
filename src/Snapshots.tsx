@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { sceneAt, type BookHistory } from "./bookArchive";
+import { failureMessage, reportFailure } from "./failures";
 import {
   snapshotMinuteChoices,
   writeSnapshotMinutes,
   type SnapshotMinutes,
 } from "./filePrefs";
-import { failureMessage, reportFailure } from "./failures";
 
 export type SnapshotListItem = {
   id: string;
@@ -15,6 +16,8 @@ export type SnapshotListItem = {
 type SnapshotsProps = {
   snapshotMinutes: SnapshotMinutes;
   snapshots: SnapshotListItem[];
+  history: BookHistory | null;
+  openDocument: { id: string; title: string } | null;
   onSnapshotMinutes: (minutes: SnapshotMinutes) => void;
   onTakeSnapshot: () => void;
   onRestoreBook: (id: string) => void;
@@ -26,6 +29,8 @@ type SnapshotsProps = {
 export default function Snapshots({
   snapshotMinutes,
   snapshots,
+  history,
+  openDocument,
   onSnapshotMinutes,
   onTakeSnapshot,
   onRestoreBook,
@@ -41,6 +46,23 @@ export default function Snapshots({
   const previousNewest = useRef(newestId);
   const selected = ordered.find((snapshot) => snapshot.id === selectedId) ?? ordered[0] ?? null;
   const selectedStamp = selected ? snapshotStamp(selected.at, Date.now()) : null;
+  const selectedSnapshotId = selected?.id ?? null;
+  const openDocumentId = openDocument?.id ?? null;
+  const sceneHere = useMemo(() => {
+    if (!history || !openDocumentId || !selectedSnapshotId) {
+      return null;
+    }
+    const index = history.snapshots.findIndex((snapshot) => snapshot.id === selectedSnapshotId);
+    if (index < 0) {
+      return false;
+    }
+    return sceneAt(history, index, openDocumentId) !== null;
+  }, [history, openDocumentId, selectedSnapshotId]);
+  const restoreNote = !openDocument
+    ? "Select a scene to restore."
+    : sceneHere === false
+      ? `${openDocument.title} is not in this snapshot.`
+      : null;
 
   useEffect(() => {
     if (newestId && newestId !== previousNewest.current) {
@@ -163,7 +185,8 @@ export default function Snapshots({
           <p>
             {selectedStamp?.day} · {selectedStamp?.time} · {kindLabel(selected.kind)}
           </p>
-          <button type="button" onClick={() => onRestoreScene(selected.id)}>
+          {restoreNote ? <p>{restoreNote}</p> : null}
+          <button type="button" disabled={restoreNote !== null} onClick={() => onRestoreScene(selected.id)}>
             Restore this scene
           </button>
           <button type="button" onClick={() => onRestoreBook(selected.id)}>
