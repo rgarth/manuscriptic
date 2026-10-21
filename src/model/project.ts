@@ -593,6 +593,34 @@ export function assignRole(
   }
 }
 
+export function replaceMatter(project: ProjectFile, section: "front" | "back", pages: BinderNode[]): ProjectFile {
+  const title = matterTitle(section);
+  return {
+    ...project,
+    publishing: {
+      ...project.publishing,
+      children: project.publishing.children.map((child) =>
+        child.kind === "folder" && child.title === title
+          ? { ...child, children: pages.map((page) => assignRole(page, "page", null)) }
+          : child,
+      ),
+    },
+  };
+}
+
+function matterTitle(section: "front" | "back"): string {
+  switch (section) {
+    case "front":
+      return "Front Matter";
+    case "back":
+      return "Back Matter";
+    default: {
+      const unexpected: never = section;
+      return unexpected;
+    }
+  }
+}
+
 function parseView(value: unknown): ProjectView {
   if (!isRecord(value)) {
     return { selectedId: null, expanded: null };

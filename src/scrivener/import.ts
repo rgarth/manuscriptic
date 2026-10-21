@@ -1,12 +1,8 @@
+import { projectFromImport } from "../importedBook.ts";
 import { emptyDoc, type EditorBlock, type EditorDoc } from "../model/editorDoc.ts";
 import {
-  createNovelProject,
   documentNode,
-  firstDocumentId,
-  folderIds,
   folderNode,
-  renameProject,
-  setView,
   type BinderNode,
   type DocumentNode,
   type DocumentRole,
@@ -46,33 +42,78 @@ export function scrivenerTitle(path: string): string {
   return name || "Imported Novel";
 }
 
+type PlacedBinder = {
+  manuscript: ScrivenerItem | null;
+  trash: ScrivenerItem | null;
+  front: ScrivenerItem | null;
+  back: ScrivenerItem | null;
+  notes: ScrivenerItem[];
+};
+
 export function projectFromScrivener(title: string, files: ScrivenerPackage): ProjectFile | null {
-  const binder = binderItems(files.scrivx);
+  const xml = parseXml(files.scrivx);
+  if (!xml) {
+    return null;
+  }
+  const binder = binderItems(xml);
   if (!binder) {
     return null;
   }
-  const draft = binder.find((item) => item.type === "DraftFolder");
-  const research = binder.find((item) => item.type === "ResearchFolder");
-  const trash = binder.find((item) => item.type === "TrashFolder");
-  const base = renameProject(createNovelProject(), title.trim() || "Imported Novel");
-  const researchChildren = research
-    ? convertList(research.children, "note", files)
-    : base.notes.children;
-  const documentNotes = collectNotes(binder, files);
-  const notesChildren =
-    documentNotes.length > 0
-      ? [...researchChildren, folderNode("Document notes", documentNotes, false)]
-      : researchChildren;
-  const project: ProjectFile = {
-    ...base,
-    manuscript: { ...base.manuscript, children: draft ? convertList(draft.children, "scene", files) : [] },
-    notes: { ...base.notes, children: notesChildren },
-    trash: { ...base.trash, children: trash ? convertList(trash.children, "scene", files) : [] },
-  };
-  return setView(project, {
-    selectedId: firstDocumentId(project.manuscript) ?? project.manuscript.id,
-    expanded: folderIds(project),
+  const templateId = directChild(xml, "TemplateFolderUUID")?.text.trim().toLowerCase() ?? "";
+  const template = templateId ? binder.find((item) => item.uuid.toLowerCase() === templateId) : undefined;
+  const placed = placeBinder(binder, template);
+  const documentNotes = collectNotes(
+    [placed.manuscript, placed.trash].filter((item) => item !== null),
+    files,
+  );
+  return projectFromImport({
+    title,
+    manuscript: placed.manuscript ? convertList(placed.manuscript.children, "scene", files) : [],
+    notes: placed.notes.length > 0 ? convertList(placed.notes, "note", files) : null,
+    extraNotes: documentNotes.length > 0 ? [folderNode("Document notes", documentNotes, false)] : [],
+    frontMatter: placed.front ? convertList(placed.front.children, "page", files) : null,
+    backMatter: placed.back ? convertList(placed.back.children, "page", files) : null,
+    trash: placed.trash ? convertList(placed.trash.children, "scene", files) : [],
   });
+}
+
+function placeBinder(binder: ScrivenerItem[], template: ScrivenerItem | undefined): PlacedBinder {
+  const placed: PlacedBinder = { manuscript: null, trash: null, front: null, back: null, notes: [] };
+  for (const item of binder) {
+    if (item === template) {
+      continue;
+    }
+    if (item.type === "DraftFolder") {
+      placed.manuscript ??= item;
+      continue;
+    }
+    if (item.type === "TrashFolder") {
+      placed.trash ??= item;
+      continue;
+    }
+    if (item.type === "ResearchFolder") {
+      placed.notes.push(...item.children);
+      continue;
+    }
+    if (isContainer(item) && sameTitle(item.title, "Front Matter")) {
+      placed.front ??= item;
+      continue;
+    }
+    if (isContainer(item) && sameTitle(item.title, "Back Matter")) {
+      placed.back ??= item;
+      continue;
+    }
+    placed.notes.push(item);
+  }
+  return placed;
+}
+
+function isContainer(item: ScrivenerItem): boolean {
+  return item.type.endsWith("Folder") || item.children.length > 0;
+}
+
+function sameTitle(left: string, right: string): boolean {
+  return left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0;
 }
 
 function convertList(items: ScrivenerItem[], role: DocumentRole, files: ScrivenerPackage): BinderNode[] {
@@ -80,14 +121,37 @@ function convertList(items: ScrivenerItem[], role: DocumentRole, files: Scrivene
 }
 
 function convertItem(item: ScrivenerItem, role: DocumentRole, files: ScrivenerPackage): BinderNode {
-  const content = rtfToDoc(stored(files.content, item.uuid));
+  const content = itemContent(item, role, files);
   const children = convertList(item.children, role, files);
   const include = included(item, role);
-  if (item.type === "Folder" || item.type.endsWith("Folder") || children.length > 0) {
+  if (isContainer(item)) {
     const body = hasText(content) ? [document(item.title, role, content, include)] : [];
     return folderNode(item.title, [...body, ...children], include);
   }
   return document(item.title, role, content, include);
+}
+
+function itemContent(item: ScrivenerItem, role: DocumentRole, files: ScrivenerPackage): EditorDoc {
+  const body = rtfToDoc(stored(files.content, item.uuid));
+  switch (role) {
+    case "scene":
+    case "page":
+      return body;
+    case "note": {
+      const notes = noteDoc(stored(files.synopsis, item.uuid), stored(files.notes, item.uuid));
+      if (!notes) {
+        return body;
+      }
+      if (!hasText(body)) {
+        return notes;
+      }
+      return { type: "doc", content: [...body.content, ...notes.content] };
+    }
+    default: {
+      const unexpected: never = role;
+      return unexpected;
+    }
+  }
 }
 
 function collectNotes(items: ScrivenerItem[], files: ScrivenerPackage): DocumentNode[] {
@@ -178,11 +242,7 @@ function blockHasText(block: EditorBlock): boolean {
   }
 }
 
-function binderItems(scrivx: string): ScrivenerItem[] | null {
-  const xml = parseXml(scrivx);
-  if (!xml) {
-    return null;
-  }
+function binderItems(xml: XmlNode): ScrivenerItem[] | null {
   const binder = findChild(xml, "Binder") ?? findNamed(xml, "Binder");
   if (!binder) {
     return null;
