@@ -1,5 +1,13 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
-import { getEditorPrefs, setTypewriter, subscribeEditorPrefs } from "./editorPrefs";
+import {
+  getEditorPrefs,
+  lineSpacings,
+  paragraphIndents,
+  setIndent,
+  setSpacing,
+  setTypewriter,
+  subscribeEditorPrefs,
+} from "./editorPrefs";
 import { failureMessage, reportFailure } from "./failures";
 import Hint from "./Hint";
 import {
@@ -32,6 +40,8 @@ export default function Settings({ dictionary, onClose }: SettingsProps) {
   const [directory, setDirectory] = useState(stored.directory);
   const [openLast, setOpenLast] = useState(stored.openLast);
   const typewriter = useSyncExternalStore(subscribeEditorPrefs, readTypewriter, readTypewriter);
+  const indent = useSyncExternalStore(subscribeEditorPrefs, readIndent, readIndent);
+  const spacing = useSyncExternalStore(subscribeEditorPrefs, readSpacing, readSpacing);
   const [draft, setDraft] = useState("");
   const [folderError, setFolderError] = useState<string | null>(null);
   const shown: SettingsSection = section === "dictionary" && dictionary === null ? "files" : section;
@@ -150,6 +160,36 @@ export default function Settings({ dictionary, onClose }: SettingsProps) {
             />
             <Hint label="Keeps the cursor in the middle of the screen.">Typewriter mode</Hint>
           </label>
+          <div className="setting">
+            <span className="setting-label">Paragraph indent</span>
+            <div className="segmented" role="group" aria-label="Paragraph indent">
+              {paragraphIndents.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={indent === item.id}
+                  onClick={() => setIndent(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="setting">
+            <span className="setting-label">Line spacing</span>
+            <div className="segmented" role="group" aria-label="Line spacing">
+              {lineSpacings.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-pressed={spacing === item.id}
+                  onClick={() => setSpacing(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </>
       );
       break;
@@ -236,4 +276,12 @@ function navSections(book: boolean): { id: SettingsSection; label: string }[] {
 
 function readTypewriter(): boolean {
   return getEditorPrefs().typewriter;
+}
+
+function readIndent() {
+  return getEditorPrefs().indent;
+}
+
+function readSpacing() {
+  return getEditorPrefs().spacing;
 }

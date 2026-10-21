@@ -1,0 +1,186 @@
+.editor-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--paper);
+  border-left: 1px solid var(--rule);
+}
+
+.editor-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.page {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 28px 24px 24px;
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  font-family: var(--editor-font, "EB Garamond Variable", "EB Garamond", Palatino, serif);
+}
+
+.editor-column > .page {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.page > .editor-scroll {
+  margin-top: 16px;
+  border: 1px solid color-mix(in srgb, var(--rule) 40%, var(--faded));
+  border-radius: 10px;
+}
+
+.page-head {
+  flex: none;
+  margin-bottom: 0.4rem;
+}
+
+.editor-surface {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  margin-top: 0;
+}
+
+.scene-title {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-size: 1.85rem;
+  font-weight: 560;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.marks,
+.ProseMirror {
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--rule) 40%, var(--faded));
+  border-radius: 10px;
+}
+
+.marks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1px;
+  margin-top: 16px;
+  padding: 4px;
+  background: color-mix(in srgb, var(--paper) 90%, var(--ink));
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 14%, transparent);
+}
+
+.font-choice,
+.size-choice {
+  border: none;
+  background: transparent;
+  color: var(--faded);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.85rem;
+  padding: 2px 2px 2px 0;
+}
+
+.font-choice {
+  max-width: 11rem;
+  margin-right: 4px;
+}
+
+.size-choice {
+  width: 3.2rem;
+}
+
+.size-unit {
+  margin: 0 8px 0 1px;
+  color: var(--faded);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.75rem;
+}
+
+.mark-gap {
+  width: 1px;
+  height: 16px;
+  margin: 0 5px;
+  flex: none;
+  background: var(--rule);
+}
+
+.mark {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--faded);
+}
+
+.mark:hover,
+.mark[aria-pressed="true"] {
+  color: var(--nib);
+  background: var(--wash);
+}
+
+.page > .editor-scroll .ProseMirror {
+  border: none;
+  border-radius: 0;
+  min-height: 100%;
+}
+
+.ProseMirror {
+  outline: none;
+  flex: 1 0 auto;
+  margin: 0;
+  padding: 1.15rem 1.25rem 2.5rem;
+  font-size: calc(var(--editor-size, 18) * 1px);
+  line-height: var(--editor-spacing, 1.7);
+  caret-color: var(--nib);
+  text-align: var(--editor-align, justify);
+  hyphens: auto;
+}
+
+.page.typewriter .ProseMirror {
+  padding-bottom: 50vh;
+}
+
+.ProseMirror p {
+  margin: 0 0 var(--editor-gap, 0.9em);
+}
+
+.ProseMirror > p + p {
+  text-indent: var(--editor-indent, 0);
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.4em;
+}
+
+.ProseMirror li p {
+  margin: 0;
+}
+
+.section-note h1 {
+  margin: 0 0 10px;
+  font-size: 1.85rem;
+  font-weight: 560;
+  letter-spacing: -0.02em;
+}
+
+.section-note p {
+  color: var(--faded);
+  line-height: 1.5;
+}

@@ -3,13 +3,14 @@ import { test } from "node:test";
 import {
   bookFromArchive,
   filesToSave,
+  importReplaceQuestion,
   newBook,
   recordedSnapshot,
   restoredBook,
-  takenNameMessage,
 } from "./bookSession.ts";
 import { menuCommand } from "./menuCommand.ts";
 import { renameProject } from "./model/project.ts";
+import { windowClose } from "./windows.ts";
 
 test("a named book is a file, and a blank name is refused", () => {
   assert.equal(newBook("  "), null);
@@ -38,15 +39,28 @@ test("an unchanged book does not grow a snapshot, and a rename does", () => {
   if (restored.kind === "ready") {
     assert.equal(restored.project.title, "Castus Revised");
   }
-  assert.equal(takenNameMessage("already-exists"), "A book with that name is already in this folder.");
-  assert.equal(takenNameMessage(new Error("disk full")), null);
+});
+
+test("import warns that history and snapshots are lost", () => {
+  assert.equal(
+    importReplaceQuestion("/Books/Castus.manuscriptic"),
+    "Importing a book replaces everything in this file, including snapshots. All history will be wiped.\n\n/Books/Castus.manuscriptic",
+  );
 });
 
 test("a menu command is one of the known actions", () => {
   assert.deepEqual(menuCommand({ name: "save-as" }), { name: "save-as" });
+  assert.deepEqual(menuCommand({ name: "import" }), { name: "import" });
   assert.deepEqual(menuCommand({ name: "format", command: "bold" }), { name: "format", command: "bold" });
   assert.deepEqual(menuCommand({ name: "align", align: "left" }), { name: "align", align: "left" });
   assert.equal(menuCommand({ name: "align", align: "nope" }), null);
   assert.equal(menuCommand({ name: "format", command: "nope" }), null);
   assert.equal(menuCommand({ name: "explode" }), null);
+});
+
+test("the start screen closes, and the last book returns there", () => {
+  assert.equal(windowClose(false, 1), "destroy");
+  assert.equal(windowClose(false, 2), "destroy");
+  assert.equal(windowClose(true, 1), "leave");
+  assert.equal(windowClose(true, 2), "destroy");
 });

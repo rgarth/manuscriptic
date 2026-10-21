@@ -3,6 +3,7 @@ import { joinNovelPath } from "./filePrefs.ts";
 import { documentsDirectory } from "./storage.ts";
 
 const novelFilter = [{ name: "Manuscriptic book", extensions: ["manuscriptic"] }];
+const scrivenerFilter = [{ name: "Scrivener project", extensions: ["scriv", "scrivx"] }];
 
 export async function resolveDirectory(directory: string | null): Promise<string> {
   return directory ?? documentsDirectory();
@@ -15,6 +16,17 @@ export async function pickNovelToOpen(directory: string): Promise<string | null>
     directory: false,
     multiple: false,
     filters: novelFilter,
+  });
+  return typeof picked === "string" ? picked : null;
+}
+
+export async function pickScrivenerProject(directory: string): Promise<string | null> {
+  const picked = await open({
+    title: "Import Scrivener Project",
+    defaultPath: directory,
+    directory: false,
+    multiple: false,
+    filters: scrivenerFilter,
   });
   return typeof picked === "string" ? picked : null;
 }

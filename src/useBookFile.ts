@@ -1,4 +1,5 @@
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import {
   bookFromFiles,
@@ -16,11 +17,12 @@ import {
 import {
   bookFromArchive,
   filesToSave,
+  importedBook,
+  importReplaceQuestion,
   newBook,
   recordedSnapshot,
   restoredBook,
   restoredScene,
-  takenNameMessage,
   withoutSnapshot,
 } from "./bookSession";
 import { failureMessage } from "./failures";
@@ -33,8 +35,9 @@ import {
   readFilePreferences,
 } from "./filePrefs";
 import { findNode, firstDocumentId, folderIds, setView, type ProjectFile } from "./model/project";
-import { pickNovelSaveAs, pickNovelToOpen, resolveDirectory } from "./novelFile";
-import { readBook, readHistory, writeBook } from "./storage";
+import { pickNovelSaveAs, pickNovelToOpen, pickScrivenerProject, resolveDirectory } from "./novelFile";
+import { projectFromScrivener, scrivenerTitle } from "./scrivener/import";
+import { fileExists, readBook, readHistory, readScrivener, writeBook } from "./storage";
 import { clearBookQuery, openBookWindow, tauriAvailable } from "./windows";
 
 export type SaveState = "saved" | "dirty" | "saving" | "error";
@@ -321,6 +324,21 @@ export function useBookFile(showNotice: Notice) {
     }
   }
 
+  async function placeNewBook(path: string, created: { title: string; files: BookFiles; project: ProjectFile; history: BookHistory }) {
+    await writeBook(path, created.files, [], true);
+    noticeRef.current(null);
+    if (projectRef.current) {
+      await openBookWindow(path, created.title);
+      return;
+    }
+    if (!(await bookLock.ensure(path))) {
+      return;
+    }
+    rememberDisk(created.files, created.history);
+    showBook(created.project, path, created.history);
+    bookLock.held();
+  }
+
   async function createBook() {
     if (fileBusy.current) {
       return;
@@ -337,20 +355,61 @@ export function useBookFile(showNotice: Notice) {
         noticeRef.current("A book needs a name.");
         return;
       }
-      await writeBook(path, created.files, [], false);
-      noticeRef.current(null);
-      if (projectRef.current) {
-        await openBookWindow(path, created.title);
-        return;
-      }
-      if (!(await bookLock.ensure(path))) {
-        return;
-      }
-      rememberDisk(created.files, created.history);
-      showBook(created.project, path, created.history);
-      bookLock.held();
+      await placeNewBook(path, created);
     } catch (error: unknown) {
-      noticeRef.current(takenNameMessage(error) ?? error, "Could not create a novel.");
+      noticeRef.current(error, "Could not create a novel.");
+    } finally {
+      fileBusy.current = false;
+    }
+  }
+
+  async function importScrivener() {
+    if (fileBusy.current) {
+      return;
+    }
+    fileBusy.current = true;
+    try {
+      const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
+      const picked = await pickScrivenerProject(directory);
+      if (!picked) {
+        return;
+      }
+      const imported = projectFromScrivener(scrivenerTitle(picked), await readScrivener(picked));
+      if (!imported) {
+        noticeRef.current("That Scrivener project has no binder.");
+        return;
+      }
+      const created = importedBook(imported);
+      if (!created) {
+        noticeRef.current("A book needs a name.");
+        return;
+      }
+      const currentPath = filePathRef.current;
+      if (projectRef.current && currentPath) {
+        if (!(await confirmImportReplace(currentPath))) {
+          return;
+        }
+        await writeBook(currentPath, created.files, [], true);
+        rememberDisk(created.files, created.history);
+        showBook(created.project, currentPath, created.history);
+        noteSaved();
+        if (tauriAvailable()) {
+          await getCurrentWebviewWindow().setTitle(created.title);
+        }
+        return;
+      }
+      const path = await pickNovelSaveAs(directory, created.fileName, "Import Scrivener Project");
+      if (!path) {
+        return;
+      }
+      if (await fileExists(path)) {
+        if (!(await confirmImportReplace(path))) {
+          return;
+        }
+      }
+      await placeNewBook(path, created);
+    } catch (error: unknown) {
+      noticeRef.current(error, "Could not import that Scrivener project.");
     } finally {
       fileBusy.current = false;
     }
@@ -542,6 +601,7 @@ export function useBookFile(showNotice: Notice) {
     saveError,
     loadBook,
     createBook,
+    importScrivener,
     openNovelFile,
     saveNovelFile,
     onWindowBlur() {
@@ -559,4 +619,13 @@ export function useBookFile(showNotice: Notice) {
     restoreSnapshotScene,
     removeSnapshot,
   };
+}
+
+function confirmImportReplace(path: string): Promise<boolean> {
+  return ask(importReplaceQuestion(path), {
+    title: "Import Scrivener",
+    kind: "warning",
+    okLabel: "Replace",
+    cancelLabel: "Cancel",
+  });
 }

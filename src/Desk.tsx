@@ -113,27 +113,27 @@ export default function Desk({
           onToggleOpen={() => onBinderOpen(!binderOpen)}
         />
         <section className="editor-column">
-          <div className="editor-scroll">
-            {selected?.node.kind === "document" ? (
-              <SceneEditor
-                key={selected.node.id}
-                title={selected.node.title}
-                content={selected.node.content}
-                onTitle={(title) => {
-                  const id = selected.node.id;
-                  onProject((current) => renameNode(current, id, title));
-                }}
-                onContent={(content: EditorDoc) => {
-                  const id = selected.node.id;
-                  onProject((current) => setDocumentContent(current, id, content));
-                }}
-                layout={project.layout}
-                onLayout={(layout) => onProject((current) => setPageLayout(current, layout))}
-                dictionary={project.dictionary}
-                onAddWord={addWord}
-                onRemoveWord={removeWord}
-              />
-            ) : (
+          {selected?.node.kind === "document" ? (
+            <SceneEditor
+              key={selected.node.id}
+              title={selected.node.title}
+              content={selected.node.content}
+              onTitle={(title) => {
+                const id = selected.node.id;
+                onProject((current) => renameNode(current, id, title));
+              }}
+              onContent={(content: EditorDoc) => {
+                const id = selected.node.id;
+                onProject((current) => setDocumentContent(current, id, content));
+              }}
+              layout={project.layout}
+              onLayout={(layout) => onProject((current) => setPageLayout(current, layout))}
+              dictionary={project.dictionary}
+              onAddWord={addWord}
+              onRemoveWord={removeWord}
+            />
+          ) : (
+            <div className="editor-scroll">
               <div className="page section-note">
                 {selected && !isRoot(project, selected.node.id) ? (
                   <input
@@ -151,8 +151,8 @@ export default function Desk({
                 )}
                 <p>{leaf.empty}</p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </section>
       </div>
       {snapshotsOpen ? (
@@ -222,12 +222,14 @@ export function Gate({
   settings,
   onOpen,
   onCreate,
+  onImport,
 }: {
   notice: string | null;
   ready: boolean;
   settings: ReactNode;
   onOpen: () => void;
   onCreate: () => void;
+  onImport: () => void;
 }) {
   return (
     <main className="gate">
@@ -240,6 +242,9 @@ export function Gate({
           </button>
           <button type="button" onClick={onCreate}>
             Create New
+          </button>
+          <button type="button" onClick={onImport}>
+            Import Scrivener
           </button>
         </div>
       ) : (

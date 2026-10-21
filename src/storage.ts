@@ -13,8 +13,21 @@ export function readBook(path: string): Promise<Record<string, string>> {
   return invoke<Record<string, string>>("read_book", { path });
 }
 
+export function readScrivener(path: string): Promise<{
+  scrivx: string;
+  content: Record<string, string>;
+  notes: Record<string, string>;
+  synopsis: Record<string, string>;
+}> {
+  return invoke("read_scrivener", { path });
+}
+
 export function readHistory(path: string): Promise<string | null> {
   return invoke<string | null>("read_history", { path });
+}
+
+export function fileExists(path: string): Promise<boolean> {
+  return invoke<boolean>("file_exists", { path });
 }
 
 export function writeBook(

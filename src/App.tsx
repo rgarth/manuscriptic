@@ -12,8 +12,9 @@ import { removal } from "./model/binder";
 import { leafAction, setPageLayout } from "./model/project";
 import { useBookFile } from "./useBookFile";
 import { useNotice } from "./useNotice";
-import { bookQuery, openBookWindow, tauriAvailable } from "./windows";
+import { bookQuery, openBookWindow, tauriAvailable, windowClose } from "./windows";
 import "./App.css";
+import "./editor.css";
 
 export default function App() {
   const [notice, showNotice] = useNotice();
@@ -142,12 +143,13 @@ export default function App() {
     let cancelled = false;
     void getCurrentWebviewWindow()
       .onCloseRequested(async (event) => {
+        event.preventDefault();
         const openWindows = (await getAllWebviewWindows()).length;
-        if (openWindows > 1 || !file.hasBook()) {
+        if (windowClose(file.hasBook(), openWindows) === "leave") {
+          await file.leaveBook();
           return;
         }
-        event.preventDefault();
-        await file.leaveBook();
+        await getCurrentWebviewWindow().destroy();
       })
       .then((unlisten) => {
         if (cancelled) {
@@ -179,6 +181,9 @@ export default function App() {
         return;
       case "open":
         void file.openNovelFile();
+        return;
+      case "import":
+        void file.importScrivener();
         return;
       case "save":
         void file.saveNovelFile(false);
@@ -321,6 +326,9 @@ export default function App() {
         }}
         onCreate={() => {
           void file.createBook();
+        }}
+        onImport={() => {
+          void file.importScrivener();
         }}
       />
     );

@@ -26,6 +26,13 @@ export async function installAppMenu(): Promise<void> {
       sendMenuCommand({ name: "open" });
     },
   };
+  const importScrivener = await MenuItem.new({
+    id: "import-scrivener",
+    text: "Import Scrivener…",
+    action: () => {
+      sendMenuCommand({ name: "import" });
+    },
+  });
   const saveNovel = await MenuItem.new({
     id: "save-novel",
     text: "Save",
@@ -83,15 +90,16 @@ export async function installAppMenu(): Promise<void> {
   if (fileMenu) {
     await fileMenu.prepend(newProject);
     await fileMenu.insert(openNovel, 1);
-    await fileMenu.insert(saveNovel, 2);
-    await fileMenu.insert(saveNovelAs, 3);
-    await fileMenu.insert(takeSnapshot, 4);
-    await fileMenu.insert(theme, 5);
-    await fileMenu.insert(settings, 6);
+    await fileMenu.insert(importScrivener, 2);
+    await fileMenu.insert(saveNovel, 3);
+    await fileMenu.insert(saveNovelAs, 4);
+    await fileMenu.insert(takeSnapshot, 5);
+    await fileMenu.insert(theme, 6);
+    await fileMenu.insert(settings, 7);
   } else {
     const file = await Submenu.new({
       text: "File",
-      items: [newProject, openNovel, saveNovel, saveNovelAs, takeSnapshot, theme, settings],
+      items: [newProject, openNovel, importScrivener, saveNovel, saveNovelAs, takeSnapshot, theme, settings],
     });
     const afterAppMenu = navigator.userAgent.includes("Mac") ? 1 : 0;
     await menu.insert(file, afterAppMenu);

@@ -10,6 +10,11 @@ use zip::{CompressionMethod, ZipArchive, ZipWriter};
 const HISTORY_FILE: &str = "history.json";
 
 #[tauri::command]
+pub fn file_exists(path: String) -> bool {
+    Path::new(&path).is_file()
+}
+
+#[tauri::command]
 pub fn read_book(path: String) -> Result<BTreeMap<String, String>, String> {
     let file = File::open(&path).map_err(|err| err.to_string())?;
     let mut archive = ZipArchive::new(file).map_err(|err| err.to_string())?;
@@ -152,7 +157,7 @@ fn temp_path(target: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{read_book, read_history, write_book};
+    use super::{file_exists, read_book, read_history, write_book};
     use std::fs::{self, File};
     use std::io::Write;
     use zip::write::SimpleFileOptions;
@@ -165,6 +170,18 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("manuscriptic-zip-{}-{id}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn a_file_exists_only_when_the_path_is_a_file() {
+        let dir = book_dir();
+        let missing = dir.join("missing.manuscriptic");
+        assert!(!file_exists(missing.to_string_lossy().to_string()));
+        let present = dir.join("Castus.manuscriptic");
+        fs::write(&present, b"x").unwrap();
+        assert!(file_exists(present.to_string_lossy().to_string()));
+        assert!(!file_exists(dir.to_string_lossy().to_string()));
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

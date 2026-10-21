@@ -17,6 +17,13 @@ export function tauriAvailable(): boolean {
   return "__TAURI_INTERNALS__" in window;
 }
 
+export function windowClose(hasBook: boolean, windowCount: number): "leave" | "destroy" {
+  if (hasBook && windowCount <= 1) {
+    return "leave";
+  }
+  return "destroy";
+}
+
 export async function openBookWindow(path: string, title: string): Promise<void> {
   const label = windowLabel(path);
   if (!tauriAvailable()) {

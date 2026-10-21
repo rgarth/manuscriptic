@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { takePendingFailures } from "./failures.ts";
-import { getEditorPrefs, nextZoom, setTypewriter, setZoom, zoomPercent } from "./editorPrefs.ts";
+import { getEditorPrefs, indentEm, lineSpacing, nextZoom, paragraphGap, paragraphIndent, setIndent, setSpacing, setTypewriter, setZoom, spacingLine, zoomPercent } from "./editorPrefs.ts";
 import { alignmentById, displayPixels, fontFamily, fontName, pointSize } from "./pageLayout.ts";
 
 test("the book face defaults to garamond and any other face is kept", () => {
@@ -19,6 +19,49 @@ test("the page defaults to justified and can sit left, center, or right", () => 
   assert.equal(alignmentById("left"), "left");
   assert.equal(alignmentById("center"), "center");
   assert.equal(alignmentById("right"), "right");
+});
+
+test("paragraph indent and line spacing are editor views", () => {
+  assert.equal(paragraphIndent(null), "first");
+  assert.equal(paragraphIndent("nope"), "first");
+  assert.equal(paragraphIndent("none"), "none");
+  assert.equal(lineSpacing(null), "comfortable");
+  assert.equal(lineSpacing("huge"), "comfortable");
+  assert.equal(lineSpacing("double"), "double");
+  assert.equal(indentEm("first"), "1.5em");
+  assert.equal(indentEm("none"), "0");
+  assert.equal(paragraphGap("first"), "0");
+  assert.equal(paragraphGap("none"), "0.9em");
+  assert.equal(spacingLine("single"), "1.15");
+  assert.equal(spacingLine("onehalf"), "1.5");
+  assert.equal(spacingLine("comfortable"), "1.7");
+  assert.equal(spacingLine("double"), "2");
+  const original = globalThis.localStorage;
+  const saved = new Map<string, string>();
+  Object.defineProperty(globalThis, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => saved.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        saved.set(key, value);
+      },
+    },
+  });
+  const previous = getEditorPrefs();
+  const nextIndent = previous.indent === "none" ? "first" : "none";
+  const nextSpacing = previous.spacing === "double" ? "single" : "double";
+  try {
+    setIndent(nextIndent);
+    setSpacing(nextSpacing);
+    assert.equal(getEditorPrefs().indent, nextIndent);
+    assert.equal(getEditorPrefs().spacing, nextSpacing);
+    assert.equal(saved.get("manuscriptic-paragraph-indent"), nextIndent);
+    assert.equal(saved.get("manuscriptic-line-spacing"), nextSpacing);
+    setIndent(previous.indent);
+    setSpacing(previous.spacing);
+  } finally {
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: original });
+  }
 });
 
 test("a zoom that cannot be saved stays as it was", () => {

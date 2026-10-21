@@ -7,5 +7,5 @@ export function scrollTopForCaret(
   if (viewHeight <= 0) {
     return scrollTop;
   }
-  return scrollTop + (caretMiddle - (viewTop + viewHeight / 2));
+  return Math.max(0, scrollTop + (caretMiddle - (viewTop + viewHeight / 2)));
 }

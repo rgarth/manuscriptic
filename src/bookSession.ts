@@ -12,7 +12,6 @@ import {
   type BookHistory,
   type SnapshotKind,
 } from "./bookArchive.ts";
-import { failureMessage } from "./failures.ts";
 import { bookFileName } from "./filePrefs.ts";
 import {
   createNovelProject,
@@ -52,6 +51,22 @@ export function bookFromArchive(files: BookFiles): OpenBook {
   return { project, history };
 }
 
+export function importedBook(project: ProjectFile): NewBook | null {
+  const title = project.title.trim();
+  if (!title) {
+    return null;
+  }
+  const bookFiles = filesForBook(project);
+  const history = emptyHistory(bookFiles);
+  return {
+    title,
+    fileName: bookFileName(title),
+    project,
+    history,
+    files: withHistory(bookFiles, history),
+  };
+}
+
 export function newBook(name: string): NewBook | null {
   const title = name.trim();
   if (!title) {
@@ -73,11 +88,8 @@ export function filesToSave(project: ProjectFile, history: BookHistory): BookFil
   return withHistory(filesForBook(project), history);
 }
 
-export function takenNameMessage(error: unknown): string | null {
-  if (failureMessage(error, "") !== "already-exists") {
-    return null;
-  }
-  return "A book with that name is already in this folder.";
+export function importReplaceQuestion(path: string): string {
+  return `Importing a book replaces everything in this file, including snapshots. All history will be wiped.\n\n${path}`;
 }
 
 export function recordedSnapshot(

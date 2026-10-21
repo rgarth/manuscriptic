@@ -3,7 +3,7 @@ import Superscript from "@tiptap/extension-superscript";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { getEditorPrefs, subscribeEditorPrefs } from "./editorPrefs";
+import { getEditorPrefs, indentEm, paragraphGap, spacingLine, subscribeEditorPrefs } from "./editorPrefs";
 import { scrollTopForCaret } from "./typewriter";
 import {
   alignments,
@@ -103,11 +103,16 @@ export default function SceneEditor({
   });
   const zoom = useSyncExternalStore(subscribeEditorPrefs, readZoom, readZoom);
   const typewriter = useSyncExternalStore(subscribeEditorPrefs, readTypewriter, readTypewriter);
+  const indent = useSyncExternalStore(subscribeEditorPrefs, readIndent, readIndent);
+  const spacing = useSyncExternalStore(subscribeEditorPrefs, readSpacing, readSpacing);
   const [fonts, setFonts] = useState<string[]>([defaultFont]);
   const pageStyle = {
     "--editor-font": fontFamily(layout.font),
     "--editor-size": String(displayPixels(layout.points, zoom)),
     "--editor-align": layout.align,
+    "--editor-indent": indentEm(indent),
+    "--editor-spacing": spacingLine(spacing),
+    "--editor-gap": paragraphGap(indent),
   } as CSSProperties;
   const fontOptions = fonts.includes(layout.font) ? fonts : [layout.font, ...fonts];
 
@@ -215,7 +220,9 @@ export default function SceneEditor({
           {formatMarks(editor, "list")}
         </div>
       </div>
-      <EditorContent className="editor-surface" editor={editor} />
+      <div className="editor-scroll">
+        <EditorContent className="editor-surface" editor={editor} />
+      </div>
       {wordMenu ? (
         <WordMenuPop
           menu={wordMenu}
@@ -241,6 +248,14 @@ function readZoom(): number {
 
 function readTypewriter(): boolean {
   return getEditorPrefs().typewriter;
+}
+
+function readIndent() {
+  return getEditorPrefs().indent;
+}
+
+function readSpacing() {
+  return getEditorPrefs().spacing;
 }
 
 function centerCaret(editor: Editor) {
