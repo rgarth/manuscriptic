@@ -1,7 +1,7 @@
 import {
   createNovelProject,
   firstDocumentId,
-  folderIds,
+  openFolders,
   renameProject,
   replaceMatter,
   setView,
@@ -34,8 +34,9 @@ export function projectFromImport(imported: ImportedBook): ProjectFile {
   if (imported.backMatter) {
     project = replaceMatter(project, "back", imported.backMatter);
   }
-  return setView(project, {
-    selectedId: firstDocumentId(project.manuscript) ?? project.manuscript.id,
-    expanded: folderIds(project),
+  const opened = setView(project, { expanded: null });
+  return setView(opened, {
+    selectedId: firstDocumentId(opened.manuscript) ?? opened.manuscript.id,
+    expanded: openFolders(opened),
   });
 }

@@ -8,11 +8,11 @@ import {
   type DropPlace,
   type Removal,
 } from "./model/binder";
-import { findNode, folderIds, setView, type ProjectFile } from "./model/project";
+import { findNode, openFolders, setView, type ProjectFile } from "./model/project";
 
 export function selectInserted(project: ProjectFile, id: string): ProjectFile {
   const located = findNode(project, id);
-  const open = new Set(project.view.expanded ?? folderIds(project));
+  const open = new Set(project.view.expanded ?? openFolders(project));
   if (located?.parent) {
     open.add(located.parent.id);
   }
@@ -33,7 +33,7 @@ export function insertSection(project: ProjectFile, targetId: string | null): Pr
 }
 
 export function toggleSection(project: ProjectFile, id: string): ProjectFile {
-  const open = new Set(project.view.expanded ?? folderIds(project));
+  const open = new Set(project.view.expanded ?? openFolders(project));
   if (open.has(id)) {
     open.delete(id);
   } else {
@@ -52,7 +52,7 @@ export function placeOpened(
   if (place !== "inside") {
     return next;
   }
-  const open = new Set(next.view.expanded ?? folderIds(next));
+  const open = new Set(next.view.expanded ?? openFolders(next));
   open.add(targetId);
   return setView(next, { expanded: [...open] });
 }

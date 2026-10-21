@@ -16,9 +16,11 @@ import {
   isStoredInTrash,
   manuscriptWordCount,
   findNode,
+  openFolders,
   parseProject,
   renameNode,
   setDocumentContent,
+  setView,
   type ProjectFile,
 } from "./project.ts";
 import { parseEditorDoc, wordCount, type EditorDoc, type TextRun } from "./editorDoc.ts";
@@ -45,6 +47,9 @@ test("a new novel has the manuscript roots", () => {
   assert.equal(project.trash.children.length, 0);
   assert.equal(project.view.selectedId, project.manuscript.id);
   assert.deepEqual(project.view.expanded, [project.manuscript.id]);
+  assert.deepEqual(openFolders(setView(project, { expanded: [project.manuscript.id, project.trash.id] })), [
+    project.manuscript.id,
+  ]);
   assert.equal(project.layout.font, "EB Garamond");
   assert.equal(project.layout.points, 12);
   assert.equal(project.layout.align, "justify");
@@ -400,7 +405,7 @@ test("an older project file loads into folders and documents", () => {
   }
 });
 
-test("a loose acknowledgement moves into back matter and keeps its text", () => {
+test("a saved publishing section stays as it was written", () => {
   const raw = JSON.stringify({
     version: 2,
     title: "Novel",
@@ -439,14 +444,20 @@ test("a loose acknowledgement moves into back matter and keeps its text", () => 
   if (!project) {
     throw new Error("project did not parse");
   }
-  const back = project.publishing.children.find((child) => child.title === "Back Matter");
-  assert.equal(back?.kind, "folder");
-  const thanks = back?.kind === "folder" ? back.children.find((child) => child.id === "thanks") : undefined;
+  assert.deepEqual(
+    project.publishing.children.map((child) => child.id),
+    ["front", "back", "thanks", "syn"],
+  );
+  const thanks = project.publishing.children.find((child) => child.id === "thanks");
   assert.equal(thanks?.kind, "document");
   if (thanks?.kind === "document") {
     assert.equal(wordCount(thanks.content), 2);
   }
-  assert.equal(project.publishing.children.some((child) => child.id === "syn"), true);
+  const front = project.publishing.children.find((child) => child.id === "front");
+  assert.equal(front?.kind, "folder");
+  if (front?.kind === "folder") {
+    assert.deepEqual(front.children, []);
+  }
   assert.deepEqual(project.dictionary, ["Castus"]);
   assert.equal(project.layout.font, "EB Garamond");
   assert.equal(project.layout.align, "justify");

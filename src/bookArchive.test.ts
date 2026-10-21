@@ -18,11 +18,13 @@ import type { EditorDoc } from "./model/editorDoc.ts";
 import { addLeaf } from "./model/binder.ts";
 import {
   createNovelProject,
+  documentNode,
   renameNode,
   setDocumentContent,
   setPageLayout,
   type ProjectFile,
 } from "./model/project.ts";
+import { projectFromImport } from "./importedBook.ts";
 import { decodeScene, encodeScene } from "./sceneText.ts";
 
 const marked: EditorDoc = {
@@ -134,6 +136,28 @@ test("page layout travels in the binder", () => {
   assert.equal(opened?.layout.font, "Palatino");
   assert.equal(opened?.layout.points, 14);
   assert.equal(opened?.layout.align, "left");
+});
+
+test("a replaced front matter round-trips without the empty starter pages", () => {
+  const project = projectFromImport({
+    title: "Bone Eaters",
+    manuscript: [documentNode("Opening", "scene")],
+    notes: null,
+    extraNotes: [],
+    frontMatter: [documentNode("Title Page", "page")],
+    backMatter: null,
+    trash: [],
+  });
+  const opened = bookFromFiles(filesForBook(project));
+  assert.ok(opened);
+  const front = opened.publishing.children.find((child) => child.title === "Front Matter");
+  assert.equal(front?.kind, "folder");
+  if (front?.kind === "folder") {
+    assert.deepEqual(
+      front.children.map((child) => child.title),
+      ["Title Page"],
+    );
+  }
 });
 
 test("old automatic snapshots fold into the checkpoint and a manual one stays", () => {

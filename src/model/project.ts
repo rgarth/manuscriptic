@@ -178,6 +178,14 @@ export function folderIds(project: ProjectFile): string[] {
   return ids;
 }
 
+export function openFolders(project: ProjectFile): string[] {
+  const hidden: string[] = [];
+  collectFolderIds(project.trash, hidden);
+  const closed = new Set(hidden);
+  const source = project.view.expanded ?? folderIds(project);
+  return source.filter((id) => !closed.has(id));
+}
+
 export function renameProject(project: ProjectFile, title: string): ProjectFile {
   return { ...project, title };
 }
@@ -450,7 +458,7 @@ function parseVersion2(value: Record<string, unknown>): ProjectFile | null {
     version: 2,
     title: value.title,
     ...roots,
-    publishing: arrangePublishing(roots.publishing),
+    publishing: roots.publishing,
     dictionary: parseDictionary(value.dictionary),
     layout: pageLayout(value.layout),
     view: parseView(value.view),

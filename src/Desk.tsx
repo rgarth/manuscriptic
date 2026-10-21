@@ -18,10 +18,10 @@ import { wordCount, type EditorDoc } from "./model/editorDoc";
 import {
   addDictionaryWord,
   findNode,
-  folderIds,
   isRoot,
   leafAction,
   manuscriptWordCount,
+  openFolders,
   removeDictionaryWord,
   renameNode,
   renameProject,
@@ -100,7 +100,7 @@ export default function Desk({
         <Binder
           project={project}
           selectedId={selectedId}
-          expanded={new Set(project.view.expanded ?? folderIds(project))}
+          expanded={new Set(project.view.expanded ?? openFolders(project))}
           onToggle={(id) => onProject((current) => toggleSection(current, id))}
           onSelect={(id) => onProject((current) => setView(current, { selectedId: id }))}
           onRenameProject={(title) => onProject((current) => renameProject(current, title))}

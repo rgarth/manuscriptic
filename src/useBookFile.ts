@@ -34,7 +34,7 @@ import {
   titleFromBookPath,
   readFilePreferences,
 } from "./filePrefs";
-import { findNode, firstDocumentId, folderIds, setView, type ProjectFile } from "./model/project";
+import { findNode, firstDocumentId, openFolders, setView, type ProjectFile } from "./model/project";
 import { pickNovelSaveAs, pickNovelToOpen, pickScrivenerProject, resolveDirectory } from "./novelFile";
 import { projectFromScrivener, scrivenerTitle } from "./scrivener/import";
 import { fileExists, readBook, readHistory, readScrivener, writeBook } from "./storage";
@@ -204,7 +204,7 @@ export function useBookFile(showNotice: Notice) {
     setProject(
       setView(next, {
         selectedId: selected,
-        expanded: next.view.expanded ?? folderIds(next),
+        expanded: openFolders(next),
       }),
     );
   }
