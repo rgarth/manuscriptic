@@ -312,7 +312,7 @@ function ConfirmDialog({
     <div className="dialog-backdrop">
       <div className="dialog" role="dialog" aria-modal="true">
         <p>{message}</p>
-        <div>
+        <div className="dialog-actions">
           <button type="button" onClick={onConfirm}>
             {confirmLabel}
           </button>

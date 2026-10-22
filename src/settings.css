@@ -1,0 +1,74 @@
+.dialog.settings .setting-grid,
+.dialog.settings .margin-row,
+.dialog.settings .measure-row,
+.dialog.settings .structure-level,
+.dialog.settings .setting-group {
+  display: grid;
+  gap: 12px 16px;
+}
+
+.dialog.settings .setting-grid {
+  grid-template-columns: 1fr 1fr;
+  margin: 0 0 4px;
+}
+
+.dialog.settings .setting-group > .setting,
+.dialog.settings .setting-grid .setting,
+.dialog.settings .margin-row .setting,
+.dialog.settings .measure-row .setting,
+.dialog.settings .structure-level .setting {
+  margin: 0;
+}
+
+.dialog.settings .setting-group {
+  margin: 0 0 18px;
+}
+
+.dialog.settings .setting-group h4 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--faded);
+}
+
+.dialog.settings .setting-group .preference,
+.dialog.settings .structure-level .preference {
+  margin: 0;
+}
+
+.dialog.settings .margin-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.dialog.settings .measure-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.dialog.settings .structure-level {
+  grid-template-columns: auto minmax(6rem, 1fr) minmax(8rem, 1.3fr) auto;
+  gap: 8px 12px;
+  align-items: end;
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--wash) 55%, var(--paper));
+  border-radius: 8px;
+}
+
+.dialog.settings .structure-level > .setting-label {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.dialog.settings .settings-pane > .segmented {
+  margin-bottom: 16px;
+}
+
+.dialog.settings .margin-row > .setting-label {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.dialog.settings .setting .segmented {
+  flex-wrap: wrap;
+  max-width: 100%;
+}

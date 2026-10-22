@@ -381,7 +381,7 @@ input:focus-visible {
   line-height: 1.35;
 }
 
-.dialog div {
+.dialog > .dialog-actions {
   display: flex;
   gap: 8px;
 }
@@ -468,14 +468,31 @@ input:focus-visible {
 }
 
 .dialog.settings {
-  width: min(40rem, calc(100% - 40px));
+  position: relative;
+  width: min(44rem, calc(100% - 48px));
   height: auto;
-  min-height: 22rem;
-  max-height: min(32rem, calc(100% - 48px));
+  min-width: min(32rem, calc(100% - 48px));
+  min-height: min(22rem, calc(100% - 48px));
+  max-width: calc(100% - 32px);
+  max-height: calc(100% - 32px);
   padding: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  resize: both;
+}
+
+.dialog.settings::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  z-index: 2;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--faded);
+  border-bottom: 2px solid var(--faded);
+  pointer-events: none;
 }
 
 .dialog.settings .settings-bar,
@@ -497,8 +514,9 @@ input:focus-visible {
 }
 
 .dialog.settings .settings-body {
+  display: flex;
   flex: 1;
-  min-height: 16rem;
+  min-height: 0;
   align-items: stretch;
 }
 
@@ -569,15 +587,6 @@ input:focus-visible {
   font-weight: 450;
 }
 
-.structure-level {
-  margin: 0 0 8px;
-  padding-top: 8px;
-}
-
-.structure-level + .structure-level {
-  border-top: 1px solid var(--rule);
-}
-
 .theme-list {
   list-style: none;
   margin: 0;
@@ -623,20 +632,34 @@ input:focus-visible {
   border-bottom: 1px solid var(--rule);
 }
 
-.dialog.settings form.row {
+.dialog.settings .row {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.dialog.settings form.row {
   margin-bottom: 8px;
 }
 
-.dialog.settings input:not([type="checkbox"]) {
+.dialog.settings form.row input {
   flex: 1;
+}
+
+.dialog.settings input:not([type="checkbox"]),
+.dialog.settings textarea,
+.dialog.settings select {
   min-width: 0;
   padding: 6px 8px;
   border: 1px solid var(--rule);
   background: transparent;
   color: var(--ink);
+}
+
+.dialog.settings .setting input,
+.dialog.settings .setting textarea,
+.dialog.settings .setting select {
+  width: 100%;
 }
 
 .hint-host {

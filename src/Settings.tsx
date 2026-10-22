@@ -19,6 +19,7 @@ import {
 import { pickSaveDirectory, resolveDirectory } from "./novelFile";
 import { applyTheme, onTheme, readTheme, readThemes } from "./themes";
 import CompileSettings from "./CompileSettings";
+import "./settings.css";
 import type { BookCompile } from "./model/project";
 
 type SettingsSection = "files" | "appearance" | "writing" | "compile" | "dictionary";
