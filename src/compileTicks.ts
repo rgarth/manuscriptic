@@ -16,6 +16,26 @@ export function compileRows(project: ProjectFile): CompileRow[] {
   return rows;
 }
 
+export function collapsedCompileFolders(rows: readonly CompileRow[]): Set<string> {
+  return new Set(rows.filter((row) => row.kind === "folder").map((row) => row.id));
+}
+
+export function shownCompileRows(rows: readonly CompileRow[], collapsed: ReadonlySet<string>): CompileRow[] {
+  const shown: CompileRow[] = [];
+  let hiddenDepth = -1;
+  for (const row of rows) {
+    if (hiddenDepth >= 0 && row.depth > hiddenDepth) {
+      continue;
+    }
+    hiddenDepth = -1;
+    shown.push(row);
+    if (row.kind === "folder" && collapsed.has(row.id)) {
+      hiddenDepth = row.depth;
+    }
+  }
+  return shown;
+}
+
 export function initialCompileTicks(project: ProjectFile): Set<string> {
   const ticks = new Set<string>();
   for (const row of compileRows(project)) {

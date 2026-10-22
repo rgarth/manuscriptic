@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compileRows, initialCompileTicks, rememberCompile, toggleCompileRow } from "./compileTicks.ts";
+import {
+  collapsedCompileFolders,
+  compileRows,
+  initialCompileTicks,
+  rememberCompile,
+  shownCompileRows,
+  toggleCompileRow,
+} from "./compileTicks.ts";
 import { createNovelProject, documentNode, folderNode, type ProjectFile } from "./model/project.ts";
 
 function novel(): ProjectFile {
@@ -23,6 +30,23 @@ test("the export lists the manuscript and then the publishing pages", () => {
   assert.equal(synopsis > titles.indexOf("Epigraph"), true);
   assert.equal(query, synopsis + 1);
   assert.equal(titles[titles.length - 1], "Back page");
+});
+
+test("the compile list opens on the top headings", () => {
+  const rows = compileRows(novel());
+  const shown = shownCompileRows(rows, collapsedCompileFolders(rows)).map((row) => row.title);
+  assert.deepEqual(shown, ["Manuscript", "Front Matter", "Back Matter", "Synopsis", "Query", "Back page"]);
+});
+
+test("a collapsed folder hides its pages and keeps the folder", () => {
+  const project = novel();
+  const rows = compileRows(project);
+  const chapter = rows.find((row) => row.title === "Tide");
+  assert.ok(chapter);
+  const shown = shownCompileRows(rows, new Set([chapter.id]));
+  assert.equal(shown.some((row) => row.title === "Tide"), true);
+  assert.equal(shown.some((row) => row.title === "Opening"), false);
+  assert.equal(shown.some((row) => row.title === "Synopsis"), true);
 });
 
 test("unticking a chapter removes its scenes and the next tick brings the manuscript back", () => {

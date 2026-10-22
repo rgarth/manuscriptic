@@ -1,9 +1,17 @@
 import { useState } from "react";
 import { bookFileName, readFilePreferences } from "./filePrefs.ts";
 import { readCompilePreferences } from "./compilePrefs.ts";
-import { compileRows, initialCompileTicks, rememberCompile, toggleCompileRow } from "./compileTicks.ts";
+import {
+  collapsedCompileFolders,
+  compileRows,
+  initialCompileTicks,
+  rememberCompile,
+  shownCompileRows,
+  toggleCompileRow,
+} from "./compileTicks.ts";
+import Icon from "./icons.tsx";
 import { compiledFile } from "./docx.ts";
-import { failureMessage, reportFailure } from "./failures.ts";
+import { reportFailure } from "./failures.ts";
 import { pickDocxSave, resolveDirectory } from "./novelFile.ts";
 import type { ProjectFile } from "./model/project.ts";
 import { writeExport } from "./storage.ts";
@@ -18,8 +26,19 @@ export default function ExportDialog({
   onClose: () => void;
 }) {
   const [included, setIncluded] = useState(() => initialCompileTicks(project));
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => collapsedCompileFolders(compileRows(project)));
   const [busy, setBusy] = useState(false);
-  const rows = compileRows(project);
+  const rows = shownCompileRows(compileRows(project), collapsed);
+
+  function toggleFolder(id: string) {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (!next.delete(id)) {
+        next.add(id);
+      }
+      return next;
+    });
+  }
 
   async function compile() {
     let preferences;
@@ -56,7 +75,7 @@ export default function ExportDialog({
       }
       onClose();
     } catch (error: unknown) {
-      reportFailure(error, failureMessage(error, "Could not write the compiled file."));
+      reportFailure(error, "Could not write the compiled file.");
     } finally {
       setBusy(false);
     }
@@ -72,22 +91,40 @@ export default function ExportDialog({
           </button>
         </header>
         <div className="compile-body">
-          <p>One Word file. Tick what goes in it.</p>
+          <p>Selected pages will be compiled into a Word file (docx).</p>
           <div className="compile-rows" role="group" aria-label="Included pages">
-            {rows.map((row) => (
-              <label key={row.id} style={{ paddingLeft: `${row.depth * 1.1}rem` }}>
-                <input
-                  type="checkbox"
-                  checked={included.has(row.id)}
-                  onChange={() => setIncluded((current) => toggleCompileRow(project, current, row.id))}
-                />
-                {row.title}
-              </label>
-            ))}
+            {rows.map((row) => {
+              const open = row.kind === "folder" && !collapsed.has(row.id);
+              return (
+                <div key={row.id} className="compile-row" style={{ paddingLeft: `${row.depth * 1.1}rem` }}>
+                  {row.kind === "folder" ? (
+                    <button
+                      type="button"
+                      className={open ? "disclosure open" : "disclosure"}
+                      aria-expanded={open}
+                      aria-label={open ? `Collapse ${row.title}` : `Expand ${row.title}`}
+                      onClick={() => toggleFolder(row.id)}
+                    >
+                      <Icon name="chevron" />
+                    </button>
+                  ) : (
+                    <span className="disclosure-gap" />
+                  )}
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={included.has(row.id)}
+                      onChange={() => setIncluded((current) => toggleCompileRow(project, current, row.id))}
+                    />
+                    <span>{row.title}</span>
+                  </label>
+                </div>
+              );
+            })}
           </div>
           <div className="dialog-actions">
             <button type="button" onClick={() => onRemember(rememberCompile(project, included))} disabled={busy}>
-              Remember
+              Save Selection
             </button>
             <button type="button" onClick={() => void compile()} disabled={busy}>
               Compile
