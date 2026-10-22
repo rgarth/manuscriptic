@@ -1,23 +1,21 @@
 import { useState } from "react";
 import {
-  compilePreferences,
-  readCompilePreferences,
-  writeCompilePreferences,
-  type CompilePreferences,
-  type CompileSpacing,
-  type PageNumbers,
-} from "./compilePrefs.ts";
-import { failureMessage, reportFailure } from "./failures.ts";
-import { alignments } from "./pageLayout.ts";
-import {
   chapterHeadings,
+  defaultCompileIdentity,
   sceneBreaks,
   type BookCompile,
   type ChapterHeading,
+  type CompileFormat,
+  type CompileIdentity,
   type CompileLevel,
+  type CompileSpacing,
   type LevelHeading,
+  type PageNumbers,
   type SceneBreak,
-} from "./model/project.ts";
+} from "./bookCompile.ts";
+import { readCompileIdentity, writeCompileIdentity } from "./compilePrefs.ts";
+import { failureMessage, reportFailure } from "./failures.ts";
+import { alignments } from "./pageLayout.ts";
 
 type CompilePane = "author" | "structure" | "formatting";
 
@@ -41,75 +39,111 @@ const numberChoice: Record<PageNumbers, string> = {
   footer: "Footer",
 };
 
-export default function CompileSettings({
-  book,
-}: {
-  book: { compile: BookCompile; onCompile: (compile: BookCompile) => void } | null;
-}) {
-  const [pane, setPane] = useState<CompilePane>("author");
-  const [prefs, setPrefs] = useState<CompilePreferences>(() => {
+const panes: { id: CompilePane; label: string }[] = [
+  { id: "author", label: "Author" },
+  { id: "structure", label: "Structure" },
+  { id: "formatting", label: "Formatting" },
+];
+
+export function AppAuthorSettings() {
+  const [identity, setIdentity] = useState<CompileIdentity>(() => {
     try {
-      return readCompilePreferences(localStorage);
+      return readCompileIdentity(localStorage);
     } catch (error: unknown) {
-      reportFailure(error, "Compile settings could not be read.");
-      return compilePreferences(null);
+      reportFailure(error, "Author information could not be read.");
+      return defaultCompileIdentity();
     }
   });
   const [error, setError] = useState<string | null>(null);
 
-  function save(next: CompilePreferences) {
+  function change(patch: Partial<CompileIdentity>) {
+    const next = { ...identity, ...patch };
     try {
-      writeCompilePreferences(localStorage, next);
-      setPrefs(readCompilePreferences(localStorage));
+      writeCompileIdentity(localStorage, next);
+      setIdentity(readCompileIdentity(localStorage));
       setError(null);
     } catch (caught: unknown) {
-      const message = failureMessage(caught, "Could not save this preference.");
+      const message = failureMessage(caught, "Could not save this author.");
       setError(message);
       reportFailure(message, message);
     }
   }
 
-  function change(patch: Partial<CompilePreferences>) {
-    save({ ...prefs, ...patch });
-  }
-
   return (
     <>
-      <h3>Compile</h3>
-      <div className="segmented" role="group" aria-label="Compile settings">
-        <button type="button" aria-pressed={pane === "author"} onClick={() => setPane("author")}>
-          Author information
-        </button>
-        <button type="button" aria-pressed={pane === "structure"} onClick={() => setPane("structure")}>
-          Structure
-        </button>
-        <button type="button" aria-pressed={pane === "formatting"} onClick={() => setPane("formatting")}>
-          Formatting
-        </button>
-      </div>
+      <h3>Author</h3>
       {error ? <p role="alert">{error}</p> : null}
-      {compilePane(pane, prefs, book, change)}
+      <AuthorFields value={identity} onChange={change} />
     </>
   );
 }
 
-function compilePane(
+export default function CompileSettings({
+  compile,
+  onCompile,
+  onClose,
+}: {
+  compile: BookCompile;
+  onCompile: (compile: BookCompile) => void;
+  onClose: () => void;
+}) {
+  const [pane, setPane] = useState<CompilePane>("author");
+  const [appAuthor] = useState<CompileIdentity>(() => {
+    try {
+      return readCompileIdentity(localStorage);
+    } catch (error: unknown) {
+      reportFailure(error, "Author information could not be read.");
+      return defaultCompileIdentity();
+    }
+  });
+
+  return (
+    <div className="dialog-backdrop">
+      <div className="dialog settings" role="dialog" aria-modal="true" aria-label="Compiler Settings">
+        <header className="settings-bar">
+          <h2>Compiler Settings</h2>
+          <button type="button" onClick={onClose}>
+            Close
+          </button>
+        </header>
+        <div className="settings-body">
+          <nav className="settings-nav" aria-label="Compiler settings">
+            {panes.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-current={item.id === pane ? "page" : undefined}
+                onClick={() => setPane(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          <section className="settings-pane">{compilerPane(pane, compile, appAuthor, onCompile)}</section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function compilerPane(
   pane: CompilePane,
-  prefs: CompilePreferences,
-  book: { compile: BookCompile; onCompile: (compile: BookCompile) => void } | null,
-  onChange: (patch: Partial<CompilePreferences>) => void,
+  compile: BookCompile,
+  appAuthor: CompileIdentity,
+  onCompile: (compile: BookCompile) => void,
 ) {
   switch (pane) {
     case "author":
-      return <AuthorSettings prefs={prefs} onChange={onChange} />;
+      return <AuthorOverride compile={compile} appAuthor={appAuthor} onCompile={onCompile} />;
     case "structure":
-      return book ? (
-        <BookStructure compile={book.compile} onCompile={book.onCompile} />
-      ) : (
-        <p className="settings-value">Open a book to set its structure.</p>
-      );
+      return <BookStructure compile={compile} onCompile={onCompile} />;
     case "formatting":
-      return <FormattingSettings prefs={prefs} onChange={onChange} />;
+      return (
+        <FormattingSettings
+          format={compile.format}
+          onChange={(format) => onCompile({ ...compile, format: { ...compile.format, ...format } })}
+        />
+      );
     default: {
       const unexpected: never = pane;
       return unexpected;
@@ -117,52 +151,102 @@ function compilePane(
   }
 }
 
-function AuthorSettings({
-  prefs,
-  onChange,
+function AuthorOverride({
+  compile,
+  appAuthor,
+  onCompile,
 }: {
-  prefs: CompilePreferences;
-  onChange: (patch: Partial<CompilePreferences>) => void;
+  compile: BookCompile;
+  appAuthor: CompileIdentity;
+  onCompile: (compile: BookCompile) => void;
+}) {
+  const shown = compile.useAppAuthor ? appAuthor : compile.author;
+  return (
+    <>
+      <h3>Author</h3>
+      <label className="preference">
+        <input
+          type="checkbox"
+          checked={compile.useAppAuthor}
+          onChange={(event) => {
+            const useAppAuthor = event.currentTarget.checked;
+            onCompile({
+              ...compile,
+              useAppAuthor,
+              author: useAppAuthor || !identityBlank(compile.author) ? compile.author : appAuthor,
+            });
+          }}
+        />
+        Use the author in Settings
+      </label>
+      <AuthorFields
+        value={shown}
+        disabled={compile.useAppAuthor}
+        onChange={(patch) => onCompile({ ...compile, author: { ...compile.author, ...patch } })}
+      />
+    </>
+  );
+}
+
+function identityBlank(identity: CompileIdentity): boolean {
+  return (
+    identity.author === "" &&
+    identity.pen === "" &&
+    identity.address === "" &&
+    identity.phone === "" &&
+    identity.email === ""
+  );
+}
+
+function AuthorFields({
+  value,
+  onChange,
+  disabled = false,
+}: {
+  value: CompileIdentity;
+  onChange: (patch: Partial<CompileIdentity>) => void;
+  disabled?: boolean;
 }) {
   return (
     <>
       <div className="setting-grid">
-        <Field label="Author" value={prefs.author} onChange={(author) => onChange({ author })} />
-        <Field label="Pen name" value={prefs.pen} onChange={(pen) => onChange({ pen })} />
-        <Field label="Phone" value={prefs.phone} onChange={(phone) => onChange({ phone })} />
-        <Field label="Email" value={prefs.email} onChange={(email) => onChange({ email })} />
+        <Field label="Author" value={value.author} disabled={disabled} onChange={(author) => onChange({ author })} />
+        <Field label="Pen name" value={value.pen} disabled={disabled} onChange={(pen) => onChange({ pen })} />
+        <Field label="Phone" value={value.phone} disabled={disabled} onChange={(phone) => onChange({ phone })} />
+        <Field label="Email" value={value.email} disabled={disabled} onChange={(email) => onChange({ email })} />
       </div>
-      <Field label="Address" value={prefs.address} onChange={(address) => onChange({ address })} multiline />
+      <Field label="Address" value={value.address} disabled={disabled} multiline onChange={(address) => onChange({ address })} />
     </>
   );
 }
 
 function FormattingSettings({
-  prefs,
+  format,
   onChange,
 }: {
-  prefs: CompilePreferences;
-  onChange: (patch: Partial<CompilePreferences>) => void;
+  format: CompileFormat;
+  onChange: (patch: Partial<CompileFormat>) => void;
 }) {
   return (
     <>
+      <h3>Formatting</h3>
       <section className="setting-group">
         <h4>Type</h4>
         <label className="preference">
           <input
             type="checkbox"
-            checked={prefs.passFont}
+            checked={format.passFont}
             onChange={(event) => onChange({ passFont: event.currentTarget.checked })}
           />
           Use the book’s font and size
         </label>
         <div className="setting-grid">
-          <Field label="Font" value={prefs.font} onChange={(font) => onChange({ font })} disabled={prefs.passFont} />
+          <Field label="Font" value={format.font} onChange={(font) => onChange({ font })} disabled={format.passFont} />
           <Field
             label="Size"
-            value={String(prefs.points)}
+            value={String(format.points)}
             onChange={(points) => onChange({ points: Number(points) })}
-            disabled={prefs.passFont}
+            disabled={format.passFont}
           />
         </div>
       </section>
@@ -170,38 +254,38 @@ function FormattingSettings({
         <h4>Paragraph</h4>
         <Choice
           label="Line spacing"
-          value={prefs.spacing}
+          value={format.spacing}
           options={(["single", "onehalf", "double"] as const).map((id) => ({ id, label: spacingChoice[id] }))}
           onChange={(spacing) => onChange({ spacing })}
         />
         <div className="measure-row">
-          <Field label="Space before (pt)" value={String(prefs.spaceBefore)} onChange={(spaceBefore) => onChange({ spaceBefore: Number(spaceBefore) })} />
-          <Field label="Space after (pt)" value={String(prefs.spaceAfter)} onChange={(spaceAfter) => onChange({ spaceAfter: Number(spaceAfter) })} />
-          <Field label="First-line indent (in)" value={String(prefs.indent)} onChange={(indent) => onChange({ indent: Number(indent) })} />
+          <Field label="Space before (pt)" value={String(format.spaceBefore)} onChange={(spaceBefore) => onChange({ spaceBefore: Number(spaceBefore) })} />
+          <Field label="Space after (pt)" value={String(format.spaceAfter)} onChange={(spaceAfter) => onChange({ spaceAfter: Number(spaceAfter) })} />
+          <Field label="First-line indent (in)" value={String(format.indent)} onChange={(indent) => onChange({ indent: Number(indent) })} />
         </div>
         <Choice
           label="Alignment"
-          value={prefs.align}
+          value={format.align}
           options={alignments.map((item) => ({ id: item.id, label: item.label }))}
           onChange={(align) => onChange({ align })}
         />
       </section>
       <section className="setting-group">
         <h4>Page</h4>
-        <MarginFields prefs={prefs} onChange={onChange} />
-        <Field label="Header" value={prefs.header} onChange={(header) => onChange({ header })} />
-        <Field label="Footer" value={prefs.footer} onChange={(footer) => onChange({ footer })} />
+        <MarginFields format={format} onChange={onChange} />
+        <Field label="Header" value={format.header} onChange={(header) => onChange({ header })} />
+        <Field label="Footer" value={format.footer} onChange={(footer) => onChange({ footer })} />
         <div className="setting-grid">
           <Choice
             label="Page numbers"
-            value={prefs.pageNumbers}
+            value={format.pageNumbers}
             options={(["off", "header", "footer"] as const).map((id) => ({ id, label: numberChoice[id] }))}
             onChange={(pageNumbers) => onChange({ pageNumbers })}
           />
           <label className="preference">
             <input
               type="checkbox"
-              checked={prefs.differentFirstPage}
+              checked={format.differentFirstPage}
               onChange={(event) => onChange({ differentFirstPage: event.currentTarget.checked })}
             />
             Different first page
@@ -228,6 +312,7 @@ function BookStructure({
 
   return (
     <>
+      <h3>Structure</h3>
       <p className="settings-value">
         Tick a level to include it and choose its heading. An unticked level stays binder organization.
       </p>
@@ -322,22 +407,22 @@ function headingOptions(name: string): { id: LevelHeading; label: string }[] {
 }
 
 function MarginFields({
-  prefs,
+  format,
   onChange,
 }: {
-  prefs: CompilePreferences;
-  onChange: (patch: Partial<CompilePreferences>) => void;
+  format: CompileFormat;
+  onChange: (patch: Partial<CompileFormat>) => void;
 }) {
-  function edge(side: keyof CompilePreferences["margins"], raw: string) {
-    onChange({ margins: { ...prefs.margins, [side]: Number(raw) } });
+  function edge(side: keyof CompileFormat["margins"], raw: string) {
+    onChange({ margins: { ...format.margins, [side]: Number(raw) } });
   }
   return (
     <div className="margin-row">
       <span className="setting-label">Margins (inches)</span>
-      <Field label="Top" value={String(prefs.margins.top)} onChange={(value) => edge("top", value)} />
-      <Field label="Right" value={String(prefs.margins.right)} onChange={(value) => edge("right", value)} />
-      <Field label="Bottom" value={String(prefs.margins.bottom)} onChange={(value) => edge("bottom", value)} />
-      <Field label="Left" value={String(prefs.margins.left)} onChange={(value) => edge("left", value)} />
+      <Field label="Top" value={String(format.margins.top)} onChange={(value) => edge("top", value)} />
+      <Field label="Right" value={String(format.margins.right)} onChange={(value) => edge("right", value)} />
+      <Field label="Bottom" value={String(format.margins.bottom)} onChange={(value) => edge("bottom", value)} />
+      <Field label="Left" value={String(format.margins.left)} onChange={(value) => edge("left", value)} />
     </div>
   );
 }

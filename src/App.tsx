@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { installAppMenu } from "./appMenu";
 import { insertScene, insertSection } from "./binderActions";
 import { commands, registerCommands } from "./commands";
-import Desk, { Gate, preloadSceneEditor } from "./Desk";
+import Desk, { Gate, preloadSceneEditor, type DeskDialog } from "./Desk";
 import Settings from "./Settings";
 import { booksOnStartup, markBookClosed, readSnapshotMinutes, type SnapshotMinutes } from "./filePrefs";
 import { menuCommand, type MenuCommand } from "./menuCommand";
@@ -20,20 +20,13 @@ export default function App() {
   const [notice, showNotice] = useNotice();
   const [binderOpen, setBinderOpen] = useState(true);
   const [pendingTrash, setPendingTrash] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [snapshotsOpen, setSnapshotsOpen] = useState(false);
-  const [compileOpen, setCompileOpen] = useState(false);
+  const [dialog, setDialog] = useState<DeskDialog | null>(null);
   const [snapshotMinutes, setSnapshotMinutes] = useState<SnapshotMinutes>(() =>
     readSnapshotMinutes(localStorage),
   );
   const runMenu = useRef<(command: MenuCommand) => void>(() => undefined);
-  const dialogs = useRef({
-    pendingTrash: null as string | null,
-    settingsOpen: false,
-    snapshotsOpen: false,
-    compileOpen: false,
-  });
-  dialogs.current = { pendingTrash, settingsOpen, snapshotsOpen, compileOpen };
+  const open = useRef({ dialog: null as DeskDialog | null, pendingTrash: null as string | null });
+  open.current = { dialog, pendingTrash };
 
   const file = useBookFile(showNotice);
   const project = file.project;
@@ -49,8 +42,7 @@ export default function App() {
       return;
     }
     hadBook.current = false;
-    setSettingsOpen(false);
-    setSnapshotsOpen(false);
+    setDialog(null);
     setPendingTrash(null);
   }, [project]);
 
@@ -111,19 +103,11 @@ export default function App() {
         return;
       }
       if (event.key === "Escape") {
-        if (dialogs.current.compileOpen) {
-          setCompileOpen(false);
+        if (open.current.dialog) {
+          setDialog(null);
           return;
         }
-        if (dialogs.current.settingsOpen) {
-          setSettingsOpen(false);
-          return;
-        }
-        if (dialogs.current.snapshotsOpen) {
-          setSnapshotsOpen(false);
-          return;
-        }
-        if (dialogs.current.pendingTrash) {
+        if (open.current.pendingTrash) {
           setPendingTrash(null);
           return;
         }
@@ -199,23 +183,23 @@ export default function App() {
         void file.saveNovelFile(true);
         return;
       case "snapshot":
-        setSettingsOpen(false);
-        setCompileOpen(false);
-        setSnapshotsOpen(true);
+        setDialog("snapshots");
         file.recordSnapshot("manual");
         return;
       case "compile":
         if (!project) {
           return;
         }
-        setSettingsOpen(false);
-        setSnapshotsOpen(false);
-        setCompileOpen(true);
+        setDialog("compile");
+        return;
+      case "compile-settings":
+        if (!project) {
+          return;
+        }
+        setDialog("compile-settings");
         return;
       case "settings":
-        setSnapshotsOpen(false);
-        setCompileOpen(false);
-        setSettingsOpen(true);
+        setDialog("settings");
         return;
       case "new-scene":
         file.setProject((current) => (current ? insertScene(current, current.view.selectedId) : current));
@@ -248,6 +232,7 @@ export default function App() {
       newProject: () => runMenu.current({ name: "new" }),
       takeSnapshot: project ? () => runMenu.current({ name: "snapshot" }) : null,
       compile: project ? () => runMenu.current({ name: "compile" }) : null,
+      compileSettings: project ? () => runMenu.current({ name: "compile-settings" }) : null,
       openNovel: () => runMenu.current({ name: "open" }),
       saveNovel: project ? () => runMenu.current({ name: "save" }) : null,
       saveNovelAs: project ? () => runMenu.current({ name: "save-as" }) : null,
@@ -329,8 +314,8 @@ export default function App() {
     };
   }, [file.filePath]);
 
-  const gateSettings = settingsOpen ? (
-    <Settings dictionary={null} book={null} onClose={() => setSettingsOpen(false)} />
+  const gateSettings = dialog === "settings" ? (
+    <Settings dictionary={null} onClose={() => setDialog(null)} />
   ) : null;
 
   if (!project) {
@@ -361,12 +346,8 @@ export default function App() {
       pendingTrash={pendingTrash}
       onAskTrash={(id) => askTrash(id)}
       onPendingTrash={setPendingTrash}
-      settingsOpen={settingsOpen}
-      onSettingsOpen={setSettingsOpen}
-      snapshotsOpen={snapshotsOpen}
-      onSnapshotsOpen={setSnapshotsOpen}
-      compileOpen={compileOpen}
-      onCompileOpen={setCompileOpen}
+      dialog={dialog}
+      onDialog={setDialog}
       filePath={file.filePath}
       notice={notice}
       saveState={file.saveState}

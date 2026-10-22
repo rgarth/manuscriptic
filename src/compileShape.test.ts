@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { bookFromFiles, filesForBook } from "./bookArchive.ts";
-import { defaultCompilePreferences } from "./compilePrefs.ts";
+import { defaultCompilePreferences } from "./bookCompile.ts";
 import { buildCompile, type CompileParagraph } from "./compileShape.ts";
 import { initialCompileTicks, toggleCompileRow } from "./compileTicks.ts";
 import type { EditorDoc } from "./model/editorDoc.ts";

@@ -19,6 +19,7 @@ import {
   openFolders,
   parseProject,
   renameNode,
+  setBookCompile,
   setDocumentContent,
   setView,
   type ProjectFile,
@@ -103,6 +104,8 @@ test("a new novel has the manuscript roots", () => {
   assert.equal(project.compile.levels[1]?.heading, "title");
   assert.equal(project.compile.sceneBreak, "hash");
   assert.equal(project.compile.sceneTitles, false);
+  assert.equal(project.compile.useAppAuthor, true);
+  assert.equal(project.compile.format.spacing, "double");
 });
 
 test("compile settings without levels keep the default divisions", () => {
@@ -124,6 +127,18 @@ test("compile settings without levels keep the default divisions", () => {
   assert.equal(project?.compile.sceneTitles, true);
   assert.equal(project?.compile.sceneBreak, "stars");
   assert.deepEqual(project?.compile.titleOnly, ["pro"]);
+  assert.equal(project?.compile.useAppAuthor, true);
+  assert.equal(project?.compile.format.font, "Times New Roman");
+});
+
+test("saving compile keeps the book's format and leaves an unchanged book alone", () => {
+  const project = createNovelProject();
+  const next = setBookCompile(project, {
+    ...project.compile,
+    format: { ...project.compile.format, spacing: "single" },
+  });
+  assert.equal(next.compile.format.spacing, "single");
+  assert.equal(setBookCompile(next, next.compile), next);
 });
 
 test("a broken folder level falls back and an empty list stays empty", () => {

@@ -1,3 +1,4 @@
+import { bookCompile, defaultBookCompile, type BookCompile } from "../bookCompile.ts";
 import { uniqueWords } from "../dictionary.ts";
 import { defaultPageLayout, pageLayout, type PageLayout } from "../pageLayout.ts";
 import { publishingStarter } from "../publishingPages.ts";
@@ -45,40 +46,6 @@ export type ProjectView = {
 };
 
 export type { PageLayout };
-
-export const chapterHeadings = ["title", "number", "numberTitle", "word", "written"] as const;
-export type ChapterHeading = (typeof chapterHeadings)[number];
-
-export const levelHeadings = ["none", ...chapterHeadings] as const;
-export type LevelHeading = (typeof levelHeadings)[number];
-
-export type CompileLevel = {
-  include: boolean;
-  name: string;
-  heading: LevelHeading;
-};
-
-export const sceneBreaks = ["hash", "stars", "blank"] as const;
-export type SceneBreak = (typeof sceneBreaks)[number];
-
-export type BookCompile = {
-  levels: CompileLevel[];
-  sceneTitles: boolean;
-  sceneBreak: SceneBreak;
-  titleOnly: string[];
-};
-
-export function defaultBookCompile(): BookCompile {
-  return {
-    levels: [
-      { include: false, name: "", heading: "none" },
-      { include: true, name: "Chapter", heading: "title" },
-    ],
-    sceneTitles: false,
-    sceneBreak: "hash",
-    titleOnly: [],
-  };
-}
 
 export type ProjectFile = {
   version: 2;
@@ -134,12 +101,7 @@ export function createNovelProject(): ProjectFile {
 
 export function setBookCompile(project: ProjectFile, compile: BookCompile): ProjectFile {
   const next = bookCompile(compile);
-  if (
-    sameLevels(next.levels, project.compile.levels) &&
-    next.sceneTitles === project.compile.sceneTitles &&
-    next.sceneBreak === project.compile.sceneBreak &&
-    sameIds(next.titleOnly, project.compile.titleOnly)
-  ) {
+  if (JSON.stringify(next) === JSON.stringify(project.compile)) {
     return project;
   }
   return { ...project, compile: next };
@@ -697,86 +659,6 @@ function matterTitle(section: MatterPlace): string {
       return unexpected;
     }
   }
-}
-
-function bookCompile(value: unknown): BookCompile {
-  const fallback = defaultBookCompile();
-  if (!isRecord(value)) {
-    return fallback;
-  }
-  const sceneTitles = value.sceneTitles === true;
-  const breakKind = sceneBreak(value.sceneBreak);
-  const titleOnly = Array.isArray(value.titleOnly)
-    ? value.titleOnly.filter((id): id is string => typeof id === "string")
-    : [];
-  const levels = Array.isArray(value.levels) ? parseLevels(value.levels) ?? fallback.levels : fallback.levels;
-  return { levels, sceneTitles, sceneBreak: breakKind, titleOnly };
-}
-
-function parseLevels(value: unknown[]): CompileLevel[] | null {
-  const levels: CompileLevel[] = [];
-  for (const entry of value) {
-    const level = parseLevel(entry);
-    if (!level) {
-      return null;
-    }
-    levels.push(level);
-  }
-  return levels;
-}
-
-function parseLevel(value: unknown): CompileLevel | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  const heading = levelHeading(value.heading);
-  if (!heading) {
-    return null;
-  }
-  return {
-    include: value.include === true,
-    name: typeof value.name === "string" ? value.name : "",
-    heading,
-  };
-}
-
-function levelHeading(value: unknown): LevelHeading | null {
-  switch (value) {
-    case "none":
-    case "title":
-    case "number":
-    case "numberTitle":
-    case "word":
-    case "written":
-      return value;
-    default:
-      return null;
-  }
-}
-
-function sceneBreak(value: unknown): SceneBreak {
-  switch (value) {
-    case "hash":
-    case "stars":
-    case "blank":
-      return value;
-    default:
-      return "hash";
-  }
-}
-
-function sameIds(left: string[], right: string[]): boolean {
-  return left.length === right.length && left.every((id, index) => id === right[index]);
-}
-
-function sameLevels(left: CompileLevel[], right: CompileLevel[]): boolean {
-  return (
-    left.length === right.length &&
-    left.every((level, index) => {
-      const other = right[index];
-      return other?.include === level.include && other.name === level.name && other.heading === level.heading;
-    })
-  );
 }
 
 function parseView(value: unknown): ProjectView {

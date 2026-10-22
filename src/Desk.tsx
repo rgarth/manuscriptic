@@ -1,5 +1,6 @@
 import { lazy, Suspense, type ReactNode } from "react";
 import Binder from "./Binder";
+import CompileSettings from "./CompileSettings";
 import ExportDialog from "./ExportDialog";
 import {
   applyTrash,
@@ -42,6 +43,8 @@ import {
 import { publishingHint } from "./publishingPages";
 import type { SaveState } from "./useBookFile";
 
+export type DeskDialog = "settings" | "snapshots" | "compile" | "compile-settings";
+
 type DeskProps = {
   project: ProjectFile;
   history: BookHistory | null;
@@ -51,12 +54,8 @@ type DeskProps = {
   onAskTrash: (id: string) => void;
   onPendingTrash: (id: string | null) => void;
   filePath: string | null;
-  settingsOpen: boolean;
-  onSettingsOpen: (open: boolean) => void;
-  snapshotsOpen: boolean;
-  onSnapshotsOpen: (open: boolean) => void;
-  compileOpen: boolean;
-  onCompileOpen: (open: boolean) => void;
+  dialog: DeskDialog | null;
+  onDialog: (dialog: DeskDialog | null) => void;
   notice: string | null;
   saveState: SaveState;
   saveError: string | null;
@@ -78,12 +77,8 @@ export default function Desk({
   onAskTrash,
   onPendingTrash,
   filePath,
-  settingsOpen,
-  onSettingsOpen,
-  snapshotsOpen,
-  onSnapshotsOpen,
-  compileOpen,
-  onCompileOpen,
+  dialog,
+  onDialog,
   notice,
   saveState,
   saveError,
@@ -172,7 +167,7 @@ export default function Desk({
           )}
         </section>
       </div>
-      {snapshotsOpen ? (
+      {dialog === "snapshots" ? (
         <Snapshots
           snapshotMinutes={snapshotMinutes}
           snapshots={history?.snapshots ?? []}
@@ -185,7 +180,7 @@ export default function Desk({
           onRestoreBook={onRestoreBook}
           onRestoreScene={onRestoreScene}
           onDeleteSnapshot={onDeleteSnapshot}
-          onClose={() => onSnapshotsOpen(false)}
+          onClose={() => onDialog(null)}
         />
       ) : null}
       <footer className="status">
@@ -206,29 +201,32 @@ export default function Desk({
           <button
             type="button"
             className="status-button"
-            aria-expanded={snapshotsOpen}
-            onClick={() => onSnapshotsOpen(!snapshotsOpen)}
+            aria-expanded={dialog === "snapshots"}
+            onClick={() => onDialog(dialog === "snapshots" ? null : "snapshots")}
           >
             Snapshots
           </button>
           <span>{saveError ?? saveLabel(saveState)}</span>
         </span>
       </footer>
-      {compileOpen ? (
+      {dialog === "compile" ? (
         <ExportDialog
           project={project}
           onRemember={(next) => onProject(() => next)}
-          onClose={() => onCompileOpen(false)}
+          onClose={() => onDialog(null)}
         />
       ) : null}
-      {settingsOpen ? (
+      {dialog === "compile-settings" ? (
+        <CompileSettings
+          compile={project.compile}
+          onCompile={(compile) => onProject((current) => setBookCompile(current, compile))}
+          onClose={() => onDialog(null)}
+        />
+      ) : null}
+      {dialog === "settings" ? (
         <Settings
           dictionary={{ words: project.dictionary, onAddWord: addWord, onRemoveWord: removeWord }}
-          book={{
-            compile: project.compile,
-            onCompile: (compile) => onProject((current) => setBookCompile(current, compile)),
-          }}
-          onClose={() => onSettingsOpen(false)}
+          onClose={() => onDialog(null)}
         />
       ) : null}
       {pendingTrash && pendingRemoval ? (

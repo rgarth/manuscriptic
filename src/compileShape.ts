@@ -1,4 +1,11 @@
-import type { CompilePreferences, CompileSpacing, PageNumbers } from "./compilePrefs.ts";
+import type {
+  CompileLevel,
+  CompilePreferences,
+  CompileSpacing,
+  LevelHeading,
+  PageNumbers,
+  SceneBreak,
+} from "./bookCompile.ts";
 import { fillDocument, fillText, type CompileValues, type FillPart } from "./compileVars.ts";
 import type { Alignment } from "./pageLayout.ts";
 import {
@@ -8,15 +15,7 @@ import {
   type Inline,
   type Mark,
 } from "./model/editorDoc.ts";
-import type {
-  BinderNode,
-  CompileLevel,
-  FolderNode,
-  LevelHeading,
-  MatterPlace,
-  ProjectFile,
-  SceneBreak,
-} from "./model/project.ts";
+import type { BinderNode, FolderNode, MatterPlace, ProjectFile } from "./model/project.ts";
 
 export type CompileRun =
   | { kind: "text"; text: string; marks: Mark[] }

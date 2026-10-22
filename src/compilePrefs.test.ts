@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  defaultBookCompile,
+  defaultCompileFormat,
+  defaultCompileIdentity,
   defaultCompilePreferences,
-  readCompilePreferences,
-  writeCompilePreferences,
-} from "./compilePrefs.ts";
+  resolvedCompilePreferences,
+} from "./bookCompile.ts";
+import { readCompileIdentity, writeCompileIdentity } from "./compilePrefs.ts";
 
 function memory(initial: Record<string, string> = {}) {
   const values = { ...initial };
@@ -18,28 +21,45 @@ function memory(initial: Record<string, string> = {}) {
   };
 }
 
-test("compile settings start as a double-spaced submission", () => {
-  const prefs = readCompilePreferences(memory());
-  assert.equal(prefs.font, "Times New Roman");
-  assert.equal(prefs.points, 12);
-  assert.equal(prefs.spacing, "double");
-  assert.equal(prefs.indent, 0.5);
-  assert.equal(prefs.align, "left");
-  assert.equal(prefs.passFont, false);
-  assert.equal(prefs.pageNumbers, "header");
-  assert.equal(prefs.differentFirstPage, true);
-  assert.deepEqual(prefs.margins, { top: 1, right: 1, bottom: 1, left: 1 });
-  assert.equal(prefs.header, "{$author} / {$title} / {$page}");
-  assert.equal(prefs.author, "");
+test("a new compile format is a double-spaced submission", () => {
+  const format = defaultCompileFormat();
+  assert.equal(format.font, "Times New Roman");
+  assert.equal(format.points, 12);
+  assert.equal(format.spacing, "double");
+  assert.equal(format.indent, 0.5);
+  assert.equal(format.align, "left");
+  assert.equal(format.passFont, false);
+  assert.equal(format.pageNumbers, "header");
+  assert.equal(format.differentFirstPage, true);
+  assert.deepEqual(format.margins, { top: 1, right: 1, bottom: 1, left: 1 });
+  assert.equal(format.header, "{$author} / {$title} / {$page}");
+  assert.equal(defaultCompilePreferences().author, "");
 });
 
-test("compile settings round-trip and a broken file is refused", () => {
+test("author information round-trips and a broken file is refused", () => {
   const storage = memory();
-  const next = { ...defaultCompilePreferences(), author: "Ada Garth", pen: "A. Garth", spacing: "single" as const };
-  writeCompilePreferences(storage, next);
-  assert.equal(readCompilePreferences(storage).author, "Ada Garth");
-  assert.equal(readCompilePreferences(storage).pen, "A. Garth");
-  assert.equal(readCompilePreferences(storage).spacing, "single");
+  writeCompileIdentity(storage, { ...defaultCompileIdentity(), author: "Ada Garth", pen: "A. Garth" });
+  assert.equal(readCompileIdentity(storage).author, "Ada Garth");
+  assert.equal(readCompileIdentity(storage).pen, "A. Garth");
   storage.setItem("manuscriptic-compile", "{");
-  assert.throws(() => readCompilePreferences(storage), /could not be read/);
+  assert.throws(() => readCompileIdentity(storage), /could not be read/);
+});
+
+test("a book inherits the settings author until it keeps its own", () => {
+  const book = defaultBookCompile();
+  const app = { ...defaultCompileIdentity(), author: "Ada Garth" };
+  const inherited = resolvedCompilePreferences({ ...book, useAppAuthor: true }, app);
+  assert.equal(inherited.author, "Ada Garth");
+  assert.equal(inherited.spacing, "double");
+  const own = resolvedCompilePreferences(
+    {
+      ...book,
+      useAppAuthor: false,
+      author: { ...defaultCompileIdentity(), author: "A. Leigh" },
+      format: { ...book.format, spacing: "single" },
+    },
+    app,
+  );
+  assert.equal(own.author, "A. Leigh");
+  assert.equal(own.spacing, "single");
 });

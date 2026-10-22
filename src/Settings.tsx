@@ -18,11 +18,10 @@ import {
 } from "./filePrefs";
 import { pickSaveDirectory, resolveDirectory } from "./novelFile";
 import { applyTheme, onTheme, readTheme, readThemes } from "./themes";
-import CompileSettings from "./CompileSettings";
+import { AppAuthorSettings } from "./CompileSettings";
 import "./settings.css";
-import type { BookCompile } from "./model/project";
 
-type SettingsSection = "files" | "appearance" | "writing" | "compile" | "dictionary";
+type SettingsSection = "files" | "appearance" | "writing" | "author" | "dictionary";
 
 type DictionarySettings = {
   words: string[];
@@ -32,11 +31,10 @@ type DictionarySettings = {
 
 type SettingsProps = {
   dictionary: DictionarySettings | null;
-  book: { compile: BookCompile; onCompile: (compile: BookCompile) => void } | null;
   onClose: () => void;
 };
 
-export default function Settings({ dictionary, book, onClose }: SettingsProps) {
+export default function Settings({ dictionary, onClose }: SettingsProps) {
   const themes = readThemes();
   const stored = readFilePreferences(localStorage);
   const [section, setSection] = useState<SettingsSection>("files");
@@ -197,8 +195,8 @@ export default function Settings({ dictionary, book, onClose }: SettingsProps) {
         </>
       );
       break;
-    case "compile":
-      pane = <CompileSettings book={book} />;
+    case "author":
+      pane = <AppAuthorSettings />;
       break;
     case "dictionary":
       pane = dictionary ? (
@@ -274,7 +272,7 @@ function navSections(book: boolean): { id: SettingsSection; label: string }[] {
     { id: "files", label: "Files" },
     { id: "appearance", label: "Application Theme" },
     { id: "writing", label: "Writing" },
-    { id: "compile", label: "Compile" },
+    { id: "author", label: "Author" },
   ];
   if (book) {
     sections.push({ id: "dictionary", label: "Dictionary" });

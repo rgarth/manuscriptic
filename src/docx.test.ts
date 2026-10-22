@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { bookFromFiles, filesForBook } from "./bookArchive.ts";
-import { defaultCompilePreferences, type CompilePreferences } from "./compilePrefs.ts";
+import { defaultCompilePreferences, type CompilePreferences } from "./bookCompile.ts";
 import { buildCompile } from "./compileShape.ts";
 import { compileRows, initialCompileTicks, rememberCompile, toggleCompileRow } from "./compileTicks.ts";
 import { compiledFile, compileDocx } from "./docx.ts";

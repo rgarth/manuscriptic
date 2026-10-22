@@ -1,4 +1,4 @@
-import type { CompilePreferences } from "./compilePrefs.ts";
+import type { CompilePreferences } from "./bookCompile.ts";
 import { buildCompile, type CompileDocument, type CompileParagraph, type CompileRun } from "./compileShape.ts";
 import type { ProjectFile } from "./model/project.ts";
 import type { Alignment } from "./pageLayout.ts";

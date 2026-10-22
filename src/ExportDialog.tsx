@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { bookFileName, readFilePreferences } from "./filePrefs.ts";
-import { readCompilePreferences } from "./compilePrefs.ts";
+import { resolvedCompilePreferences } from "./bookCompile.ts";
+import { readCompileIdentity } from "./compilePrefs.ts";
 import {
   collapsedCompileFolders,
   compileRows,
@@ -43,9 +44,9 @@ export default function ExportDialog({
   async function compile() {
     let preferences;
     try {
-      preferences = readCompilePreferences(localStorage);
+      preferences = resolvedCompilePreferences(project.compile, readCompileIdentity(localStorage));
     } catch (error: unknown) {
-      reportFailure(error, "Compile settings could not be read.");
+      reportFailure(error, "Author information could not be read.");
       return;
     }
     const compiled = compiledFile(project, included, preferences, new Date().getFullYear());

@@ -23,6 +23,7 @@ export type MenuCommand =
   | { name: "save-as" }
   | { name: "snapshot" }
   | { name: "compile" }
+  | { name: "compile-settings" }
   | { name: "settings" }
   | { name: "new-scene" }
   | { name: "new-section" }
@@ -46,6 +47,7 @@ export function menuCommand(value: unknown): MenuCommand | null {
     case "save-as":
     case "snapshot":
     case "compile":
+    case "compile-settings":
     case "settings":
     case "new-scene":
     case "new-section":
