@@ -1,0 +1,13 @@
+[data-theme="leather"] {
+  color-scheme: dark;
+  --theme-label: Leather;
+  --theme-order: 8;
+  --room: #24180f;
+  --board: #1a120c;
+  --paper: #3a291c;
+  --ink: #f3e6d4;
+  --faded: #b39a82;
+  --rule: #5c4634;
+  --wash: #4a3628;
+  --nib: #d4a574;
+}

@@ -1,0 +1,13 @@
+[data-theme="typewriter"] {
+  color-scheme: light;
+  --theme-label: Typewriter;
+  --theme-order: 9;
+  --room: #c8c6c2;
+  --board: #e4e2de;
+  --paper: #f7f7f5;
+  --ink: #141414;
+  --faded: #5c5c5c;
+  --rule: #bdbbb6;
+  --wash: #e0deda;
+  --nib: #1a1a1a;
+}

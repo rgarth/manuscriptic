@@ -1,0 +1,13 @@
+[data-theme="sage"] {
+  color-scheme: light;
+  --theme-label: Sage;
+  --theme-order: 5;
+  --room: #d7e4d6;
+  --board: #e5eee4;
+  --paper: #f3f7f2;
+  --ink: #243028;
+  --faded: #6a7a6c;
+  --rule: #cdd9cc;
+  --wash: #e2ebe1;
+  --nib: #3f6248;
+}

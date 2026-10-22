@@ -12,22 +12,9 @@
         height: 100%;
         margin: 0;
       }
-      [data-theme="parchment"] {
-        color-scheme: light;
-        --room: #e5dccb;
-        --faded: #8a7b68;
-        --rule: #e3d6c2;
-        --nib: #7c3b2e;
-      }
-      [data-theme="ink"] {
-        color-scheme: dark;
-        --room: #10141c;
-        --faded: #8e98ab;
-        --rule: #2a3344;
-        --nib: #d4b483;
-      }
       body {
-        background: var(--room);
+        background: var(--room, #e5dccb);
+        color: var(--faded, #8a7b68);
       }
       .opening {
         box-sizing: border-box;
@@ -48,14 +35,14 @@
         width: 8.5rem;
         height: 2px;
         overflow: hidden;
-        background: var(--rule);
+        background: var(--rule, #e3d6c2);
         border-radius: 1px;
       }
       .opening-track span {
         display: block;
         height: 100%;
         width: 38%;
-        background: var(--nib);
+        background: var(--nib, #7c3b2e);
         animation: opening-slide 1.05s ease-in-out infinite;
       }
       @keyframes opening-slide {
@@ -78,6 +65,19 @@
         var savedTheme = localStorage.getItem("manuscriptic-theme");
         if (savedTheme && /^[a-z0-9-]+$/.test(savedTheme)) {
           document.documentElement.dataset.theme = savedTheme;
+        }
+        var opening = JSON.parse(localStorage.getItem("manuscriptic-opening") || "null");
+        if (opening && typeof opening === "object") {
+          var names = ["room", "faded", "rule", "nib"];
+          for (var i = 0; i < names.length; i++) {
+            var value = opening[names[i]];
+            if (typeof value === "string" && value.length < 40 && !/[;{}]|url\s*\(/i.test(value)) {
+              document.documentElement.style.setProperty("--" + names[i], value);
+            }
+          }
+          if (opening.scheme === "dark" || opening.scheme === "light") {
+            document.documentElement.style.colorScheme = opening.scheme;
+          }
         }
       } catch {}
     </script>

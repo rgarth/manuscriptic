@@ -1,0 +1,13 @@
+[data-theme="chamomile"] {
+  color-scheme: light;
+  --theme-label: Chamomile;
+  --theme-order: 2;
+  --room: #ebe3c4;
+  --board: #f3ecd4;
+  --paper: #faf6e8;
+  --ink: #3c3422;
+  --faded: #8a7d62;
+  --rule: #e4d8b4;
+  --wash: #efe6c8;
+  --nib: #8d5e2a;
+}

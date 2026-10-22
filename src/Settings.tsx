@@ -141,7 +141,7 @@ export default function Settings({ dictionary, book, onClose }: SettingsProps) {
                   type="button"
                   role="option"
                   aria-selected={item.id === theme}
-                  onClick={() => applyTheme(item.id)}
+                  onClick={() => applyTheme(item.id, themes)}
                 >
                   {item.label}
                 </button>
