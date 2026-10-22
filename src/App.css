@@ -386,6 +386,87 @@ input:focus-visible {
   gap: 8px;
 }
 
+.dialog.compile {
+  width: min(28rem, calc(100% - 40px));
+  max-height: min(32rem, calc(100% - 48px));
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dialog.compile .compile-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 16px;
+}
+
+.dialog.compile .compile-body > p {
+  margin: 0;
+  color: var(--faded);
+}
+
+.dialog.compile .compile-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 16rem;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, var(--rule));
+  border-radius: 8px;
+}
+
+.dialog.compile .compile-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dialog.compile .compile-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.dialog.compile .compile-row label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog.compile .disclosure {
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dialog.compile .disclosure:hover:not(:disabled) {
+  background: var(--wash);
+}
+
+.dialog.compile .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+}
+
+.dialog.compile .dialog-actions button {
+  flex: none;
+  width: auto;
+}
+
 .dialog.settings {
   width: min(40rem, calc(100% - 40px));
   height: auto;
@@ -397,7 +478,8 @@ input:focus-visible {
   overflow: hidden;
 }
 
-.dialog.settings .settings-bar {
+.dialog.settings .settings-bar,
+.dialog.compile .settings-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -407,7 +489,8 @@ input:focus-visible {
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, var(--rule));
 }
 
-.dialog.settings .settings-bar h2 {
+.dialog.settings .settings-bar h2,
+.dialog.compile .settings-bar h2 {
   margin: 0;
   font-size: 13px;
   font-weight: 650;
@@ -484,6 +567,15 @@ input:focus-visible {
   margin: 0 0 8px;
   color: var(--faded);
   font-weight: 450;
+}
+
+.structure-level {
+  margin: 0 0 8px;
+  padding-top: 8px;
+}
+
+.structure-level + .structure-level {
+  border-top: 1px solid var(--rule);
 }
 
 .theme-list {

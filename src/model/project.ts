@@ -1,5 +1,6 @@
 import { uniqueWords } from "../dictionary.ts";
 import { defaultPageLayout, pageLayout, type PageLayout } from "../pageLayout.ts";
+import { publishingStarter } from "../publishingPages.ts";
 import { emptyDoc, parseEditorDoc, wordCount, type EditorDoc } from "./editorDoc.ts";
 
 export type TrashOrigin = {
@@ -15,9 +16,13 @@ type BinderFields = {
   origin?: TrashOrigin;
 };
 
+export const matterPlaces = ["front", "back"] as const;
+export type MatterPlace = (typeof matterPlaces)[number];
+
 export type FolderNode = BinderFields & {
   kind: "folder";
   children: BinderNode[];
+  matter?: MatterPlace;
 };
 
 export type DocumentRole = "scene" | "note" | "page";
@@ -41,6 +46,40 @@ export type ProjectView = {
 
 export type { PageLayout };
 
+export const chapterHeadings = ["title", "number", "numberTitle", "word", "written"] as const;
+export type ChapterHeading = (typeof chapterHeadings)[number];
+
+export const levelHeadings = ["none", ...chapterHeadings] as const;
+export type LevelHeading = (typeof levelHeadings)[number];
+
+export type CompileLevel = {
+  include: boolean;
+  name: string;
+  heading: LevelHeading;
+};
+
+export const sceneBreaks = ["hash", "stars", "blank"] as const;
+export type SceneBreak = (typeof sceneBreaks)[number];
+
+export type BookCompile = {
+  levels: CompileLevel[];
+  sceneTitles: boolean;
+  sceneBreak: SceneBreak;
+  titleOnly: string[];
+};
+
+export function defaultBookCompile(): BookCompile {
+  return {
+    levels: [
+      { include: false, name: "", heading: "none" },
+      { include: true, name: "Chapter", heading: "title" },
+    ],
+    sceneTitles: false,
+    sceneBreak: "hash",
+    titleOnly: [],
+  };
+}
+
 export type ProjectFile = {
   version: 2;
   title: string;
@@ -50,6 +89,7 @@ export type ProjectFile = {
   trash: FolderNode;
   dictionary: string[];
   layout: PageLayout;
+  compile: BookCompile;
   view: ProjectView;
 };
 
@@ -81,14 +121,28 @@ export function createNovelProject(): ProjectFile {
       false,
     ),
     publishing: arrangePublishing(
-      folderNode("Publishing", [folderNode("Front Matter"), folderNode("Back Matter")]),
+      folderNode("Publishing", [folderNode("Front Matter", [], true, "front"), folderNode("Back Matter", [], true, "back")]),
     ),
     trash: folderNode("Trash"),
     dictionary: [],
     layout: defaultPageLayout(),
+    compile: defaultBookCompile(),
     view: { selectedId: manuscript.id, expanded: null },
   };
   return setView(novel, { expanded: [manuscript.id] });
+}
+
+export function setBookCompile(project: ProjectFile, compile: BookCompile): ProjectFile {
+  const next = bookCompile(compile);
+  if (
+    sameLevels(next.levels, project.compile.levels) &&
+    next.sceneTitles === project.compile.sceneTitles &&
+    next.sceneBreak === project.compile.sceneBreak &&
+    sameIds(next.titleOnly, project.compile.titleOnly)
+  ) {
+    return project;
+  }
+  return { ...project, compile: next };
 }
 
 export function setPageLayout(project: ProjectFile, layout: PageLayout): ProjectFile {
@@ -237,24 +291,26 @@ export function folderNode(
   title: string,
   children: BinderNode[] = [],
   includeInCompile = true,
+  matter?: MatterPlace,
 ): FolderNode {
   return {
     id: crypto.randomUUID(),
     title,
     kind: "folder",
     includeInCompile,
+    ...(matter ? { matter } : {}),
     children,
   };
 }
 
-export function documentNode(title: string, role: DocumentRole): DocumentNode {
+export function documentNode(title: string, role: DocumentRole, content: EditorDoc = emptyDoc()): DocumentNode {
   return {
     id: crypto.randomUUID(),
     title,
     kind: "document",
     role,
     includeInCompile: role !== "note",
-    content: emptyDoc(),
+    content,
   };
 }
 
@@ -461,6 +517,7 @@ function parseVersion2(value: Record<string, unknown>): ProjectFile | null {
     publishing: roots.publishing,
     dictionary: parseDictionary(value.dictionary),
     layout: pageLayout(value.layout),
+    compile: bookCompile(value.compile),
     view: parseView(value.view),
   };
 }
@@ -510,26 +567,36 @@ function migrateVersion1(value: Record<string, unknown>): ProjectFile | null {
     trash: assignFolder(trash, "scene", null),
     dictionary: [],
     layout: defaultPageLayout(),
+    compile: defaultBookCompile(),
     view: { selectedId: null, expanded: null },
   };
 }
 
 const frontPages = ["Title page", "Copyright", "Dedication", "Epigraph"];
 const backPages = ["Acknowledgements", "About the Author"];
-const publishingPages = ["Synopsis", "Back page"];
+const publishingPages = ["Synopsis", "Query", "Back page"];
 
 function arrangePublishing(publishing: FolderNode): FolderNode {
-  const loose = publishing.children.filter(
-    (child) => child.title !== "Front Matter" && child.title !== "Back Matter",
-  );
-  const front = folderChild(publishing, "Front Matter") ?? folderNode("Front Matter");
-  const back = folderChild(publishing, "Back Matter") ?? folderNode("Back Matter");
+  const front = matterFolder(publishing, "front") ?? folderNode("Front Matter", [], true, "front");
+  const back = matterFolder(publishing, "back") ?? folderNode("Back Matter", [], true, "back");
+  const loose = publishing.children.filter((child) => child.id !== front.id && child.id !== back.id);
   const used = new Set<string>();
   const nextFront = nestPages(front, frontPages, loose, used);
   const nextBack = nestPages(back, backPages, loose, used);
   const beside = publishingPages.map((title) => claimPage(title, [loose], used));
   const rest = loose.filter((child) => !used.has(child.id));
-  return { ...publishing, children: [nextFront, nextBack, ...beside, ...rest] };
+  return {
+    ...publishing,
+    children: [{ ...nextFront, matter: "front" }, { ...nextBack, matter: "back" }, ...beside, ...rest],
+  };
+}
+
+function matterFolder(folder: FolderNode, matter: MatterPlace): FolderNode | null {
+  const marked = folder.children.find((child) => child.kind === "folder" && child.matter === matter);
+  if (marked?.kind === "folder") {
+    return marked;
+  }
+  return folderChild(folder, matterTitle(matter));
 }
 
 function folderChild(folder: FolderNode, title: string): FolderNode | null {
@@ -567,7 +634,7 @@ function claimPage(title: string, groups: BinderNode[][], used: Set<string>): Bi
       return found;
     }
   }
-  const created = documentNode(title, "page");
+  const created = documentNode(title, "page", publishingStarter(title) ?? emptyDoc());
   used.add(created.id);
   return created;
 }
@@ -601,22 +668,25 @@ export function assignRole(
   }
 }
 
-export function replaceMatter(project: ProjectFile, section: "front" | "back", pages: BinderNode[]): ProjectFile {
-  const title = matterTitle(section);
+export function replaceMatter(project: ProjectFile, section: MatterPlace, pages: BinderNode[]): ProjectFile {
+  const target = matterFolder(project.publishing, section);
+  if (!target) {
+    return project;
+  }
   return {
     ...project,
     publishing: {
       ...project.publishing,
       children: project.publishing.children.map((child) =>
-        child.kind === "folder" && child.title === title
-          ? { ...child, children: pages.map((page) => assignRole(page, "page", null)) }
+        child.id === target.id
+          ? { ...child, matter: section, children: pages.map((page) => assignRole(page, "page", null)) }
           : child,
       ),
     },
   };
 }
 
-function matterTitle(section: "front" | "back"): string {
+function matterTitle(section: MatterPlace): string {
   switch (section) {
     case "front":
       return "Front Matter";
@@ -627,6 +697,86 @@ function matterTitle(section: "front" | "back"): string {
       return unexpected;
     }
   }
+}
+
+function bookCompile(value: unknown): BookCompile {
+  const fallback = defaultBookCompile();
+  if (!isRecord(value)) {
+    return fallback;
+  }
+  const sceneTitles = value.sceneTitles === true;
+  const breakKind = sceneBreak(value.sceneBreak);
+  const titleOnly = Array.isArray(value.titleOnly)
+    ? value.titleOnly.filter((id): id is string => typeof id === "string")
+    : [];
+  const levels = Array.isArray(value.levels) ? parseLevels(value.levels) ?? fallback.levels : fallback.levels;
+  return { levels, sceneTitles, sceneBreak: breakKind, titleOnly };
+}
+
+function parseLevels(value: unknown[]): CompileLevel[] | null {
+  const levels: CompileLevel[] = [];
+  for (const entry of value) {
+    const level = parseLevel(entry);
+    if (!level) {
+      return null;
+    }
+    levels.push(level);
+  }
+  return levels;
+}
+
+function parseLevel(value: unknown): CompileLevel | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const heading = levelHeading(value.heading);
+  if (!heading) {
+    return null;
+  }
+  return {
+    include: value.include === true,
+    name: typeof value.name === "string" ? value.name : "",
+    heading,
+  };
+}
+
+function levelHeading(value: unknown): LevelHeading | null {
+  switch (value) {
+    case "none":
+    case "title":
+    case "number":
+    case "numberTitle":
+    case "word":
+    case "written":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function sceneBreak(value: unknown): SceneBreak {
+  switch (value) {
+    case "hash":
+    case "stars":
+    case "blank":
+      return value;
+    default:
+      return "hash";
+  }
+}
+
+function sameIds(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
+function sameLevels(left: CompileLevel[], right: CompileLevel[]): boolean {
+  return (
+    left.length === right.length &&
+    left.every((level, index) => {
+      const other = right[index];
+      return other?.include === level.include && other.name === level.name && other.heading === level.heading;
+    })
+  );
 }
 
 function parseView(value: unknown): ProjectView {
@@ -699,7 +849,8 @@ function parseBinderNode(value: unknown, requireRole: boolean): BinderNode | nul
         }
         children.push(parsed);
       }
-      return { ...fields, kind: "folder", children };
+      const matter = parseMatter(value.matter) ?? matterFromTitle(value.title);
+      return { ...fields, kind: "folder", children, ...(matter ? { matter } : {}) };
     }
     case "document": {
       const content = value.content == null ? emptyDoc() : parseEditorDoc(value.content);
@@ -709,6 +860,27 @@ function parseBinderNode(value: unknown, requireRole: boolean): BinderNode | nul
       }
       return { ...fields, kind: "document", role, content };
     }
+    default:
+      return null;
+  }
+}
+
+function parseMatter(value: unknown): MatterPlace | null {
+  switch (value) {
+    case "front":
+    case "back":
+      return value;
+    default:
+      return null;
+  }
+}
+
+function matterFromTitle(title: string): MatterPlace | null {
+  switch (title) {
+    case "Front Matter":
+      return "front";
+    case "Back Matter":
+      return "back";
     default:
       return null;
   }

@@ -1,18 +1,34 @@
 import { reportFailure } from "../failures.ts";
 
+export type OpeningPaint = {
+  room: string;
+  faded: string;
+  rule: string;
+  nib: string;
+  scheme: "light" | "dark" | null;
+};
+
 export type Theme = {
   id: string;
   label: string;
   order: number;
+  opening: OpeningPaint | null;
 };
 
 export type ThemeRule = {
   selectorText: string;
   label: string;
   order: string;
+  room: string;
+  faded: string;
+  rule: string;
+  nib: string;
+  scheme: string;
 };
 
 const storageKey = "manuscriptic-theme";
+const openingKey = "manuscriptic-opening";
+const openingProperties = ["--room", "--faded", "--rule", "--nib"] as const;
 
 export function collectThemes(rules: ThemeRule[]): Theme[] {
   const themes: Theme[] = [];
@@ -23,15 +39,37 @@ export function collectThemes(rules: ThemeRule[]): Theme[] {
       continue;
     }
     const rawOrder = rule.order.trim();
-    const order = rawOrder === "" ? 100 : Number(rawOrder);
+    const parsed = rawOrder === "" ? 100 : Number(rawOrder);
     themes.push({
       id,
       label: rule.label.trim() || id,
-      order: Number.isFinite(order) ? order : 100,
+      order: Number.isFinite(parsed) ? parsed : 100,
+      opening: openingPaint(rule),
     });
   }
   themes.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
   return themes;
+}
+
+function openingPaint(source: ThemeRule): OpeningPaint | null {
+  const room = source.room.trim();
+  const faded = source.faded.trim();
+  const rule = source.rule.trim();
+  const nib = source.nib.trim();
+  if (!openingColor(room) || !openingColor(faded) || !openingColor(rule) || !openingColor(nib)) {
+    return null;
+  }
+  return { room, faded, rule, nib, scheme: paintScheme(source.scheme.trim()) };
+}
+
+function paintScheme(value: string): OpeningPaint["scheme"] {
+  switch (value) {
+    case "light":
+    case "dark":
+      return value;
+    default:
+      return null;
+  }
 }
 
 export function stylesheetAccess(href: string | null, pageOrigin: string): "read" | "skip" | "unreadable" {
@@ -73,10 +111,16 @@ export function readThemes(): Theme[] {
       if (!(rule instanceof CSSStyleRule) || !rule.selectorText.includes("data-theme")) {
         continue;
       }
+      const style = rule.style;
       rules.push({
         selectorText: rule.selectorText,
-        label: rule.style.getPropertyValue("--theme-label"),
-        order: rule.style.getPropertyValue("--theme-order"),
+        label: style.getPropertyValue("--theme-label"),
+        order: style.getPropertyValue("--theme-order"),
+        room: style.getPropertyValue("--room"),
+        faded: style.getPropertyValue("--faded"),
+        rule: style.getPropertyValue("--rule"),
+        nib: style.getPropertyValue("--nib"),
+        scheme: style.getPropertyValue("color-scheme"),
       });
     }
   }
@@ -106,7 +150,7 @@ export function onTheme(listener: (id: string) => void): () => void {
   };
 }
 
-export function applyTheme(id: string): void {
+export function applyTheme(id: string, available = readThemes()): void {
   try {
     localStorage.setItem(storageKey, id);
   } catch (error: unknown) {
@@ -116,7 +160,45 @@ export function applyTheme(id: string): void {
     }
   }
   document.documentElement.dataset.theme = id;
+  clearOpeningPaint();
+  const theme = available.find((item) => item.id === id);
+  if (theme) {
+    rememberOpening(theme.opening);
+  }
   for (const listener of themeListeners) {
     listener(id);
   }
+}
+
+function rememberOpening(opening: OpeningPaint | null): void {
+  if (!opening) {
+    dropOpening();
+    return;
+  }
+  try {
+    localStorage.setItem(openingKey, JSON.stringify(opening));
+  } catch (error: unknown) {
+    reportFailure(error, "Could not save the opening colors.");
+    dropOpening();
+  }
+}
+
+function dropOpening(): void {
+  try {
+    localStorage.removeItem(openingKey);
+  } catch (error: unknown) {
+    reportFailure(error, "Could not save the opening colors.");
+  }
+}
+
+function clearOpeningPaint(): void {
+  const style = document.documentElement.style;
+  for (const name of openingProperties) {
+    style.removeProperty(name);
+  }
+  style.colorScheme = "";
+}
+
+function openingColor(value: string): boolean {
+  return value.length > 0 && value.length < 40 && !/[;{}]|url\s*\(/i.test(value);
 }

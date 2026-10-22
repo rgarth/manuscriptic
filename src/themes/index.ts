@@ -6,6 +6,7 @@ export {
   onTheme,
   readTheme,
   readThemes,
+  type OpeningPaint,
   type Theme,
   type ThemeRule,
 } from "./collect";

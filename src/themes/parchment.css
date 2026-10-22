@@ -1,6 +1,6 @@
 /*
   Drop a CSS file in this folder to add a theme.
-  The Theme menu lists every [data-theme] block it finds.
+  Settings lists every named [data-theme] block it finds.
 */
 
 [data-theme="parchment"] {

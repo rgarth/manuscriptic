@@ -56,6 +56,24 @@ pub fn read_history(path: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+pub fn write_export(path: String, bytes: Vec<u8>) -> Result<(), String> {
+    let mut target = PathBuf::from(&path);
+    let docx = target
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("docx"));
+    if !docx {
+        target.set_extension("docx");
+    }
+    if let Some(parent) = target.parent() {
+        if !parent.as_os_str().is_empty() {
+            fs::create_dir_all(parent).map_err(|err| err.to_string())?;
+        }
+    }
+    fs::write(target, bytes).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 pub fn write_book(
     path: String,
     files: BTreeMap<String, String>,

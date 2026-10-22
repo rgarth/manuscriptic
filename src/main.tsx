@@ -3,9 +3,10 @@ import "@fontsource-variable/eb-garamond/wght-italic.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { applyTheme, readTheme } from "./themes";
+import { applyTheme, readTheme, readThemes } from "./themes";
 
-applyTheme(readTheme());
+const themes = readThemes();
+applyTheme(readTheme(themes), themes);
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

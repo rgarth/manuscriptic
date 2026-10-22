@@ -1,0 +1,13 @@
+[data-theme="midnight"] {
+  color-scheme: dark;
+  --theme-label: Midnight;
+  --theme-order: 7;
+  --room: #070e22;
+  --board: #0a1228;
+  --paper: #121a32;
+  --ink: #e7eefb;
+  --faded: #8b9cc2;
+  --rule: #24345c;
+  --wash: #1a2850;
+  --nib: #a8bce8;
+}

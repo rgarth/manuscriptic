@@ -342,6 +342,7 @@ function binderValue(project: ProjectFile): unknown {
     title: project.title,
     dictionary: project.dictionary,
     layout: project.layout,
+    compile: project.compile,
     view: project.view,
     manuscript: binderNode(project.manuscript),
     notes: binderNode(project.notes),
@@ -359,7 +360,12 @@ function binderNode(node: BinderNode): unknown {
   };
   switch (node.kind) {
     case "folder":
-      return { ...shared, kind: "folder", children: node.children.map((child) => binderNode(child)) };
+      return {
+        ...shared,
+        kind: "folder",
+        ...(node.matter ? { matter: node.matter } : {}),
+        children: node.children.map((child) => binderNode(child)),
+      };
     case "document":
       return { ...shared, kind: "document", role: node.role };
     default: {

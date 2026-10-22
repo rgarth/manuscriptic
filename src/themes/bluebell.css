@@ -1,0 +1,13 @@
+[data-theme="bluebell"] {
+  color-scheme: light;
+  --theme-label: Bluebell;
+  --theme-order: 4;
+  --room: #d7e3ee;
+  --board: #e5eef5;
+  --paper: #f3f7fb;
+  --ink: #1e2c38;
+  --faded: #6a8090;
+  --rule: #cddae6;
+  --wash: #e0ebf3;
+  --nib: #3a6584;
+}

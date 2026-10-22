@@ -18,8 +18,10 @@ import {
 } from "./filePrefs";
 import { pickSaveDirectory, resolveDirectory } from "./novelFile";
 import { applyTheme, onTheme, readTheme, readThemes } from "./themes";
+import CompileSettings from "./CompileSettings";
+import type { BookCompile } from "./model/project";
 
-type SettingsSection = "files" | "appearance" | "writing" | "dictionary";
+type SettingsSection = "files" | "appearance" | "writing" | "compile" | "dictionary";
 
 type DictionarySettings = {
   words: string[];
@@ -29,10 +31,11 @@ type DictionarySettings = {
 
 type SettingsProps = {
   dictionary: DictionarySettings | null;
+  book: { compile: BookCompile; onCompile: (compile: BookCompile) => void } | null;
   onClose: () => void;
 };
 
-export default function Settings({ dictionary, onClose }: SettingsProps) {
+export default function Settings({ dictionary, book, onClose }: SettingsProps) {
   const themes = readThemes();
   const stored = readFilePreferences(localStorage);
   const [section, setSection] = useState<SettingsSection>("files");
@@ -138,7 +141,7 @@ export default function Settings({ dictionary, onClose }: SettingsProps) {
                   type="button"
                   role="option"
                   aria-selected={item.id === theme}
-                  onClick={() => applyTheme(item.id)}
+                  onClick={() => applyTheme(item.id, themes)}
                 >
                   {item.label}
                 </button>
@@ -192,6 +195,9 @@ export default function Settings({ dictionary, onClose }: SettingsProps) {
           </div>
         </>
       );
+      break;
+    case "compile":
+      pane = <CompileSettings book={book} />;
       break;
     case "dictionary":
       pane = dictionary ? (
@@ -267,6 +273,7 @@ function navSections(book: boolean): { id: SettingsSection; label: string }[] {
     { id: "files", label: "Files" },
     { id: "appearance", label: "Application Theme" },
     { id: "writing", label: "Writing" },
+    { id: "compile", label: "Compile" },
   ];
   if (book) {
     sections.push({ id: "dictionary", label: "Dictionary" });

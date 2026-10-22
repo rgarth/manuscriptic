@@ -8,6 +8,7 @@ export type CommandState = {
   saveNovel: (() => void) | null;
   saveNovelAs: (() => void) | null;
   takeSnapshot: (() => void) | null;
+  compile: (() => void) | null;
   newScene: (() => void) | null;
   newSection: (() => void) | null;
   trash: (() => void) | null;
@@ -24,6 +25,7 @@ const initial: CommandState = {
   saveNovel: null,
   saveNovelAs: null,
   takeSnapshot: null,
+  compile: null,
   newScene: null,
   newSection: null,
   trash: null,

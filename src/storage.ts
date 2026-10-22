@@ -30,6 +30,10 @@ export function fileExists(path: string): Promise<boolean> {
   return invoke<boolean>("file_exists", { path });
 }
 
+export function writeExport(path: string, bytes: Uint8Array): Promise<void> {
+  return invoke("write_export", { path, bytes: Array.from(bytes) });
+}
+
 export function writeBook(
   path: string,
   files: Record<string, string>,

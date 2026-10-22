@@ -22,6 +22,7 @@ export default function App() {
   const [pendingTrash, setPendingTrash] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [snapshotsOpen, setSnapshotsOpen] = useState(false);
+  const [compileOpen, setCompileOpen] = useState(false);
   const [snapshotMinutes, setSnapshotMinutes] = useState<SnapshotMinutes>(() =>
     readSnapshotMinutes(localStorage),
   );
@@ -30,8 +31,9 @@ export default function App() {
     pendingTrash: null as string | null,
     settingsOpen: false,
     snapshotsOpen: false,
+    compileOpen: false,
   });
-  dialogs.current = { pendingTrash, settingsOpen, snapshotsOpen };
+  dialogs.current = { pendingTrash, settingsOpen, snapshotsOpen, compileOpen };
 
   const file = useBookFile(showNotice);
   const project = file.project;
@@ -109,6 +111,10 @@ export default function App() {
         return;
       }
       if (event.key === "Escape") {
+        if (dialogs.current.compileOpen) {
+          setCompileOpen(false);
+          return;
+        }
         if (dialogs.current.settingsOpen) {
           setSettingsOpen(false);
           return;
@@ -194,11 +200,21 @@ export default function App() {
         return;
       case "snapshot":
         setSettingsOpen(false);
+        setCompileOpen(false);
         setSnapshotsOpen(true);
         file.recordSnapshot("manual");
         return;
+      case "compile":
+        if (!project) {
+          return;
+        }
+        setSettingsOpen(false);
+        setSnapshotsOpen(false);
+        setCompileOpen(true);
+        return;
       case "settings":
         setSnapshotsOpen(false);
+        setCompileOpen(false);
         setSettingsOpen(true);
         return;
       case "new-scene":
@@ -231,6 +247,7 @@ export default function App() {
       openSettings: () => runMenu.current({ name: "settings" }),
       newProject: () => runMenu.current({ name: "new" }),
       takeSnapshot: project ? () => runMenu.current({ name: "snapshot" }) : null,
+      compile: project ? () => runMenu.current({ name: "compile" }) : null,
       openNovel: () => runMenu.current({ name: "open" }),
       saveNovel: project ? () => runMenu.current({ name: "save" }) : null,
       saveNovelAs: project ? () => runMenu.current({ name: "save-as" }) : null,
@@ -313,7 +330,7 @@ export default function App() {
   }, [file.filePath]);
 
   const gateSettings = settingsOpen ? (
-    <Settings dictionary={null} onClose={() => setSettingsOpen(false)} />
+    <Settings dictionary={null} book={null} onClose={() => setSettingsOpen(false)} />
   ) : null;
 
   if (!project) {
@@ -348,6 +365,8 @@ export default function App() {
       onSettingsOpen={setSettingsOpen}
       snapshotsOpen={snapshotsOpen}
       onSnapshotsOpen={setSnapshotsOpen}
+      compileOpen={compileOpen}
+      onCompileOpen={setCompileOpen}
       filePath={file.filePath}
       notice={notice}
       saveState={file.saveState}

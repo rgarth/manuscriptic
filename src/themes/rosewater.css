@@ -1,0 +1,13 @@
+[data-theme="rosewater"] {
+  color-scheme: light;
+  --theme-label: Rosewater;
+  --theme-order: 3;
+  --room: #f0ddd8;
+  --board: #f6e8e4;
+  --paper: #fbf3f1;
+  --ink: #3c2a2a;
+  --faded: #947872;
+  --rule: #e8d4ce;
+  --wash: #f3e3de;
+  --nib: #8f4d56;
+}

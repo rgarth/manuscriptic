@@ -64,10 +64,10 @@ test("a new novel has the manuscript roots", () => {
   );
   assert.deepEqual(
     project.publishing.children.map((child) => child.title),
-    ["Front Matter", "Back Matter", "Synopsis", "Back page"],
+    ["Front Matter", "Back Matter", "Synopsis", "Query", "Back page"],
   );
-  const front = project.publishing.children.find((child) => child.title === "Front Matter");
-  const back = project.publishing.children.find((child) => child.title === "Back Matter");
+  const front = project.publishing.children.find((child) => child.kind === "folder" && child.matter === "front");
+  const back = project.publishing.children.find((child) => child.kind === "folder" && child.matter === "back");
   assert.equal(front?.kind, "folder");
   assert.equal(back?.kind, "folder");
   if (front?.kind === "folder") {
@@ -86,6 +86,117 @@ test("a new novel has the manuscript roots", () => {
   assert.equal(synopsis?.kind, "document");
   if (synopsis?.kind === "document") {
     assert.equal(synopsis.role, "page");
+    assert.equal(synopsis.content.content.length, 1);
+  }
+  const titlePage = front?.kind === "folder" ? front.children.find((child) => child.title === "Title page") : undefined;
+  assert.equal(titlePage?.kind, "document");
+  if (titlePage?.kind === "document") {
+    const first = titlePage.content.content[0];
+    assert.equal(first?.type, "paragraph");
+    if (first?.type === "paragraph") {
+      assert.equal(first.content?.[0]?.type === "text" ? first.content[0].text : "", "{$author}");
+    }
+  }
+  assert.equal(project.compile.levels[0]?.include, false);
+  assert.equal(project.compile.levels[1]?.include, true);
+  assert.equal(project.compile.levels[1]?.name, "Chapter");
+  assert.equal(project.compile.levels[1]?.heading, "title");
+  assert.equal(project.compile.sceneBreak, "hash");
+  assert.equal(project.compile.sceneTitles, false);
+});
+
+test("compile settings without levels keep the default divisions", () => {
+  const project = parseProject(
+    JSON.stringify({
+      version: 2,
+      title: "Novel",
+      manuscript: emptyFolder("m", "Manuscript"),
+      notes: emptyFolder("n", "Notes"),
+      publishing: emptyFolder("p", "Publishing"),
+      trash: emptyFolder("t", "Trash"),
+      compile: { chapterHeading: "word", partHeading: "number", sceneTitles: true, sceneBreak: "stars", titleOnly: ["pro"] },
+    }),
+  );
+  assert.equal(project?.compile.levels.length, 2);
+  assert.equal(project?.compile.levels[0]?.include, false);
+  assert.equal(project?.compile.levels[1]?.name, "Chapter");
+  assert.equal(project?.compile.levels[1]?.heading, "title");
+  assert.equal(project?.compile.sceneTitles, true);
+  assert.equal(project?.compile.sceneBreak, "stars");
+  assert.deepEqual(project?.compile.titleOnly, ["pro"]);
+});
+
+test("a broken folder level falls back and an empty list stays empty", () => {
+  function book(compile: unknown) {
+    return parseProject(
+      JSON.stringify({
+        version: 2,
+        title: "Novel",
+        manuscript: emptyFolder("m", "Manuscript"),
+        notes: emptyFolder("n", "Notes"),
+        publishing: emptyFolder("p", "Publishing"),
+        trash: emptyFolder("t", "Trash"),
+        compile,
+      }),
+    );
+  }
+  const broken = book({ levels: [{ include: true, name: "Chapter", heading: "nope" }] });
+  assert.equal(broken?.compile.levels[1]?.include, true);
+  assert.equal(broken?.compile.levels[1]?.heading, "title");
+  const empty = book({ levels: [] });
+  assert.deepEqual(empty?.compile.levels, []);
+});
+
+test("a publishing page the author already wrote is not replaced", () => {
+  const raw = JSON.stringify({
+    version: 2,
+    title: "Novel",
+    manuscript: emptyFolder("m", "Manuscript"),
+    notes: emptyFolder("n", "Notes"),
+    trash: emptyFolder("t", "Trash"),
+    publishing: {
+      id: "pub",
+      title: "Publishing",
+      kind: "folder",
+      includeInCompile: true,
+      children: [
+        {
+          id: "front",
+          title: "Front Matter",
+          kind: "folder",
+          includeInCompile: true,
+          children: [
+            {
+              id: "title",
+              title: "Title page",
+              kind: "document",
+              role: "page",
+              includeInCompile: true,
+              content: textDoc("Keep this page"),
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const project = parseProject(raw);
+  assert.ok(project);
+  if (!project) {
+    return;
+  }
+  assert.deepEqual(
+    project.publishing.children.map((child) => child.id),
+    ["front"],
+  );
+  const front = project.publishing.children[0];
+  assert.equal(front?.kind, "folder");
+  if (front?.kind === "folder") {
+    assert.equal(front.matter, "front");
+    const page = front.children[0];
+    assert.equal(page?.kind, "document");
+    if (page?.kind === "document") {
+      assert.deepEqual(page.content, textDoc("Keep this page"));
+    }
   }
 });
 
@@ -456,7 +567,13 @@ test("a saved publishing section stays as it was written", () => {
   const front = project.publishing.children.find((child) => child.id === "front");
   assert.equal(front?.kind, "folder");
   if (front?.kind === "folder") {
+    assert.equal(front.matter, "front");
     assert.deepEqual(front.children, []);
+  }
+  const back = project.publishing.children.find((child) => child.id === "back");
+  assert.equal(back?.kind, "folder");
+  if (back?.kind === "folder") {
+    assert.equal(back.matter, "back");
   }
   assert.deepEqual(project.dictionary, ["Castus"]);
   assert.equal(project.layout.font, "EB Garamond");
