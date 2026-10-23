@@ -36,6 +36,10 @@ There is no support. There is no warranty.
 
 I am not responsible if Manuscriptic shreds your next bestselling idea, or your lifetime opus. Keep your own copies of the work.
 
+## Licence
+
+[MIT](LICENSE).
+
 ## Building it
 
 See [INSTALL.md](INSTALL.md).
