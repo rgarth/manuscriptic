@@ -1,4 +1,3 @@
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -38,7 +37,7 @@ import { findNode, firstDocumentId, openFolders, setView, type ProjectFile } fro
 import { pickNovelSaveAs, pickNovelToOpen, pickScrivenerProject, resolveDirectory } from "./novelFile";
 import { projectFromScrivener, scrivenerTitle } from "./scrivener/import";
 import { fileExists, readBook, readHistory, readScrivener, writeBook } from "./storage";
-import { clearBookQuery, openBookWindow, tauriAvailable } from "./windows";
+import { clearBookQuery, openBookWindow } from "./windows";
 
 export type SaveState = "saved" | "dirty" | "saving" | "error";
 
@@ -192,14 +191,6 @@ export function useBookFile(showNotice: Notice) {
     }
     clearBookQuery();
     dropBook();
-    if (!tauriAvailable()) {
-      return;
-    }
-    try {
-      await getCurrentWebviewWindow().setTitle("Manuscriptic");
-    } catch (error: unknown) {
-      noticeRef.current(error, "Could not retitle the window.");
-    }
   }
 
   function openProject(next: ProjectFile) {
@@ -400,9 +391,6 @@ export function useBookFile(showNotice: Notice) {
         rememberDisk(created.files, created.history);
         showBook(created.project, currentPath, created.history);
         noteSaved();
-        if (tauriAvailable()) {
-          await getCurrentWebviewWindow().setTitle(created.title);
-        }
         return;
       }
       const path = await pickNovelSaveAs(directory, created.fileName, "Import Scrivener Project");

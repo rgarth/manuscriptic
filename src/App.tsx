@@ -31,6 +31,17 @@ export default function App() {
   const file = useBookFile(showNotice);
   const project = file.project;
   const selectedId = project?.view.selectedId ?? null;
+
+  useEffect(() => {
+    if (!tauriAvailable()) {
+      return;
+    }
+    const name = project?.title.trim() ?? "";
+    const title = name ? `Manuscriptic - ${name}` : "Manuscriptic";
+    void getCurrentWebviewWindow().setTitle(title).catch((error: unknown) => {
+      showNotice(error, "Could not retitle the window.");
+    });
+  }, [project?.title, showNotice]);
   const hadBook = useRef(false);
 
   useEffect(() => {
