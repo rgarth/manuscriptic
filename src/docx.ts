@@ -74,7 +74,7 @@ function paragraphXml(paragraph: CompileParagraph, doc: CompileDocument): string
 function runXml(run: CompileRun, doc: CompileDocument): string {
   switch (run.kind) {
     case "text":
-      return `<w:r>${runProperties(doc, run.marks)}<w:t xml:space="preserve">${escapeXml(run.text)}</w:t></w:r>`;
+      return `<w:r>${runProperties(doc, run.marks, run.font, run.points)}<w:t xml:space="preserve">${escapeXml(run.text)}</w:t></w:r>`;
     case "break":
       return `<w:r>${runProperties(doc, [])}<w:br/></w:r>`;
     case "page":
@@ -86,9 +86,9 @@ function runXml(run: CompileRun, doc: CompileDocument): string {
   }
 }
 
-function runProperties(doc: CompileDocument, marks: readonly Mark[]): string {
-  const font = escapeXml(doc.font);
-  const size = String(Math.round(doc.points * 2));
+function runProperties(doc: CompileDocument, marks: readonly Mark[], fontName?: string, points?: number): string {
+  const font = escapeXml(fontName || doc.font);
+  const size = String(Math.round((points && points > 0 ? points : doc.points) * 2));
   const extras = marks.map((mark) => markXml(mark)).join("");
   return `<w:rPr><w:rFonts w:ascii="${font}" w:hAnsi="${font}" w:cs="${font}"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/>${extras}</w:rPr>`;
 }

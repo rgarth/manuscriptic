@@ -32,6 +32,24 @@ test("the export lists the manuscript and then the publishing pages", () => {
   assert.equal(titles[titles.length - 1], "Back page");
 });
 
+test("only a manuscript folder can leave the numbering", () => {
+  const opening = documentNode("Opening", "scene");
+  const chapter = folderNode("Tide", [opening]);
+  const part = folderNode("The Sea", [chapter]);
+  const project = createNovelProject();
+  const book = { ...project, manuscript: { ...project.manuscript, children: [part] } };
+  const rows = compileRows(book);
+  function numbering(title: string): boolean | undefined {
+    return rows.find((row) => row.title === title)?.numbering;
+  }
+  assert.equal(numbering("Manuscript"), false);
+  assert.equal(numbering("The Sea"), true);
+  assert.equal(numbering("Tide"), true);
+  assert.equal(numbering("Opening"), false);
+  assert.equal(numbering("Front Matter"), false);
+  assert.equal(numbering("Synopsis"), false);
+});
+
 test("the compile list opens on the top headings", () => {
   const rows = compileRows(novel());
   const shown = shownCompileRows(rows, collapsedCompileFolders(rows)).map((row) => row.title);

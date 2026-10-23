@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { bookFromFiles, filesForBook } from "./bookArchive.ts";
-import { defaultCompilePreferences, type CompilePreferences } from "./bookCompile.ts";
+import { defaultCompilePreferences, defaultLevel, type CompilePreferences } from "./bookCompile.ts";
 import { buildCompile } from "./compileShape.ts";
 import { compileRows, initialCompileTicks, rememberCompile, toggleCompileRow } from "./compileTicks.ts";
 import { compiledFile, compileDocx } from "./docx.ts";
@@ -127,9 +127,9 @@ test("a saved book compiles the ticked pages in order", () => {
   book = setBookCompile(book, {
     ...book.compile,
     levels: [
-      { include: false, name: "", heading: "none" },
-      { include: true, name: "Chapter", heading: "number" },
-      { include: true, name: "Part", heading: "number" },
+      defaultLevel(false, ""),
+      { ...defaultLevel(true, "Chapter"), number: "arabic" },
+      { ...defaultLevel(true, "Part"), number: "arabic" },
     ],
     sceneBreak: "hash",
     titleOnly: [prologue.id],
@@ -143,8 +143,9 @@ test("a saved book compiles the ticked pages in order", () => {
   if (!loaded) {
     return;
   }
-  assert.equal(loaded.compile.levels[1]?.heading, "number");
-  assert.equal(loaded.compile.levels[2]?.heading, "number");
+  assert.equal(loaded.compile.levels[1]?.number, "arabic");
+  assert.equal(loaded.compile.levels[2]?.number, "arabic");
+  assert.equal(loaded.compile.levels[1]?.title, false);
   assert.deepEqual(loaded.compile.titleOnly, [prologue.id]);
   const included = initialCompileTicks(loaded);
   assert.equal(included.has(rowId(loaded, "Old Draft")), false);
@@ -265,6 +266,34 @@ test("an empty selection and a chapter with no scenes write nothing", () => {
     assert.deepEqual(file.missing, ["pen"]);
     assert.match(unzip(file.bytes).document, /Untitled Novel/);
   }
+});
+
+test("a heading keeps the font of each piece", () => {
+  const scene = documentNode("Opening", "scene", prose("Hello"));
+  const chapter = folderNode("Tide", [scene]);
+  let book = createNovelProject();
+  book = { ...book, manuscript: { ...book.manuscript, children: [chapter] } };
+  book = setBookCompile(book, {
+    ...book.compile,
+    levels: [
+      defaultLevel(false, ""),
+      {
+        ...defaultLevel(true, "Chapter", true),
+        number: "arabic",
+        join: "mark",
+        nameFont: "Courier",
+        namePoints: 18,
+        titleFont: "Palatino",
+        titlePoints: 14,
+      },
+    ],
+  });
+  const compiled = buildCompile(book, new Set([book.manuscript.id, chapter.id, scene.id]), submission(), 2026);
+  const document = unzip(compileDocx(compiled)).document;
+  assert.match(document, /Courier/);
+  assert.match(document, /Palatino/);
+  assert.match(document, /w:sz w:val="36"/);
+  assert.match(document, /w:sz w:val="28"/);
 });
 
 function submission(): CompilePreferences {

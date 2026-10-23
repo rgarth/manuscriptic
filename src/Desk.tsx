@@ -34,7 +34,6 @@ import {
   removeDictionaryWord,
   renameNode,
   renameProject,
-  setBookCompile,
   setDocumentContent,
   setPageLayout,
   setView,
@@ -210,18 +209,10 @@ export default function Desk({
         </span>
       </footer>
       {dialog === "compile" ? (
-        <ExportDialog
-          project={project}
-          onRemember={(next) => onProject(() => next)}
-          onClose={() => onDialog(null)}
-        />
+        <ExportDialog project={project} onClose={() => onDialog(null)} />
       ) : null}
       {dialog === "compile-settings" ? (
-        <CompileSettings
-          compile={project.compile}
-          onCompile={(compile) => onProject((current) => setBookCompile(current, compile))}
-          onClose={() => onDialog(null)}
-        />
+        <CompileSettings project={project} onProject={onProject} onClose={() => onDialog(null)} />
       ) : null}
       {dialog === "settings" ? (
         <Settings

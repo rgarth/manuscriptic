@@ -1,10 +1,13 @@
-import type {
-  CompileLevel,
-  CompilePreferences,
-  CompileSpacing,
-  LevelHeading,
-  PageNumbers,
-  SceneBreak,
+import {
+  defaultHeading,
+  defaultLevel,
+  type CompileHeading,
+  type CompileLevel,
+  type CompilePreferences,
+  type CompileSpacing,
+  type NumberStyle,
+  type PageNumbers,
+  type SceneBreak,
 } from "./bookCompile.ts";
 import { fillDocument, fillText, type CompileValues, type FillPart } from "./compileVars.ts";
 import type { Alignment } from "./pageLayout.ts";
@@ -18,7 +21,7 @@ import {
 import type { BinderNode, FolderNode, MatterPlace, ProjectFile } from "./model/project.ts";
 
 export type CompileRun =
-  | { kind: "text"; text: string; marks: Mark[] }
+  | { kind: "text"; text: string; marks: Mark[]; font?: string; points?: number }
   | { kind: "break" }
   | { kind: "page" };
 
@@ -114,21 +117,22 @@ type ScenePiece = { title: string; content: EditorDoc };
 
 type SectionHeading = {
   rank: number;
-  title: string;
-  name: string;
-  heading: LevelHeading;
+  folderTitle: string;
   titleOnly: boolean;
+  heading: CompileHeading;
 };
 
+type HeadingLine = { runs: CompileRun[] };
+
 type ManuscriptRun =
-  | { kind: "text"; scenes: ScenePiece[]; sceneTitles: boolean }
+  | { kind: "text"; scenes: ScenePiece[]; headings: boolean }
   | { kind: "section"; heading: SectionHeading; runs: ManuscriptRun[] };
 
 type Structure = {
   included: ReadonlySet<string>;
   titleOnly: ReadonlySet<string>;
   levels: readonly CompileLevel[];
-  sceneTitles: boolean;
+  scenes: CompileHeading;
 };
 
 function manuscriptParagraphs(
@@ -143,13 +147,15 @@ function manuscriptParagraphs(
     included,
     titleOnly: new Set(project.compile.titleOnly),
     levels: project.compile.levels,
-    sceneTitles: project.compile.sceneTitles,
+    scenes: project.compile.scenes,
   };
   const state: EmitState = {
     paragraphs: [],
     pageOpen: false,
     sceneOnPage: false,
     numbers: [],
+    sceneNumber: 0,
+    scenes: structure.scenes,
     missing,
     align,
     sceneBreak: project.compile.sceneBreak,
@@ -168,7 +174,7 @@ function walk(folder: FolderNode, structure: Structure): { runs: ManuscriptRun[]
     if (scenes.length === 0) {
       return;
     }
-    runs.push({ kind: "text", scenes, sceneTitles: structure.sceneTitles });
+    runs.push({ kind: "text", scenes, headings: true });
     scenes = [];
   }
   for (const child of folder.children) {
@@ -182,7 +188,7 @@ function walk(folder: FolderNode, structure: Structure): { runs: ManuscriptRun[]
           runs.push({
             kind: "section",
             heading: sectionHeading(child.id, child.title, 0, structure),
-            runs: [{ kind: "text", scenes: [{ title: child.title, content: child.content }], sceneTitles: false }],
+            runs: [{ kind: "text", scenes: [{ title: child.title, content: child.content }], headings: false }],
           });
         } else {
           scenes.push({ title: child.title, content: child.content });
@@ -221,20 +227,35 @@ function isSection(id: string, rank: number, structure: Structure): boolean {
 }
 
 function sectionHeading(id: string, title: string, rank: number, structure: Structure): SectionHeading {
-  const level = structure.levels[rank];
   return {
     rank,
-    title,
-    name: level?.name ?? "",
-    heading: level?.heading ?? "none",
+    folderTitle: title,
     titleOnly: structure.titleOnly.has(id),
+    heading: structure.levels[rank] ?? defaultLevel(false, ""),
   };
+}
+
+export function folderRanks(manuscript: FolderNode, included: ReadonlySet<string>): number[] {
+  const seen = walk(manuscript, {
+    included,
+    titleOnly: new Set(),
+    levels: [],
+    scenes: defaultHeading(),
+  });
+  const ranks: number[] = [];
+  for (let rank = seen.rank - 1; rank >= 1; rank -= 1) {
+    ranks.push(rank);
+  }
+  if (seen.runs.length > 0) {
+    ranks.push(0);
+  }
+  return ranks;
 }
 
 function absorb(runs: ManuscriptRun[], extra: ManuscriptRun[]) {
   for (const run of extra) {
     const last = runs[runs.length - 1];
-    if (run.kind === "text" && last?.kind === "text") {
+    if (run.kind === "text" && last?.kind === "text" && last.headings === run.headings) {
       last.scenes.push(...run.scenes);
       continue;
     }
@@ -247,6 +268,8 @@ type EmitState = {
   pageOpen: boolean;
   sceneOnPage: boolean;
   numbers: number[];
+  sceneNumber: number;
+  scenes: CompileHeading;
   missing: string[];
   align: Alignment;
   sceneBreak: SceneBreak;
@@ -299,82 +322,94 @@ function hasSection(runs: ManuscriptRun[]): boolean {
 }
 
 function openPage(headings: SectionHeading[], state: EmitState) {
-  const lines: string[] = [];
-  let drop = false;
-  for (const heading of headings) {
-    const mode = shownHeading(heading);
-    if (mode !== "none") {
-      drop = true;
-    }
-    const text = headingText(heading.name, mode, heading.title, takeNumber(heading.rank, mode, state.numbers));
-    if (text !== null) {
-      lines.push(text);
-    }
-  }
-  if (drop) {
-    for (let line = 0; line < dropLines; line += 1) {
-      state.paragraphs.push(blankParagraph());
-    }
-    const first = state.paragraphs[state.paragraphs.length - dropLines];
-    if (first) {
-      first.pageBreakBefore = true;
-    }
-    lines.forEach((line, index) => {
-      state.paragraphs.push(centered(line));
-      const blanks = index === lines.length - 1 ? linesAfterHeading : 1;
-      for (let extra = 0; extra < blanks; extra += 1) {
-        state.paragraphs.push(blankParagraph());
+  let continueOnPage = false;
+  headings.forEach((heading, index) => {
+    const style = heading.heading;
+    const lines = headingPieces(
+      style,
+      heading.folderTitle,
+      heading.titleOnly,
+      nextNumber(heading.rank, style.number, heading.titleOnly, state.numbers),
+    );
+    const startsPage = !continueOnPage || style.pageBefore;
+    if (startsPage) {
+      const classic = !style.pageBefore && !style.pageAfter && (lines.length > 0 || style.blankOpening);
+      if (classic) {
+        dropSpace(state);
+      } else {
+        state.pageOpen = false;
       }
-    });
-    state.pageOpen = true;
-  } else {
-    state.pageOpen = false;
-  }
+      continueOnPage = true;
+    }
+    emitHeading(lines, state, trailingBlanks(headings, index));
+    if (style.pageAfter) {
+      state.pageOpen = false;
+      continueOnPage = false;
+    }
+  });
+  state.sceneNumber = 0;
   state.sceneOnPage = false;
 }
 
-function shownHeading(heading: SectionHeading): LevelHeading {
-  switch (heading.heading) {
-    case "none":
-    case "written":
-      return heading.heading;
-    case "title":
-    case "number":
-    case "numberTitle":
-    case "word":
-      return heading.titleOnly ? "title" : heading.heading;
-    default: {
-      const unexpected: never = heading.heading;
-      return unexpected;
-    }
+function trailingBlanks(headings: SectionHeading[], index: number): number {
+  const heading = headings[index];
+  if (!heading || heading.heading.pageAfter) {
+    return 0;
   }
+  const next = headings[index + 1];
+  if (next && !next.heading.pageBefore) {
+    return 1;
+  }
+  return linesAfterHeading;
 }
 
-function takeNumber(rank: number, mode: LevelHeading, numbers: number[]): number | null {
-  switch (mode) {
-    case "none":
-    case "title":
-    case "written":
-      return null;
-    case "number":
-    case "numberTitle":
-    case "word": {
-      const next = (numbers[rank] ?? 0) + 1;
-      numbers[rank] = next;
-      return next;
-    }
-    default: {
-      const unexpected: never = mode;
-      return unexpected;
-    }
+function dropSpace(state: EmitState) {
+  for (let line = 0; line < dropLines; line += 1) {
+    state.paragraphs.push(blankParagraph());
   }
+  const first = state.paragraphs[state.paragraphs.length - dropLines];
+  if (first) {
+    first.pageBreakBefore = true;
+  }
+  state.pageOpen = true;
+}
+
+function emitHeading(lines: HeadingLine[], state: EmitState, trailing: number) {
+  lines.forEach((line, index) => {
+    const paragraph = headingParagraph(line);
+    if (!state.pageOpen) {
+      paragraph.pageBreakBefore = true;
+      state.pageOpen = true;
+    }
+    state.paragraphs.push(paragraph);
+    const blanks = index === lines.length - 1 ? trailing : 0;
+    for (let extra = 0; extra < blanks; extra += 1) {
+      state.paragraphs.push(blankParagraph());
+    }
+  });
+}
+
+function nextNumber(rank: number, style: NumberStyle, titleOnly: boolean, numbers: number[]): number | null {
+  if (style === "none" || titleOnly) {
+    return null;
+  }
+  const next = (numbers[rank] ?? 0) + 1;
+  numbers[rank] = next;
+  return next;
 }
 
 function writeScenes(run: Extract<ManuscriptRun, { kind: "text" }>, state: EmitState) {
   for (const scene of run.scenes) {
+    const lines = run.headings ? sceneLines(scene, state) : [];
     const blocks: CompileParagraph[] = [];
-    if (run.sceneTitles) {
-      blocks.push(centered(scene.title));
+    if (lines.length > 0) {
+      if (state.scenes.pageBefore) {
+        state.pageOpen = false;
+      }
+      emitHeading(lines, state, 0);
+      if (state.scenes.pageAfter) {
+        state.pageOpen = false;
+      }
     } else if (state.sceneOnPage) {
       blocks.push(sceneBreakParagraph(state.sceneBreak));
     }
@@ -385,7 +420,7 @@ function writeScenes(run: Extract<ManuscriptRun, { kind: "text" }>, state: EmitS
       blocks[0].pageBreakBefore = true;
       state.pageOpen = true;
     }
-    if (blocks.length > 0) {
+    if (blocks.length > 0 || lines.length > 0) {
       state.sceneOnPage = true;
     }
     state.chosen.hasDocument = true;
@@ -393,25 +428,103 @@ function writeScenes(run: Extract<ManuscriptRun, { kind: "text" }>, state: EmitS
   }
 }
 
-function headingText(name: string, mode: LevelHeading, title: string, number: number | null): string | null {
-  const label = name.trim();
-  switch (mode) {
+function sceneLines(scene: ScenePiece, state: EmitState): HeadingLine[] {
+  const style = state.scenes;
+  const number = style.number === "none" ? null : (state.sceneNumber += 1);
+  return headingPieces(style, scene.title, false, number);
+}
+
+function headingPieces(style: CompileHeading, folderTitle: string, titleOnly: boolean, number: number | null): HeadingLine[] {
+  const generated = style.title || style.number !== "none";
+  const showTitle = (style.title || (titleOnly && generated)) && folderTitle !== "";
+  const label = style.number !== "none" && !titleOnly ? numberLabel(style.name, style.number, number) : "";
+  const title = showTitle ? folderTitle : "";
+  if (!label && !title) {
+    return [];
+  }
+  if (!label) {
+    return [{ runs: [faced(title, style.titleFont, style.titlePoints)] }];
+  }
+  if (!title) {
+    return [{ runs: [faced(label, style.nameFont, style.namePoints)] }];
+  }
+  if (style.join === "line") {
+    return [
+      { runs: [faced(label, style.nameFont, style.namePoints)] },
+      { runs: [faced(title, style.titleFont, style.titlePoints)] },
+    ];
+  }
+  const mark = style.mark.length > 0 ? style.mark : " ";
+  return [
+    {
+      runs: [faced(`${label}${mark}`, style.nameFont, style.namePoints), faced(title, style.titleFont, style.titlePoints)],
+    },
+  ];
+}
+
+function numberLabel(name: string, style: NumberStyle, number: number | null): string {
+  if (number === null) {
+    return "";
+  }
+  return joinLabel(name.trim(), renderNumber(style, number));
+}
+
+function renderNumber(style: NumberStyle, number: number): string {
+  switch (style) {
     case "none":
-    case "written":
-      return null;
-    case "title":
-      return title;
-    case "number":
-      return number === null ? title : joinLabel(label, String(number));
-    case "numberTitle":
-      return number === null ? title : `${joinLabel(label, String(number))}: ${title}`;
+      return "";
+    case "arabic":
+      return String(number);
     case "word":
-      return number === null ? title : joinLabel(label, numberName(number));
+      return numberName(number);
+    case "roman":
+      return roman(number);
     default: {
-      const unexpected: never = mode;
+      const unexpected: never = style;
       return unexpected;
     }
   }
+}
+
+function roman(value: number): string {
+  const pairs: [number, string][] = [
+    [1000, "m"],
+    [900, "cm"],
+    [500, "d"],
+    [400, "cd"],
+    [100, "c"],
+    [90, "xc"],
+    [50, "l"],
+    [40, "xl"],
+    [10, "x"],
+    [9, "ix"],
+    [5, "v"],
+    [4, "iv"],
+    [1, "i"],
+  ];
+  let rest = value;
+  let text = "";
+  for (const [amount, glyph] of pairs) {
+    while (rest >= amount) {
+      text += glyph;
+      rest -= amount;
+    }
+  }
+  return text || String(value);
+}
+
+function faced(text: string, font: string, points: number): CompileRun {
+  return {
+    kind: "text",
+    text,
+    marks: [],
+    ...(font ? { font } : {}),
+    ...(points > 0 ? { points } : {}),
+  };
+}
+
+function headingParagraph(line: HeadingLine): CompileParagraph {
+  return { runs: line.runs, align: "center", indent: false, pageBreakBefore: false };
 }
 
 function joinLabel(label: string, value: string): string {

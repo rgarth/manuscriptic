@@ -1,25 +1,28 @@
 import { useState } from "react";
 import {
-  chapterHeadings,
   defaultCompileIdentity,
+  levelAt,
   sceneBreaks,
+  withLevel,
   type BookCompile,
-  type ChapterHeading,
   type CompileFormat,
+  type CompileHeading,
   type CompileIdentity,
-  type CompileLevel,
   type CompileSpacing,
-  type LevelHeading,
+  type HeadingJoin,
+  type NumberStyle,
   type PageNumbers,
   type SceneBreak,
 } from "./bookCompile.ts";
+import BookContents from "./BookContents.tsx";
+import { folderRanks } from "./compileShape.ts";
+import { initialCompileTicks } from "./compileTicks.ts";
 import { readCompileIdentity, writeCompileIdentity } from "./compilePrefs.ts";
 import { failureMessage, reportFailure } from "./failures.ts";
+import { setBookCompile, type FolderNode, type ProjectFile } from "./model/project.ts";
 import { alignments } from "./pageLayout.ts";
 
-type CompilePane = "author" | "structure" | "formatting";
-
-const writtenChoice = "Already written";
+type CompilePane = "author" | "structure" | "contents" | "formatting";
 
 const breakChoice: Record<SceneBreak, string> = {
   hash: "#",
@@ -39,9 +42,24 @@ const numberChoice: Record<PageNumbers, string> = {
   footer: "Footer",
 };
 
+const numberOptions: { id: NumberStyle; label: string }[] = [
+  { id: "none", label: "None" },
+  { id: "arabic", label: "1" },
+  { id: "word", label: "One" },
+  { id: "roman", label: "i" },
+];
+
+const joinOptions: { id: HeadingJoin; label: string }[] = [
+  { id: "line", label: "New line" },
+  { id: "mark", label: "Character" },
+];
+
+const depthNames = ["Top level", "Second level", "Third level", "Fourth level", "Fifth level"];
+
 const panes: { id: CompilePane; label: string }[] = [
   { id: "author", label: "Author" },
   { id: "structure", label: "Structure" },
+  { id: "contents", label: "Contents" },
   { id: "formatting", label: "Formatting" },
 ];
 
@@ -79,14 +97,17 @@ export function AppAuthorSettings() {
 }
 
 export default function CompileSettings({
-  compile,
-  onCompile,
+  project,
+  onProject,
   onClose,
 }: {
-  compile: BookCompile;
-  onCompile: (compile: BookCompile) => void;
+  project: ProjectFile;
+  onProject: (update: (project: ProjectFile) => ProjectFile) => void;
   onClose: () => void;
 }) {
+  function onCompile(next: BookCompile) {
+    onProject((current) => setBookCompile(current, next));
+  }
   const [pane, setPane] = useState<CompilePane>("author");
   const [appAuthor] = useState<CompileIdentity>(() => {
     try {
@@ -119,7 +140,9 @@ export default function CompileSettings({
               </button>
             ))}
           </nav>
-          <section className="settings-pane">{compilerPane(pane, compile, appAuthor, onCompile)}</section>
+          <section className={pane === "structure" ? "settings-pane structure-pane" : "settings-pane"}>
+            {compilerPane(pane, project, appAuthor, onCompile, onProject)}
+          </section>
         </div>
       </div>
     </div>
@@ -128,20 +151,30 @@ export default function CompileSettings({
 
 function compilerPane(
   pane: CompilePane,
-  compile: BookCompile,
+  project: ProjectFile,
   appAuthor: CompileIdentity,
   onCompile: (compile: BookCompile) => void,
+  onProject: (update: (project: ProjectFile) => ProjectFile) => void,
 ) {
   switch (pane) {
     case "author":
-      return <AuthorOverride compile={compile} appAuthor={appAuthor} onCompile={onCompile} />;
+      return <AuthorOverride compile={project.compile} appAuthor={appAuthor} onCompile={onCompile} />;
     case "structure":
-      return <BookStructure compile={compile} onCompile={onCompile} />;
+      return (
+        <BookStructure
+          compile={project.compile}
+          manuscript={project.manuscript}
+          included={initialCompileTicks(project)}
+          onCompile={onCompile}
+        />
+      );
+    case "contents":
+      return <BookContents project={project} onProject={onProject} />;
     case "formatting":
       return (
         <FormattingSettings
-          format={compile.format}
-          onChange={(format) => onCompile({ ...compile, format: { ...compile.format, ...format } })}
+          format={project.compile.format}
+          onChange={(format) => onCompile({ ...project.compile, format: { ...project.compile.format, ...format } })}
         />
       );
     default: {
@@ -298,112 +331,290 @@ function FormattingSettings({
 
 function BookStructure({
   compile,
+  manuscript,
+  included,
+  onCompile,
+}: {
+  compile: BookCompile;
+  manuscript: FolderNode;
+  included: ReadonlySet<string>;
+  onCompile: (compile: BookCompile) => void;
+}) {
+  const ranks = folderRanks(manuscript, included);
+  const [selected, setSelected] = useState<number | "scenes">(ranks[0] ?? "scenes");
+  const shown = selected === "scenes" || ranks.includes(selected) ? selected : (ranks[0] ?? "scenes");
+  const place = typeof shown === "number" ? ranks.indexOf(shown) : -1;
+  const level = typeof shown === "number" ? levelAt(compile, shown) : null;
+  const label = level && typeof shown === "number" ? levelLabel(level, place, shown) : "Scenes";
+  return (
+    <div className="structure-body">
+      <nav className="settings-nav structure-nav" aria-label="Manuscript structure">
+        {ranks.map((rank, index) => {
+          const entry = levelAt(compile, rank);
+          const name = levelLabel(entry, index, rank);
+          return (
+            <button
+              key={rank}
+              type="button"
+              aria-current={shown === rank ? "page" : undefined}
+              onClick={() => setSelected(rank)}
+            >
+              {name}
+            </button>
+          );
+        })}
+        <button type="button" aria-current={shown === "scenes" ? "page" : undefined} onClick={() => setSelected("scenes")}>
+          Scenes
+        </button>
+      </nav>
+      <div className="structure-detail">
+        <h3>{label}</h3>
+        {level && typeof shown === "number" ? (
+          <LevelCard
+            label={label}
+            hint={nameHint(shown)}
+            titleLabel={shown === 0 ? "Include the page title" : "Include the folder title"}
+            level={level}
+            onChange={(next) => onCompile(withLevel(compile, shown, next))}
+          />
+        ) : (
+          <SceneCard compile={compile} onCompile={onCompile} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function levelLabel(level: BookCompile["levels"][number], place: number, rank: number): string {
+  const name = level.name.trim();
+  if (name) {
+    return name;
+  }
+  if (rank === 0) {
+    return "Pages";
+  }
+  return depthNames[place] ?? nameHint(rank);
+}
+
+function LevelCard({
+  label,
+  hint,
+  titleLabel,
+  level,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  titleLabel: string;
+  level: BookCompile["levels"][number];
+  onChange: (level: BookCompile["levels"][number]) => void;
+}) {
+  return (
+    <div className="structure-level">
+      <label className="preference">
+        <input
+          type="checkbox"
+          aria-label={`Include ${label}`}
+          checked={level.include}
+          onChange={(event) => onChange({ ...level, include: event.currentTarget.checked })}
+        />
+        Include
+      </label>
+      <HeadingFields
+        scope={label}
+        heading={level}
+        hint={hint}
+        titleLabel={titleLabel}
+        disabled={!level.include}
+        pagesDisabled={!level.include}
+        onChange={(patch) => onChange({ ...level, ...patch })}
+      />
+    </div>
+  );
+}
+
+function SceneCard({
+  compile,
   onCompile,
 }: {
   compile: BookCompile;
   onCompile: (compile: BookCompile) => void;
 }) {
-  function changeLevel(index: number, patch: Partial<CompileLevel>) {
-    onCompile({
-      ...compile,
-      levels: compile.levels.map((level, levelIndex) => (levelIndex === index ? { ...level, ...patch } : level)),
-    });
-  }
+  const scenes = compile.scenes;
+  return (
+    <div className="structure-level">
+      <HeadingFields
+        scope="Scenes"
+        heading={scenes}
+        hint="Scene"
+        titleLabel="Include the scene title"
+        disabled={false}
+        pagesDisabled={!scenes.title && scenes.number === "none"}
+        onChange={(patch) => onCompile({ ...compile, scenes: { ...scenes, ...patch } })}
+      />
+      <div className="structure-span">
+        <Choice
+          label="Separator"
+          value={compile.sceneBreak}
+          options={sceneBreaks.map((id) => ({ id, label: breakChoice[id] }))}
+          onChange={(sceneBreak) => onCompile({ ...compile, sceneBreak })}
+        />
+      </div>
+    </div>
+  );
+}
 
+function HeadingFields({
+  scope,
+  heading,
+  hint,
+  titleLabel,
+  disabled,
+  pagesDisabled,
+  onChange,
+}: {
+  scope: string;
+  heading: CompileHeading;
+  hint: string;
+  titleLabel: string;
+  disabled: boolean;
+  pagesDisabled: boolean;
+  onChange: (patch: Partial<CompileHeading>) => void;
+}) {
+  const numbered = heading.number !== "none";
+  const both = heading.title && numbered;
   return (
     <>
-      <h3>Structure</h3>
-      <p className="settings-value">
-        Tick a level to include it and choose its heading. An unticked level stays binder organization.
-      </p>
-      {compile.levels.map((level, index) => (
-        <div className="structure-level" key={index}>
-          <span className="setting-label">{levelLabel(index)}</span>
-          <label className="preference">
-            <input
-              type="checkbox"
-              aria-label={`Include ${levelLabel(index)}`}
-              checked={level.include}
-              onChange={(event) => changeLevel(index, { include: event.currentTarget.checked })}
-            />
-            Include
-          </label>
-          <Field
-            label="Name"
-            ariaLabel={`${levelLabel(index)} name`}
-            value={level.name}
-            placeholder="Chapter"
-            disabled={!level.include}
-            onChange={(name) => changeLevel(index, { name })}
-          />
-          <Choice
-            label="Heading"
-            ariaLabel={`${levelLabel(index)} heading`}
-            value={level.heading}
-            disabled={!level.include}
-            options={headingOptions(level.name)}
-            onChange={(heading) => changeLevel(index, { heading })}
-            menu
-          />
-          {index > 0 && index === compile.levels.length - 1 ? (
-            <button type="button" onClick={() => onCompile({ ...compile, levels: compile.levels.slice(0, -1) })}>
-              Remove
-            </button>
-          ) : null}
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() =>
-          onCompile({
-            ...compile,
-            levels: [...compile.levels, { include: false, name: "", heading: "title" }],
-          })
-        }
-      >
-        Add a folder level
-      </button>
+      <div className="structure-span">
+        <Field
+          label="Name"
+          ariaLabel={`${scope} name`}
+          value={heading.name}
+          placeholder={hint}
+          disabled={disabled}
+          onChange={(name) => onChange({ name })}
+        />
+      </div>
       <label className="preference">
         <input
           type="checkbox"
-          checked={compile.sceneTitles}
-          onChange={(event) => onCompile({ ...compile, sceneTitles: event.currentTarget.checked })}
+          aria-label={titleLabel}
+          checked={heading.title}
+          disabled={disabled}
+          onChange={(event) => onChange({ title: event.currentTarget.checked })}
         />
-        Include scene titles
+        {titleLabel}
       </label>
-      <Choice
-        label="Scene break"
-        value={compile.sceneBreak}
-        options={sceneBreaks.map((id) => ({ id, label: breakChoice[id] }))}
-        onChange={(sceneBreak) => onCompile({ ...compile, sceneBreak })}
+      <div className="structure-span">
+        <Choice
+          label="Number"
+          ariaLabel={`${scope} number`}
+          value={heading.number}
+          disabled={disabled}
+          options={numberOptions}
+          onChange={(number) => onChange({ number })}
+        />
+      </div>
+      <div className="structure-span">
+        <Choice
+          label="Between the number and the title"
+          ariaLabel={`${scope} break`}
+          value={heading.join}
+          disabled={disabled || !both}
+          options={joinOptions}
+          onChange={(join) => onChange({ join })}
+        />
+      </div>
+      {both && heading.join === "mark" ? (
+        <div className="structure-span">
+          <Field
+            label="Character"
+            ariaLabel={`${scope} character`}
+            value={heading.mark}
+            placeholder=": "
+            onChange={(mark) => onChange({ mark })}
+          />
+        </div>
+      ) : null}
+      <Field
+        label="Heading font"
+        ariaLabel={`${scope} heading font`}
+        value={heading.nameFont}
+        placeholder="Manuscript font"
+        disabled={disabled || !numbered}
+        onChange={(nameFont) => onChange({ nameFont })}
       />
+      <Field
+        label="Heading size"
+        ariaLabel={`${scope} heading size`}
+        value={heading.namePoints > 0 ? String(heading.namePoints) : ""}
+        placeholder="Manuscript size"
+        disabled={disabled || !numbered}
+        onChange={(value) => onChange({ namePoints: pointSize(value) })}
+      />
+      <Field
+        label="Title font"
+        ariaLabel={`${scope} title font`}
+        value={heading.titleFont}
+        placeholder="Manuscript font"
+        disabled={disabled || !heading.title}
+        onChange={(titleFont) => onChange({ titleFont })}
+      />
+      <Field
+        label="Title size"
+        ariaLabel={`${scope} title size`}
+        value={heading.titlePoints > 0 ? String(heading.titlePoints) : ""}
+        placeholder="Manuscript size"
+        disabled={disabled || !heading.title}
+        onChange={(value) => onChange({ titlePoints: pointSize(value) })}
+      />
+      <div className="structure-span structure-ticks">
+        <label className="preference">
+          <input
+            type="checkbox"
+            aria-label={`${scope} new page before`}
+            checked={heading.pageBefore}
+            disabled={pagesDisabled}
+            onChange={(event) => onChange({ pageBefore: event.currentTarget.checked })}
+          />
+          New page before
+        </label>
+        <label className="preference">
+          <input
+            type="checkbox"
+            aria-label={`${scope} new page after`}
+            checked={heading.pageAfter}
+            disabled={pagesDisabled}
+            onChange={(event) => onChange({ pageAfter: event.currentTarget.checked })}
+          />
+          New page after
+        </label>
+      </div>
     </>
   );
 }
 
-function levelLabel(index: number): string {
-  if (index === 0) {
-    return "Pages";
+function nameHint(rank: number): string {
+  switch (rank) {
+    case 0:
+      return "Pages";
+    case 1:
+      return "Chapter";
+    case 2:
+      return "Part";
+    case 3:
+      return "Volume";
+    default:
+      return "Name";
   }
-  if (index === 1) {
-    return "Folder level 1";
-  }
-  return `Folder level ${index}`;
 }
 
-function headingOptions(name: string): { id: LevelHeading; label: string }[] {
-  const label = name.trim() || "Heading";
-  const styles: Record<ChapterHeading, string> = {
-    title: "Title only",
-    number: `${label} 1`,
-    numberTitle: `${label} 1: Title`,
-    word: `${label} One`,
-    written: writtenChoice,
-  };
-  return [
-    { id: "none", label: "No heading" },
-    ...chapterHeadings.map((id) => ({ id, label: styles[id] })),
-  ];
+function pointSize(value: string): number {
+  if (value.trim() === "") {
+    return 0;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function MarginFields({

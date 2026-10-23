@@ -5,13 +5,14 @@ export type CompileRow = {
   title: string;
   depth: number;
   kind: "folder" | "document";
+  numbering: boolean;
 };
 
 export function compileRows(project: ProjectFile): CompileRow[] {
   const rows: CompileRow[] = [];
-  appendRow(project.manuscript, 0, rows);
+  appendRow(project.manuscript, 0, rows, false, true);
   for (const child of project.publishing.children) {
-    appendRow(child, 0, rows);
+    appendRow(child, 0, rows, false, false);
   }
   return rows;
 }
@@ -79,11 +80,23 @@ export function rememberCompile(project: ProjectFile, included: ReadonlySet<stri
   return { ...project, manuscript, publishing };
 }
 
-function appendRow(node: BinderNode, depth: number, rows: CompileRow[]) {
-  rows.push({ id: node.id, title: node.title, depth, kind: node.kind });
+function appendRow(
+  node: BinderNode,
+  depth: number,
+  rows: CompileRow[],
+  numbering: boolean,
+  childNumbering: boolean,
+) {
+  rows.push({
+    id: node.id,
+    title: node.title,
+    depth,
+    kind: node.kind,
+    numbering: numbering && node.kind === "folder",
+  });
   if (node.kind === "folder") {
     for (const child of node.children) {
-      appendRow(child, depth + 1, rows);
+      appendRow(child, depth + 1, rows, childNumbering, childNumbering);
     }
   }
 }

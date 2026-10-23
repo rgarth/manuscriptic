@@ -44,14 +44,94 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.dialog.settings .structure-level {
-  grid-template-columns: auto minmax(6rem, 1fr) minmax(8rem, 1.3fr) auto;
-  gap: 8px 12px;
-  align-items: end;
-  margin: 0 0 10px;
-  padding: 10px 12px;
+.dialog.settings .structure-pane {
+  display: flex;
+  padding: 0;
+  overflow: hidden;
+}
+
+.dialog.settings .structure-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.dialog.settings .structure-nav {
+  width: 9.5rem;
+  border-right: 1px solid color-mix(in srgb, var(--ink) 10%, var(--rule));
   background: color-mix(in srgb, var(--wash) 55%, var(--paper));
-  border-radius: 8px;
+}
+
+.dialog.settings .structure-detail {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 14px 16px;
+}
+
+.dialog.settings .structure-level {
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+  align-items: end;
+  margin: 0;
+  padding: 0;
+  background: none;
+}
+
+.dialog.settings .structure-level > .preference,
+.dialog.settings .structure-level > .structure-span {
+  grid-column: 1 / -1;
+}
+
+.dialog.settings .contents-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dialog.settings .contents-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dialog.settings .contents-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.dialog.settings .contents-row label span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog.settings .contents-row select {
+  flex: none;
+  width: auto;
+}
+
+.dialog.settings .contents-row .disclosure {
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.dialog.settings .contents-row .disclosure:hover:not(:disabled) {
+  background: var(--wash);
+}
+
+.dialog.settings .structure-ticks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
 }
 
 .dialog.settings .structure-level > .setting-label {

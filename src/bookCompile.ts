@@ -1,16 +1,72 @@
 import { alignmentById, alignments, type Alignment } from "./pageLayout.ts";
 
-export const chapterHeadings = ["title", "number", "numberTitle", "word", "written"] as const;
-export type ChapterHeading = (typeof chapterHeadings)[number];
+export const numberStyles = ["none", "arabic", "word", "roman"] as const;
+export type NumberStyle = (typeof numberStyles)[number];
 
-export const levelHeadings = ["none", ...chapterHeadings] as const;
-export type LevelHeading = (typeof levelHeadings)[number];
+export const headingJoins = ["line", "mark"] as const;
+export type HeadingJoin = (typeof headingJoins)[number];
 
-export type CompileLevel = {
-  include: boolean;
+export type CompileHeading = {
   name: string;
-  heading: LevelHeading;
+  title: boolean;
+  number: NumberStyle;
+  join: HeadingJoin;
+  mark: string;
+  nameFont: string;
+  namePoints: number;
+  titleFont: string;
+  titlePoints: number;
+  pageBefore: boolean;
+  pageAfter: boolean;
+  blankOpening: boolean;
 };
+
+export type CompileLevel = CompileHeading & {
+  include: boolean;
+};
+
+export function defaultHeading(name = ""): CompileHeading {
+  return {
+    name,
+    title: false,
+    number: "none",
+    join: "line",
+    mark: ": ",
+    nameFont: "",
+    namePoints: 0,
+    titleFont: "",
+    titlePoints: 0,
+    pageBefore: false,
+    pageAfter: false,
+    blankOpening: false,
+  };
+}
+
+export function defaultLevel(include: boolean, name: string, title = false): CompileLevel {
+  return { ...defaultHeading(name), title, include };
+}
+
+export function levelAt(compile: BookCompile, rank: number): CompileLevel {
+  return compile.levels[rank] ?? defaultLevel(false, "");
+}
+
+export function withTitleOnly(compile: BookCompile, id: string, unnumbered: boolean): BookCompile {
+  const has = compile.titleOnly.includes(id);
+  if (has === unnumbered) {
+    return compile;
+  }
+  const titleOnly = unnumbered ? [...compile.titleOnly, id] : compile.titleOnly.filter((item) => item !== id);
+  return { ...compile, titleOnly };
+}
+
+export function withLevel(compile: BookCompile, rank: number, level: CompileLevel): BookCompile {
+  const levels = compile.levels.slice();
+  while (levels.length <= rank) {
+    levels.push(defaultLevel(false, ""));
+  }
+  levels[rank] = level;
+  return { ...compile, levels };
+}
 
 export const sceneBreaks = ["hash", "stars", "blank"] as const;
 export type SceneBreak = (typeof sceneBreaks)[number];
@@ -47,7 +103,7 @@ export type CompilePreferences = CompileIdentity & CompileFormat;
 
 export type BookCompile = {
   levels: CompileLevel[];
-  sceneTitles: boolean;
+  scenes: CompileHeading;
   sceneBreak: SceneBreak;
   titleOnly: string[];
   useAppAuthor: boolean;
@@ -83,11 +139,8 @@ export function defaultCompilePreferences(): CompilePreferences {
 
 export function defaultBookCompile(): BookCompile {
   return bookCompile({
-    levels: [
-      { include: false, name: "", heading: "none" },
-      { include: true, name: "Chapter", heading: "title" },
-    ],
-    sceneTitles: false,
+    levels: [defaultLevel(false, ""), defaultLevel(true, "Chapter", true)],
+    scenes: defaultHeading(),
     sceneBreak: "hash",
     titleOnly: [],
     useAppAuthor: true,
@@ -144,14 +197,11 @@ export function compileFormat(value: unknown): CompileFormat {
 }
 
 export function bookCompile(value: unknown): BookCompile {
-  const fallbackLevels: CompileLevel[] = [
-    { include: false, name: "", heading: "none" },
-    { include: true, name: "Chapter", heading: "title" },
-  ];
+  const fallbackLevels = [defaultLevel(false, ""), defaultLevel(true, "Chapter", true)];
   if (!isRecord(value)) {
     return {
       levels: fallbackLevels,
-      sceneTitles: false,
+      scenes: defaultHeading(),
       sceneBreak: "hash",
       titleOnly: [],
       useAppAuthor: true,
@@ -162,7 +212,7 @@ export function bookCompile(value: unknown): BookCompile {
   const levels = Array.isArray(value.levels) ? parseLevels(value.levels) ?? fallbackLevels : fallbackLevels;
   return {
     levels,
-    sceneTitles: value.sceneTitles === true,
+    scenes: parseScenes(value),
     sceneBreak: sceneBreak(value.sceneBreak),
     titleOnly: Array.isArray(value.titleOnly) ? value.titleOnly.filter((id): id is string => typeof id === "string") : [],
     useAppAuthor: value.useAppAuthor !== false,
@@ -183,33 +233,90 @@ function parseLevels(value: unknown[]): CompileLevel[] | null {
   return levels;
 }
 
+function parseScenes(value: Record<string, unknown>): CompileHeading {
+  if (isRecord(value.scenes)) {
+    return parseHeading(value.scenes, text(value.scenes.name));
+  }
+  return { ...defaultHeading(), title: value.sceneTitles === true };
+}
+
 function parseLevel(value: unknown): CompileLevel | null {
   if (!isRecord(value)) {
     return null;
   }
-  const heading = levelHeading(value.heading);
-  if (!heading) {
+  const name = text(value.name);
+  const include = value.include === true;
+  if (isCurrentLevel(value)) {
+    return { ...parseHeading(value, name), include };
+  }
+  const legacy = legacyHeading(value.heading);
+  if (!legacy) {
     return null;
   }
+  return { ...legacy, name, include };
+}
+
+function isCurrentLevel(value: Record<string, unknown>): boolean {
+  return typeof value.title === "boolean" || isNumberStyle(value.number) || typeof value.pageBefore === "boolean";
+}
+
+function parseHeading(value: Record<string, unknown>, name: string): CompileHeading {
+  const heading = defaultHeading(name);
   return {
-    include: value.include === true,
-    name: typeof value.name === "string" ? value.name : "",
-    heading,
+    ...heading,
+    name,
+    title: value.title === true,
+    number: numberStyle(value.number),
+    join: value.join === "mark" ? "mark" : "line",
+    mark: typeof value.mark === "string" ? value.mark : heading.mark,
+    nameFont: text(value.nameFont),
+    namePoints: headingPoints(value.namePoints),
+    titleFont: text(value.titleFont),
+    titlePoints: headingPoints(value.titlePoints),
+    pageBefore: value.pageBefore === true,
+    pageAfter: value.pageAfter === true,
+    blankOpening: value.blankOpening === true,
   };
 }
 
-function levelHeading(value: unknown): LevelHeading | null {
+function legacyHeading(value: unknown): CompileHeading | null {
+  const heading = defaultHeading();
   switch (value) {
     case "none":
-    case "title":
-    case "number":
-    case "numberTitle":
-    case "word":
+      return heading;
     case "written":
-      return value;
+      return { ...heading, blankOpening: true };
+    case "title":
+      return { ...heading, title: true };
+    case "number":
+      return { ...heading, number: "arabic" };
+    case "numberTitle":
+      return { ...heading, title: true, number: "arabic", join: "mark" };
+    case "word":
+      return { ...heading, number: "word" };
     default:
       return null;
   }
+}
+
+function numberStyle(value: unknown): NumberStyle {
+  switch (value) {
+    case "none":
+    case "arabic":
+    case "word":
+    case "roman":
+      return value;
+    default:
+      return "none";
+  }
+}
+
+function isNumberStyle(value: unknown): value is NumberStyle {
+  return numberStyle(value) === value;
+}
+
+function headingPoints(value: unknown): number {
+  return clamp(numberValue(value), 0, 144, 0);
 }
 
 function sceneBreak(value: unknown): SceneBreak {
