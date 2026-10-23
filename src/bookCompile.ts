@@ -139,7 +139,7 @@ export function defaultCompilePreferences(): CompilePreferences {
 
 export function defaultBookCompile(): BookCompile {
   return bookCompile({
-    levels: [defaultLevel(false, ""), defaultLevel(true, "Chapter", true)],
+    levels: [defaultLevel(false, ""), defaultLevel(true, "", true)],
     scenes: defaultHeading(),
     sceneBreak: "hash",
     titleOnly: [],
@@ -197,7 +197,7 @@ export function compileFormat(value: unknown): CompileFormat {
 }
 
 export function bookCompile(value: unknown): BookCompile {
-  const fallbackLevels = [defaultLevel(false, ""), defaultLevel(true, "Chapter", true)];
+  const fallbackLevels = [defaultLevel(false, ""), defaultLevel(true, "", true)];
   if (!isRecord(value)) {
     return {
       levels: fallbackLevels,

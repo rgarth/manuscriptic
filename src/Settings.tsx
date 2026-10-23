@@ -21,20 +21,13 @@ import { applyTheme, onTheme, readTheme, readThemes } from "./themes";
 import { AppAuthorSettings } from "./CompileSettings";
 import "./settings.css";
 
-type SettingsSection = "files" | "appearance" | "writing" | "author" | "dictionary";
-
-type DictionarySettings = {
-  words: string[];
-  onAddWord: (word: string) => void;
-  onRemoveWord: (word: string) => void;
-};
+type SettingsSection = "files" | "appearance" | "writing" | "author";
 
 type SettingsProps = {
-  dictionary: DictionarySettings | null;
   onClose: () => void;
 };
 
-export default function Settings({ dictionary, onClose }: SettingsProps) {
+export default function Settings({ onClose }: SettingsProps) {
   const themes = readThemes();
   const stored = readFilePreferences(localStorage);
   const [section, setSection] = useState<SettingsSection>("files");
@@ -44,9 +37,7 @@ export default function Settings({ dictionary, onClose }: SettingsProps) {
   const typewriter = useSyncExternalStore(subscribeEditorPrefs, readTypewriter, readTypewriter);
   const indent = useSyncExternalStore(subscribeEditorPrefs, readIndent, readIndent);
   const spacing = useSyncExternalStore(subscribeEditorPrefs, readSpacing, readSpacing);
-  const [draft, setDraft] = useState("");
   const [folderError, setFolderError] = useState<string | null>(null);
-  const shown: SettingsSection = section === "dictionary" && dictionary === null ? "files" : section;
 
   function savePreference(write: () => void): boolean {
     try {
@@ -82,7 +73,7 @@ export default function Settings({ dictionary, onClose }: SettingsProps) {
   useEffect(() => onTheme(setTheme), []);
 
   let pane: ReactNode;
-  switch (shown) {
+  switch (section) {
     case "files":
       pane = (
         <>
@@ -198,42 +189,8 @@ export default function Settings({ dictionary, onClose }: SettingsProps) {
     case "author":
       pane = <AppAuthorSettings />;
       break;
-    case "dictionary":
-      pane = dictionary ? (
-        <>
-          <h3>Custom word list</h3>
-          {dictionary.words.length > 0 ? (
-            <ul className="word-list">
-              {dictionary.words.map((word) => (
-                <li key={word.toLocaleLowerCase()}>
-                  <span>{word}</span>
-                  <button type="button" onClick={() => dictionary.onRemoveWord(word)}>
-                    Remove
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <form
-            className="row"
-            onSubmit={(event) => {
-              event.preventDefault();
-              dictionary.onAddWord(draft);
-              setDraft("");
-            }}
-          >
-            <input
-              aria-label="Add a word"
-              value={draft}
-              onChange={(event) => setDraft(event.currentTarget.value)}
-            />
-            <button type="submit">Add</button>
-          </form>
-        </>
-      ) : null;
-      break;
     default: {
-      const unexpected: never = shown;
+      const unexpected: never = section;
       pane = unexpected;
     }
   }
@@ -249,11 +206,11 @@ export default function Settings({ dictionary, onClose }: SettingsProps) {
         </header>
         <div className="settings-body">
           <nav className="settings-nav" aria-label="Settings sections">
-            {navSections(dictionary !== null).map((item) => (
+            {navSections.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                aria-current={item.id === shown ? "page" : undefined}
+                aria-current={item.id === section ? "page" : undefined}
                 onClick={() => setSection(item.id)}
               >
                 {item.label}
@@ -267,18 +224,12 @@ export default function Settings({ dictionary, onClose }: SettingsProps) {
   );
 }
 
-function navSections(book: boolean): { id: SettingsSection; label: string }[] {
-  const sections: { id: SettingsSection; label: string }[] = [
-    { id: "files", label: "Files" },
-    { id: "appearance", label: "Application Theme" },
-    { id: "writing", label: "Writing" },
-    { id: "author", label: "Author" },
-  ];
-  if (book) {
-    sections.push({ id: "dictionary", label: "Dictionary" });
-  }
-  return sections;
-}
+const navSections: { id: SettingsSection; label: string }[] = [
+  { id: "files", label: "Files" },
+  { id: "appearance", label: "Application Theme" },
+  { id: "writing", label: "Writing" },
+  { id: "author", label: "Author" },
+];
 
 function readTypewriter(): boolean {
   return getEditorPrefs().typewriter;

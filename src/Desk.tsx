@@ -42,7 +42,7 @@ import {
 import { publishingHint } from "./publishingPages";
 import type { SaveState } from "./useBookFile";
 
-export type DeskDialog = "settings" | "snapshots" | "compile" | "compile-settings";
+export type DeskDialog = "settings" | "snapshots" | "compile" | "book-settings";
 
 type DeskProps = {
   project: ProjectFile;
@@ -211,15 +211,10 @@ export default function Desk({
       {dialog === "compile" ? (
         <ExportDialog project={project} onClose={() => onDialog(null)} />
       ) : null}
-      {dialog === "compile-settings" ? (
+      {dialog === "book-settings" ? (
         <CompileSettings project={project} onProject={onProject} onClose={() => onDialog(null)} />
       ) : null}
-      {dialog === "settings" ? (
-        <Settings
-          dictionary={{ words: project.dictionary, onAddWord: addWord, onRemoveWord: removeWord }}
-          onClose={() => onDialog(null)}
-        />
-      ) : null}
+      {dialog === "settings" ? <Settings onClose={() => onDialog(null)} /> : null}
       {pendingTrash && pendingRemoval ? (
         <ConfirmDialog
           message={pendingRemoval.message}

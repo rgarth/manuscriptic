@@ -101,7 +101,9 @@ test("a title-only folder stays out of the chapter count", () => {
   let project = novel([prologue, first]);
   project = setBookCompile(project, {
     ...project.compile,
-    levels: project.compile.levels.map((entry, index) => (index === 1 ? { ...entry, title: false, number: "arabic" } : entry)),
+    levels: project.compile.levels.map((entry, index) =>
+      index === 1 ? { ...entry, name: "Chapter", title: false, number: "arabic" } : entry,
+    ),
     titleOnly: [prologue.id],
   });
   const compiled = buildCompile(project, initialCompileTicks(project), defaultCompilePreferences(), 2026);
@@ -117,7 +119,9 @@ test("an unticked chapter is left out and the next number moves up", () => {
   let project = novel([old, kept]);
   project = setBookCompile(project, {
     ...project.compile,
-    levels: project.compile.levels.map((entry, index) => (index === 1 ? { ...entry, title: false, number: "word" } : entry)),
+    levels: project.compile.levels.map((entry, index) =>
+      index === 1 ? { ...entry, name: "Chapter", title: false, number: "word" } : entry,
+    ),
   });
   const included = toggleCompileRow(project, initialCompileTicks(project), old.id);
   const compiled = buildCompile(project, included, defaultCompilePreferences(), 2026);
@@ -379,7 +383,7 @@ test("an empty nested folder does not move the chapter up a level", () => {
   assert.equal(text.includes("Part 1"), false);
   assert.equal(text.includes("Notes"), false);
   assert.equal(text.includes("Secret"), false);
-  assert.deepEqual(folderRanks(project.manuscript, new Set([chapter.id, scene.id])), [1, 0]);
+  assert.deepEqual(folderRanks(project.manuscript, new Set([chapter.id, scene.id])), [1]);
 });
 
 test("a page is a scene until that level is included", () => {
@@ -482,9 +486,9 @@ test("folder ranks follow the included prose", () => {
   const part = folderNode("The Sea", [chapter]);
   const notes = folderNode("Notes", []);
   const loose = createNovelProject();
-  assert.deepEqual(folderRanks(novel([part]).manuscript, ids(part)), [2, 1, 0]);
-  assert.deepEqual(folderRanks(novel([chapter, notes]).manuscript, ids(chapter, notes)), [1, 0]);
-  assert.deepEqual(folderRanks({ ...loose.manuscript, children: [scene] }, new Set([scene.id])), [0]);
+  assert.deepEqual(folderRanks(novel([part]).manuscript, ids(part)), [2, 1]);
+  assert.deepEqual(folderRanks(novel([chapter, notes]).manuscript, ids(chapter, notes)), [1]);
+  assert.deepEqual(folderRanks({ ...loose.manuscript, children: [scene] }, new Set([scene.id])), []);
   assert.deepEqual(folderRanks(loose.manuscript, new Set()), []);
 });
 

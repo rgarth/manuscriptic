@@ -66,12 +66,13 @@ export async function installAppMenu(): Promise<void> {
       sendMenuCommand({ name: "compile" });
     },
   });
-  const compileSettings = await MenuItem.new({
-    id: "compile-settings",
-    text: "Compiler Settings…",
+  const bookSettings = await MenuItem.new({
+    id: "book-settings",
+    text: "Book Settings…",
+    accelerator: "Cmd+Option+,",
     enabled: false,
     action: () => {
-      sendMenuCommand({ name: "compile-settings" });
+      sendMenuCommand({ name: "book-settings" });
     },
   });
   function syncFile() {
@@ -83,7 +84,7 @@ export async function installAppMenu(): Promise<void> {
     void saveNovelAs.setEnabled(current.saveNovelAs !== null);
     void takeSnapshot.setEnabled(current.takeSnapshot !== null);
     void compileBook.setEnabled(current.compile !== null);
-    void compileSettings.setEnabled(current.compileSettings !== null);
+    void bookSettings.setEnabled(current.bookSettings !== null);
   }
   onCommands(syncFile);
   syncFile();
@@ -111,12 +112,12 @@ export async function installAppMenu(): Promise<void> {
     await fileMenu.insert(saveNovelAs, 4);
     await fileMenu.insert(takeSnapshot, 5);
     await fileMenu.insert(compileBook, 6);
-    await fileMenu.insert(compileSettings, 7);
+    await fileMenu.insert(bookSettings, 7);
     await fileMenu.insert(settings, 8);
   } else {
     const file = await Submenu.new({
       text: "File",
-      items: [newProject, openNovel, importScrivener, saveNovel, saveNovelAs, takeSnapshot, compileBook, compileSettings, settings],
+      items: [newProject, openNovel, importScrivener, saveNovel, saveNovelAs, takeSnapshot, compileBook, bookSettings, settings],
     });
     const afterAppMenu = navigator.userAgent.includes("Mac") ? 1 : 0;
     await menu.insert(file, afterAppMenu);

@@ -69,7 +69,7 @@ export default function ExportDialog({
           </button>
         </header>
         <div className="compile-body">
-          <p>Pages ticked in Compiler Settings are written to a Word file (docx).</p>
+          <p>Pages ticked in Book Settings are written to a Word file (docx).</p>
           <div className="dialog-actions">
             <button type="button" onClick={() => void compile()} disabled={busy}>
               Compile

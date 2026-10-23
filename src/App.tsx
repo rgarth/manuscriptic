@@ -203,11 +203,11 @@ export default function App() {
         }
         setDialog("compile");
         return;
-      case "compile-settings":
+      case "book-settings":
         if (!project) {
           return;
         }
-        setDialog("compile-settings");
+        setDialog("book-settings");
         return;
       case "settings":
         setDialog("settings");
@@ -243,7 +243,7 @@ export default function App() {
       newProject: () => runMenu.current({ name: "new" }),
       takeSnapshot: project ? () => runMenu.current({ name: "snapshot" }) : null,
       compile: project ? () => runMenu.current({ name: "compile" }) : null,
-      compileSettings: project ? () => runMenu.current({ name: "compile-settings" }) : null,
+      bookSettings: project ? () => runMenu.current({ name: "book-settings" }) : null,
       openNovel: () => runMenu.current({ name: "open" }),
       saveNovel: project ? () => runMenu.current({ name: "save" }) : null,
       saveNovelAs: project ? () => runMenu.current({ name: "save-as" }) : null,
@@ -326,7 +326,7 @@ export default function App() {
   }, [file.filePath]);
 
   const gateSettings = dialog === "settings" ? (
-    <Settings dictionary={null} onClose={() => setDialog(null)} />
+    <Settings onClose={() => setDialog(null)} />
   ) : null;
 
   if (!project) {

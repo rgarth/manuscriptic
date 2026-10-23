@@ -19,10 +19,10 @@ import { folderRanks } from "./compileShape.ts";
 import { initialCompileTicks } from "./compileTicks.ts";
 import { readCompileIdentity, writeCompileIdentity } from "./compilePrefs.ts";
 import { failureMessage, reportFailure } from "./failures.ts";
-import { setBookCompile, type FolderNode, type ProjectFile } from "./model/project.ts";
+import { addDictionaryWord, removeDictionaryWord, setBookCompile, type FolderNode, type ProjectFile } from "./model/project.ts";
 import { alignments } from "./pageLayout.ts";
 
-type CompilePane = "author" | "structure" | "contents" | "formatting";
+type CompilePane = "author" | "structure" | "contents" | "formatting" | "dictionary";
 
 const breakChoice: Record<SceneBreak, string> = {
   hash: "#",
@@ -54,13 +54,12 @@ const joinOptions: { id: HeadingJoin; label: string }[] = [
   { id: "mark", label: "Character" },
 ];
 
-const depthNames = ["Top level", "Second level", "Third level", "Fourth level", "Fifth level"];
-
 const panes: { id: CompilePane; label: string }[] = [
   { id: "author", label: "Author" },
   { id: "structure", label: "Structure" },
   { id: "contents", label: "Contents" },
   { id: "formatting", label: "Formatting" },
+  { id: "dictionary", label: "Dictionary" },
 ];
 
 export function AppAuthorSettings() {
@@ -120,15 +119,15 @@ export default function CompileSettings({
 
   return (
     <div className="dialog-backdrop">
-      <div className="dialog settings" role="dialog" aria-modal="true" aria-label="Compiler Settings">
+      <div className="dialog settings" role="dialog" aria-modal="true" aria-label="Book Settings">
         <header className="settings-bar">
-          <h2>Compiler Settings</h2>
+          <h2>Book Settings</h2>
           <button type="button" onClick={onClose}>
             Close
           </button>
         </header>
         <div className="settings-body">
-          <nav className="settings-nav" aria-label="Compiler settings">
+          <nav className="settings-nav" aria-label="Book settings">
             {panes.map((item) => (
               <button
                 key={item.id}
@@ -177,11 +176,59 @@ function compilerPane(
           onChange={(format) => onCompile({ ...project.compile, format: { ...project.compile.format, ...format } })}
         />
       );
+    case "dictionary":
+      return (
+        <BookDictionary
+          words={project.dictionary}
+          onAdd={(word) => onProject((current) => addDictionaryWord(current, word))}
+          onRemove={(word) => onProject((current) => removeDictionaryWord(current, word))}
+        />
+      );
     default: {
       const unexpected: never = pane;
       return unexpected;
     }
   }
+}
+
+function BookDictionary({
+  words,
+  onAdd,
+  onRemove,
+}: {
+  words: readonly string[];
+  onAdd: (word: string) => void;
+  onRemove: (word: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  return (
+    <>
+      <h3>Dictionary</h3>
+      {words.length > 0 ? (
+        <ul className="word-list">
+          {words.map((word) => (
+            <li key={word.toLocaleLowerCase()}>
+              <span>{word}</span>
+              <button type="button" onClick={() => onRemove(word)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <form
+        className="row"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onAdd(draft);
+          setDraft("");
+        }}
+      >
+        <input aria-label="Add a word" value={draft} onChange={(event) => setDraft(event.currentTarget.value)} />
+        <button type="submit">Add</button>
+      </form>
+    </>
+  );
 }
 
 function AuthorOverride({
@@ -345,13 +392,12 @@ function BookStructure({
   const shown = selected === "scenes" || ranks.includes(selected) ? selected : (ranks[0] ?? "scenes");
   const place = typeof shown === "number" ? ranks.indexOf(shown) : -1;
   const level = typeof shown === "number" ? levelAt(compile, shown) : null;
-  const label = level && typeof shown === "number" ? levelLabel(level, place, shown) : "Scenes";
+  const label = typeof shown === "number" ? levelLabel(place) : "Scenes";
   return (
     <div className="structure-body">
       <nav className="settings-nav structure-nav" aria-label="Manuscript structure">
         {ranks.map((rank, index) => {
-          const entry = levelAt(compile, rank);
-          const name = levelLabel(entry, index, rank);
+          const name = levelLabel(index);
           return (
             <button
               key={rank}
@@ -372,8 +418,8 @@ function BookStructure({
         {level && typeof shown === "number" ? (
           <LevelCard
             label={label}
-            hint={nameHint(shown)}
-            titleLabel={shown === 0 ? "Include the page title" : "Include the folder title"}
+            hint=""
+            titleLabel="Include the folder title"
             level={level}
             onChange={(next) => onCompile(withLevel(compile, shown, next))}
           />
@@ -385,15 +431,8 @@ function BookStructure({
   );
 }
 
-function levelLabel(level: BookCompile["levels"][number], place: number, rank: number): string {
-  const name = level.name.trim();
-  if (name) {
-    return name;
-  }
-  if (rank === 0) {
-    return "Pages";
-  }
-  return depthNames[place] ?? nameHint(rank);
+function levelLabel(place: number): string {
+  return `Folder Level ${place + 1}`;
 }
 
 function LevelCard({
@@ -592,21 +631,6 @@ function HeadingFields({
       </div>
     </>
   );
-}
-
-function nameHint(rank: number): string {
-  switch (rank) {
-    case 0:
-      return "Pages";
-    case 1:
-      return "Chapter";
-    case 2:
-      return "Part";
-    case 3:
-      return "Volume";
-    default:
-      return "Name";
-  }
 }
 
 function pointSize(value: string): number {

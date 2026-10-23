@@ -246,9 +246,6 @@ export function folderRanks(manuscript: FolderNode, included: ReadonlySet<string
   for (let rank = seen.rank - 1; rank >= 1; rank -= 1) {
     ranks.push(rank);
   }
-  if (seen.runs.length > 0) {
-    ranks.push(0);
-  }
   return ranks;
 }
 

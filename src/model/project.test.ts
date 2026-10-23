@@ -101,7 +101,7 @@ test("a new novel has the manuscript roots", () => {
   }
   assert.equal(project.compile.levels[0]?.include, false);
   assert.equal(project.compile.levels[1]?.include, true);
-  assert.equal(project.compile.levels[1]?.name, "Chapter");
+  assert.equal(project.compile.levels[1]?.name, "");
   assert.equal(project.compile.levels[1]?.title, true);
   assert.equal(project.compile.levels[1]?.number, "none");
   assert.equal(project.compile.sceneBreak, "hash");
@@ -124,7 +124,7 @@ test("compile settings without levels keep the default divisions", () => {
   );
   assert.equal(project?.compile.levels.length, 2);
   assert.equal(project?.compile.levels[0]?.include, false);
-  assert.equal(project?.compile.levels[1]?.name, "Chapter");
+  assert.equal(project?.compile.levels[1]?.name, "");
   assert.equal(project?.compile.levels[1]?.title, true);
   assert.equal(project?.compile.levels[1]?.number, "none");
   assert.equal(project?.compile.scenes.title, true);
