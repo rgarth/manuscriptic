@@ -5,7 +5,6 @@ import type { Alignment } from "./pageLayout";
 export type CommandState = {
   newProject: (() => void) | null;
   openNovel: (() => void) | null;
-  saveNovel: (() => void) | null;
   saveNovelAs: (() => void) | null;
   takeSnapshot: (() => void) | null;
   compile: (() => void) | null;
@@ -23,7 +22,6 @@ export type CommandState = {
 const initial: CommandState = {
   newProject: null,
   openNovel: null,
-  saveNovel: null,
   saveNovelAs: null,
   takeSnapshot: null,
   compile: null,

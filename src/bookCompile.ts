@@ -6,6 +6,9 @@ export type NumberStyle = (typeof numberStyles)[number];
 export const headingJoins = ["line", "mark"] as const;
 export type HeadingJoin = (typeof headingJoins)[number];
 
+export const headingAligns = ["left", "center", "right"] as const;
+export type HeadingAlign = (typeof headingAligns)[number];
+
 export type CompileHeading = {
   name: string;
   title: boolean;
@@ -16,6 +19,7 @@ export type CompileHeading = {
   namePoints: number;
   titleFont: string;
   titlePoints: number;
+  align: HeadingAlign;
   pageBefore: boolean;
   pageAfter: boolean;
   blankOpening: boolean;
@@ -36,6 +40,7 @@ export function defaultHeading(name = ""): CompileHeading {
     namePoints: 0,
     titleFont: "",
     titlePoints: 0,
+    align: "center",
     pageBefore: false,
     pageAfter: false,
     blankOpening: false,
@@ -273,6 +278,7 @@ function parseHeading(value: Record<string, unknown>, name: string): CompileHead
     namePoints: headingPoints(value.namePoints),
     titleFont: text(value.titleFont),
     titlePoints: headingPoints(value.titlePoints),
+    align: headingAlign(value.align),
     pageBefore: value.pageBefore === true,
     pageAfter: value.pageAfter === true,
     blankOpening: value.blankOpening === true,
@@ -296,6 +302,17 @@ function legacyHeading(value: unknown): CompileHeading | null {
       return { ...heading, number: "word" };
     default:
       return null;
+  }
+}
+
+export function headingAlign(value: unknown): HeadingAlign {
+  switch (value) {
+    case "left":
+    case "center":
+    case "right":
+      return value;
+    default:
+      return "center";
   }
 }
 

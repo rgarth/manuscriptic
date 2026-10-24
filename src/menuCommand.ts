@@ -19,7 +19,6 @@ export type MenuCommand =
   | { name: "new" }
   | { name: "open" }
   | { name: "import" }
-  | { name: "save" }
   | { name: "save-as" }
   | { name: "snapshot" }
   | { name: "compile" }
@@ -43,7 +42,6 @@ export function menuCommand(value: unknown): MenuCommand | null {
     case "new":
     case "open":
     case "import":
-    case "save":
     case "save-as":
     case "snapshot":
     case "compile":

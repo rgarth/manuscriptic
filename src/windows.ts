@@ -1,4 +1,5 @@
-import { getAllWebviewWindows, WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { raiseBookWindow } from "./storage.ts";
 
 export function bookQuery(): string | null {
   return new URLSearchParams(window.location.search).get("book");
@@ -25,17 +26,14 @@ export function windowClose(hasBook: boolean, windowCount: number): "leave" | "d
 }
 
 export async function openBookWindow(path: string, title: string): Promise<void> {
-  const label = windowLabel(path);
   if (!tauriAvailable()) {
-    window.open(`${window.location.pathname}?book=${encodeURIComponent(path)}`, label);
+    window.open(`${window.location.pathname}?book=${encodeURIComponent(path)}`, windowLabel(path));
     return;
   }
-  const existing = (await getAllWebviewWindows()).find((item) => item.label === label);
-  if (existing) {
-    await existing.setFocus();
+  if (await raiseBookWindow(path)) {
     return;
   }
-  const created = new WebviewWindow(label, {
+  const created = new WebviewWindow(`book-${crypto.randomUUID()}`, {
     url: `index.html?book=${encodeURIComponent(path)}`,
     title,
     width: 1100,

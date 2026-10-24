@@ -465,18 +465,27 @@ test("a new page after the heading starts the prose on the next page", () => {
   assert.equal(hello?.pageBreakBefore, true);
 });
 
-test("scene numbers restart in each chapter", () => {
+test("an included scene title keeps its font and alignment, and a number is ignored", () => {
   const first = folderNode("Tide", [documentNode("Opening", "scene", prose("Hello")), documentNode("Later", "scene", prose("After"))]);
   const second = folderNode("Dune", [documentNode("Next", "scene", prose("More"))]);
   let project = novel([first, second]);
   project = setBookCompile(project, {
     ...project.compile,
-    scenes: { ...defaultHeading("Scene"), title: true, number: "arabic", join: "line" },
+    levels: [level(false, ""), level(true, "Chapter", { title: true, number: "arabic", align: "right" })],
+    scenes: { ...defaultHeading("Scene"), title: true, number: "arabic", titleFont: "Courier", titlePoints: 14, align: "left" },
   });
   const compiled = buildCompile(project, initialCompileTicks(project), defaultCompilePreferences(), 2026);
   const text = compiled.paragraphs.map(paragraphPlain);
-  assert.equal(text.filter((line) => line === "Scene 1").length, 2);
-  assert.ok(text.includes("Scene 2"));
+  const opening = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Opening");
+  const chapter = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Chapter 1");
+  assert.equal(opening?.align, "left");
+  assert.equal(opening?.runs[0]?.kind, "text");
+  if (opening?.runs[0]?.kind === "text") {
+    assert.equal(opening.runs[0].font, "Courier");
+    assert.equal(opening.runs[0].points, 14);
+  }
+  assert.equal(chapter?.align, "right");
+  assert.equal(text.includes("Scene 1"), false);
   assert.equal(text.includes("#"), false);
 });
 

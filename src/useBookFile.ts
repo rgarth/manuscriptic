@@ -36,8 +36,8 @@ import {
 import { findNode, firstDocumentId, openFolders, setView, type ProjectFile } from "./model/project";
 import { pickNovelSaveAs, pickNovelToOpen, pickScrivenerProject, resolveDirectory } from "./novelFile";
 import { projectFromScrivener, scrivenerTitle } from "./scrivener/import";
-import { fileExists, readBook, readHistory, readScrivener, writeBook } from "./storage";
-import { clearBookQuery, openBookWindow } from "./windows";
+import { bookIsOpen, fileExists, raiseBookWindow, readBook, readHistory, readScrivener, writeBook } from "./storage";
+import { clearBookQuery, openBookWindow, tauriAvailable } from "./windows";
 
 export type SaveState = "saved" | "dirty" | "saving" | "error";
 
@@ -322,7 +322,18 @@ export function useBookFile(showNotice: Notice) {
     }
   }
 
+  async function refuseOpenBook(path: string): Promise<boolean> {
+    if (!tauriAvailable() || !(await bookIsOpen(path))) {
+      return false;
+    }
+    noticeRef.current("That book is open. Choose a different file.");
+    return true;
+  }
+
   async function placeNewBook(path: string, created: { title: string; files: BookFiles; project: ProjectFile; history: BookHistory }) {
+    if (await refuseOpenBook(path)) {
+      return;
+    }
     await writeBook(path, created.files, [], true);
     noticeRef.current(null);
     if (projectRef.current) {
@@ -382,19 +393,11 @@ export function useBookFile(showNotice: Notice) {
         noticeRef.current("A book needs a name.");
         return;
       }
-      const currentPath = filePathRef.current;
-      if (projectRef.current && currentPath) {
-        if (!(await confirmImportReplace(currentPath))) {
-          return;
-        }
-        await writeBook(currentPath, created.files, [], true);
-        rememberDisk(created.files, created.history);
-        showBook(created.project, currentPath, created.history);
-        noteSaved();
-        return;
-      }
       const path = await pickNovelSaveAs(directory, created.fileName, "Import Scrivener Project");
       if (!path) {
+        return;
+      }
+      if (await refuseOpenBook(path)) {
         return;
       }
       if (await fileExists(path)) {
@@ -495,6 +498,9 @@ export function useBookFile(showNotice: Notice) {
         await openBookWindow(picked, picked);
         return;
       }
+      if (tauriAvailable() && (await raiseBookWindow(picked))) {
+        return;
+      }
       await loadBook(picked);
     } catch (error: unknown) {
       noticeRef.current(error, "Could not open that novel.");
@@ -503,17 +509,13 @@ export function useBookFile(showNotice: Notice) {
     }
   }
 
-  async function saveNovelFile(forceDialog: boolean) {
+  async function saveNovelFile() {
     const current = projectRef.current;
     if (!current || fileBusy.current) {
       return;
     }
     fileBusy.current = true;
     try {
-      if (!forceDialog) {
-        enqueueSave(++generation.current);
-        return;
-      }
       if (disk.current.phase === "unread" || !historyRef.current) {
         noticeRef.current("This book is still opening.");
         return;

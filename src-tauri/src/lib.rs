@@ -7,7 +7,10 @@ mod spellcheck;
 
 use book_file::{file_exists, read_book, read_history, write_book, write_export};
 use scrivener::read_scrivener;
-use book_lock::{claim_book_lock, refresh_book_lock, release_book_lock, release_window, take_book_lock};
+use book_lock::{
+    book_is_open, claim_book_lock, raise_book_window, refresh_book_lock, release_book_lock, release_window,
+    take_book_lock,
+};
 use documents::documents_directory;
 use fonts::list_fonts;
 use spellcheck::misspellings;
@@ -27,6 +30,8 @@ pub fn run() {
             file_exists,
             read_scrivener,
             claim_book_lock,
+            raise_book_window,
+            book_is_open,
             take_book_lock,
             refresh_book_lock,
             release_book_lock,

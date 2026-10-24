@@ -91,6 +91,43 @@ pub fn refresh_book_lock(path: String, holder: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub fn raise_book_window(app: AppHandle, path: String) -> Result<bool, String> {
+    let labels = {
+        let held = holds();
+        labels_for_book(&held, &path)
+    };
+    for label in labels {
+        let Some(window) = app.get_webview_window(&label) else {
+            continue;
+        };
+        window.unminimize().map_err(|err| err.to_string())?;
+        window.set_focus().map_err(|err| err.to_string())?;
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+#[tauri::command]
+pub fn book_is_open(app: AppHandle, path: String) -> Result<bool, String> {
+    let open_here = {
+        let held = holds();
+        labels_for_book(&held, &path)
+            .into_iter()
+            .any(|label| app.get_webview_window(&label).is_some())
+    };
+    if open_here {
+        return Ok(true);
+    }
+    let machine = machine_id(&app)?;
+    for lock in lock_candidates(Path::new(&path)) {
+        if live_lock(read_lock(&lock).as_ref(), &machine, process_alive) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+#[tauri::command]
 pub fn release_book_lock(window: tauri::WebviewWindow, path: String, holder: String) -> Result<(), String> {
     let _guard = lock_io();
     forget(window.label(), &path);
@@ -211,6 +248,24 @@ fn release_holder(book: &Path, holder: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn live_lock(record: Option<&BookLockRecord>, machine_id: &str, alive: impl Fn(u32) -> bool) -> bool {
+    let Some(record) = record else {
+        return false;
+    };
+    record.machine_id != machine_id || alive(record.pid)
+}
+
+fn lock_candidates(book: &Path) -> Vec<PathBuf> {
+    let mut paths = vec![lock_path(book)];
+    if let Ok(canonical) = book.canonicalize() {
+        let beside = lock_path(&canonical);
+        if beside != paths[0] {
+            paths.push(beside);
+        }
+    }
+    paths
+}
+
 fn lock_path(book: &Path) -> PathBuf {
     let mut name = book.file_name().unwrap_or_default().to_os_string();
     name.push(".lock");
@@ -231,6 +286,25 @@ fn remember(window: &str, path: &str, holder: &str) {
         path: path.to_string(),
         holder: holder.to_string(),
     });
+}
+
+fn labels_for_book(holds: &[Hold], path: &str) -> Vec<String> {
+    holds
+        .iter()
+        .rev()
+        .filter(|hold| same_book(&hold.path, path))
+        .map(|hold| hold.window.clone())
+        .collect()
+}
+
+fn same_book(held: &str, asked: &str) -> bool {
+    if held == asked {
+        return true;
+    }
+    match (std::fs::canonicalize(held), std::fs::canonicalize(asked)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
 }
 
 fn forget(window: &str, path: &str) {
@@ -302,7 +376,10 @@ fn now_ms() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{claim_with, classify, lock_path, release_holder, write_lock, BookLockRecord, Classified};
+    use super::{
+        claim_with, classify, labels_for_book, live_lock, lock_path, release_holder, write_lock, BookLockRecord,
+        Classified, Hold,
+    };
     use std::fs;
 
     #[test]
@@ -347,6 +424,41 @@ mod tests {
         release_holder(&book, "holder-b").unwrap();
         assert!(!lock_path(&book).exists());
         fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_book_open_in_this_app_is_the_window_to_raise() {
+        let dir = std::env::temp_dir().join(format!("manuscriptic-raise-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let book = dir.join("Castus.manuscriptic");
+        fs::write(&book, "").unwrap();
+        let link = dir.join("link.manuscriptic");
+        std::os::unix::fs::symlink(&book, &link).unwrap();
+        let book_path = book.to_string_lossy().to_string();
+        let holds = vec![
+            Hold {
+                window: "main".into(),
+                path: link.to_string_lossy().into(),
+                holder: "h".into(),
+            },
+            Hold {
+                window: "book-later".into(),
+                path: book_path.clone(),
+                holder: "h".into(),
+            },
+        ];
+        assert_eq!(labels_for_book(&holds, &book_path), vec!["book-later".to_string(), "main".to_string()]);
+        assert!(labels_for_book(&holds, "/Novels/Missing.manuscriptic").is_empty());
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_live_lock_blocks_a_new_book_and_a_dead_one_does_not() {
+        let live = sample("holder-a", "machine", 40, 1_000);
+        assert!(live_lock(Some(&live), "machine", |_| true));
+        assert!(!live_lock(Some(&live), "machine", |_| false));
+        assert!(live_lock(Some(&live), "other", |_| false));
+        assert!(!live_lock(None, "machine", |_| true));
     }
 
     fn sample(holder: &str, machine: &str, pid: u32, seen: i64) -> BookLockRecord {

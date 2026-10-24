@@ -7,7 +7,6 @@ import { getEditorPrefs, indentEm, paragraphGap, spacingLine, subscribeEditorPre
 import { scrollTopForCaret } from "./typewriter";
 import {
   alignments,
-  defaultFont,
   displayPixels,
   fontFamily,
   fontName,
@@ -23,7 +22,7 @@ import { includesWord } from "./dictionary.ts";
 import { parseEditorDoc, type EditorDoc } from "./model/editorDoc";
 import { dictionarySpellcheckKey, projectDictionary, wordFromPoint } from "./spellcheck";
 import { reportFailure } from "./failures";
-import { listFonts } from "./storage";
+import { FontChoice } from "./FontChoice.tsx";
 
 type SceneEditorProps = {
   title: string;
@@ -122,7 +121,6 @@ export default function SceneEditor({
   const typewriter = useSyncExternalStore(subscribeEditorPrefs, readTypewriter, readTypewriter);
   const indent = useSyncExternalStore(subscribeEditorPrefs, readIndent, readIndent);
   const spacing = useSyncExternalStore(subscribeEditorPrefs, readSpacing, readSpacing);
-  const [fonts, setFonts] = useState<string[]>([defaultFont]);
   const pageStyle = {
     "--editor-font": fontFamily(layout.font),
     "--editor-size": String(displayPixels(layout.points, zoom)),
@@ -131,19 +129,6 @@ export default function SceneEditor({
     "--editor-spacing": spacingLine(spacing),
     "--editor-gap": paragraphGap(indent),
   } as CSSProperties;
-  const fontOptions = fonts.includes(layout.font) ? fonts : [layout.font, ...fonts];
-
-  useEffect(() => {
-    void listFonts()
-      .then((names) => {
-        const available = new Set([defaultFont, ...names]);
-        setFonts([...available].sort((a, b) => a.localeCompare(b)));
-      })
-      .catch((error: unknown) => {
-        reportFailure(error, "Could not list fonts.");
-      });
-  }, []);
-
   useEffect(() => {
     if (!editor) {
       return;
@@ -193,18 +178,12 @@ export default function SceneEditor({
         {hint ? <p className="page-hint">{hint}</p> : null}
         <div className="marks">
           <Hint label="Typeface">
-            <select
+            <FontChoice
               className="font-choice"
-              aria-label="Typeface"
+              ariaLabel="Typeface"
               value={layout.font}
-              onChange={(event) => onLayout({ ...layout, font: fontName(event.currentTarget.value) })}
-            >
-              {fontOptions.map((name) => (
-                <option key={name} value={name} style={{ fontFamily: fontFamily(name) }}>
-                  {name}
-                </option>
-              ))}
-            </select>
+              onChange={(font) => onLayout({ ...layout, font: fontName(font) })}
+            />
           </Hint>
           <Hint label="Point size">
             <input

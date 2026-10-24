@@ -7,6 +7,7 @@ import {
   type BookCompile,
   type CompileFormat,
   type CompileHeading,
+  type HeadingAlign,
   type CompileIdentity,
   type CompileSpacing,
   type HeadingJoin,
@@ -20,6 +21,7 @@ import { initialCompileTicks } from "./compileTicks.ts";
 import { readCompileIdentity, writeCompileIdentity } from "./compilePrefs.ts";
 import { failureMessage, reportFailure } from "./failures.ts";
 import { addDictionaryWord, removeDictionaryWord, setBookCompile, type FolderNode, type ProjectFile } from "./model/project.ts";
+import { FontChoice } from "./FontChoice.tsx";
 import { alignments } from "./pageLayout.ts";
 
 type CompilePane = "author" | "structure" | "contents" | "formatting" | "dictionary";
@@ -52,6 +54,12 @@ const numberOptions: { id: NumberStyle; label: string }[] = [
 const joinOptions: { id: HeadingJoin; label: string }[] = [
   { id: "line", label: "New line" },
   { id: "mark", label: "Character" },
+];
+
+const headingAlignments: { id: HeadingAlign; label: string }[] = [
+  { id: "left", label: "Align Left" },
+  { id: "center", label: "Center" },
+  { id: "right", label: "Align Right" },
 ];
 
 const panes: { id: CompilePane; label: string }[] = [
@@ -321,7 +329,13 @@ function FormattingSettings({
           Use the book’s font and size
         </label>
         <div className="setting-grid">
-          <Field label="Font" value={format.font} onChange={(font) => onChange({ font })} disabled={format.passFont} />
+          <FontMenu
+            label="Font"
+            ariaLabel="Font"
+            value={format.font}
+            disabled={format.passFont}
+            onChange={(font) => onChange({ font })}
+          />
           <Field
             label="Size"
             value={String(format.points)}
@@ -480,17 +494,66 @@ function SceneCard({
   onCompile: (compile: BookCompile) => void;
 }) {
   const scenes = compile.scenes;
+  const titled = scenes.title;
   return (
     <div className="structure-level">
-      <HeadingFields
-        scope="Scenes"
-        heading={scenes}
-        hint="Scene"
-        titleLabel="Include the scene title"
-        disabled={false}
-        pagesDisabled={!scenes.title && scenes.number === "none"}
-        onChange={(patch) => onCompile({ ...compile, scenes: { ...scenes, ...patch } })}
+      <label className="preference">
+        <input
+          type="checkbox"
+          aria-label="Include the scene title"
+          checked={scenes.title}
+          onChange={(event) => onCompile({ ...compile, scenes: { ...scenes, title: event.currentTarget.checked } })}
+        />
+        Include the scene title
+      </label>
+      <FontMenu
+        label="Font"
+        ariaLabel="Scene title font"
+        value={scenes.titleFont}
+        inherit
+        disabled={!titled}
+        onChange={(titleFont) => onCompile({ ...compile, scenes: { ...scenes, titleFont } })}
       />
+      <Field
+        label="Size"
+        ariaLabel="Scene title size"
+        value={scenes.titlePoints > 0 ? String(scenes.titlePoints) : ""}
+        placeholder="Manuscript size"
+        disabled={!titled}
+        onChange={(value) => onCompile({ ...compile, scenes: { ...scenes, titlePoints: pointSize(value) } })}
+      />
+      <div className="structure-span">
+        <Choice
+          label="Alignment"
+          ariaLabel="Scene title alignment"
+          value={scenes.align}
+          disabled={!titled}
+          options={headingAlignments}
+          onChange={(align) => onCompile({ ...compile, scenes: { ...scenes, align } })}
+        />
+      </div>
+      <div className="structure-span structure-ticks">
+        <label className="preference">
+          <input
+            type="checkbox"
+            aria-label="Scenes new page before"
+            checked={scenes.pageBefore}
+            disabled={!titled}
+            onChange={(event) => onCompile({ ...compile, scenes: { ...scenes, pageBefore: event.currentTarget.checked } })}
+          />
+          New page before
+        </label>
+        <label className="preference">
+          <input
+            type="checkbox"
+            aria-label="Scenes new page after"
+            checked={scenes.pageAfter}
+            disabled={!titled}
+            onChange={(event) => onCompile({ ...compile, scenes: { ...scenes, pageAfter: event.currentTarget.checked } })}
+          />
+          New page after
+        </label>
+      </div>
       <div className="structure-span">
         <Choice
           label="Separator"
@@ -575,11 +638,11 @@ function HeadingFields({
           />
         </div>
       ) : null}
-      <Field
+      <FontMenu
         label="Heading font"
         ariaLabel={`${scope} heading font`}
         value={heading.nameFont}
-        placeholder="Manuscript font"
+        inherit
         disabled={disabled || !numbered}
         onChange={(nameFont) => onChange({ nameFont })}
       />
@@ -591,11 +654,11 @@ function HeadingFields({
         disabled={disabled || !numbered}
         onChange={(value) => onChange({ namePoints: pointSize(value) })}
       />
-      <Field
+      <FontMenu
         label="Title font"
         ariaLabel={`${scope} title font`}
         value={heading.titleFont}
-        placeholder="Manuscript font"
+        inherit
         disabled={disabled || !heading.title}
         onChange={(titleFont) => onChange({ titleFont })}
       />
@@ -607,6 +670,16 @@ function HeadingFields({
         disabled={disabled || !heading.title}
         onChange={(value) => onChange({ titlePoints: pointSize(value) })}
       />
+      <div className="structure-span">
+        <Choice
+          label="Alignment"
+          ariaLabel={`${scope} alignment`}
+          value={heading.align}
+          disabled={disabled}
+          options={headingAlignments}
+          onChange={(align) => onChange({ align })}
+        />
+      </div>
       <div className="structure-span structure-ticks">
         <label className="preference">
           <input
@@ -659,6 +732,36 @@ function MarginFields({
       <Field label="Bottom" value={String(format.margins.bottom)} onChange={(value) => edge("bottom", value)} />
       <Field label="Left" value={String(format.margins.left)} onChange={(value) => edge("left", value)} />
     </div>
+  );
+}
+
+function FontMenu({
+  label,
+  ariaLabel,
+  value,
+  onChange,
+  disabled = false,
+  inherit = false,
+}: {
+  label: string;
+  ariaLabel: string;
+  value: string;
+  onChange: (font: string) => void;
+  disabled?: boolean;
+  inherit?: boolean;
+}) {
+  return (
+    <label className="setting">
+      <span className="setting-label">{label}</span>
+      <FontChoice
+        ariaLabel={ariaLabel}
+        value={value}
+        disabled={disabled}
+        inherit={inherit}
+        showFace
+        onChange={onChange}
+      />
+    </label>
   );
 }
 

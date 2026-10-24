@@ -100,7 +100,9 @@ export default function App() {
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        runMenu.current({ name: event.shiftKey ? "save-as" : "save" });
+        if (event.shiftKey) {
+          runMenu.current({ name: "save-as" });
+        }
         return;
       }
       if ((event.metaKey || event.ctrlKey) && event.key === ",") {
@@ -187,11 +189,8 @@ export default function App() {
       case "import":
         void file.importScrivener();
         return;
-      case "save":
-        void file.saveNovelFile(false);
-        return;
       case "save-as":
-        void file.saveNovelFile(true);
+        void file.saveNovelFile();
         return;
       case "snapshot":
         setDialog("snapshots");
@@ -245,7 +244,6 @@ export default function App() {
       compile: project ? () => runMenu.current({ name: "compile" }) : null,
       bookSettings: project ? () => runMenu.current({ name: "book-settings" }) : null,
       openNovel: () => runMenu.current({ name: "open" }),
-      saveNovel: project ? () => runMenu.current({ name: "save" }) : null,
       saveNovelAs: project ? () => runMenu.current({ name: "save-as" }) : null,
       newScene: project ? () => runMenu.current({ name: "new-scene" }) : null,
       newSection: project ? () => runMenu.current({ name: "new-section" }) : null,

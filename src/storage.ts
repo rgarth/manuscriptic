@@ -43,6 +43,14 @@ export function writeBook(
   return invoke("write_book", { path, files, keep, overwrite });
 }
 
+export function bookIsOpen(path: string): Promise<boolean> {
+  return invoke<boolean>("book_is_open", { path });
+}
+
+export function raiseBookWindow(path: string): Promise<boolean> {
+  return invoke<boolean>("raise_book_window", { path });
+}
+
 export function claimBookLock(path: string, holder: string): Promise<BookLock> {
   return invoke<BookLock>("claim_book_lock", { path, holder });
 }

@@ -7,7 +7,6 @@
     "core:default",
     "dialog:default",
     "core:webview:allow-create-webview-window",
-    "core:window:allow-set-focus",
     "core:window:allow-set-title",
     "core:window:allow-get-all-windows",
     "core:window:allow-destroy"

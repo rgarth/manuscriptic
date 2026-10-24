@@ -20,7 +20,9 @@ fn collect_font_names() -> Vec<String> {
             .find(|(_, language)| *language == Language::English_UnitedStates);
         let family = english.or_else(|| face.families.first());
         if let Some((name, _)) = family {
-            names.insert(name.clone());
+            if !name.starts_with('.') {
+                names.insert(name.clone());
+            }
         }
     }
     names.into_iter().collect()

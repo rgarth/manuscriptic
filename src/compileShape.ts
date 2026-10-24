@@ -3,6 +3,7 @@ import {
   defaultLevel,
   type CompileHeading,
   type CompileLevel,
+  type HeadingAlign,
   type CompilePreferences,
   type CompileSpacing,
   type NumberStyle,
@@ -154,7 +155,6 @@ function manuscriptParagraphs(
     pageOpen: false,
     sceneOnPage: false,
     numbers: [],
-    sceneNumber: 0,
     scenes: structure.scenes,
     missing,
     align,
@@ -265,7 +265,6 @@ type EmitState = {
   pageOpen: boolean;
   sceneOnPage: boolean;
   numbers: number[];
-  sceneNumber: number;
   scenes: CompileHeading;
   missing: string[];
   align: Alignment;
@@ -338,13 +337,12 @@ function openPage(headings: SectionHeading[], state: EmitState) {
       }
       continueOnPage = true;
     }
-    emitHeading(lines, state, trailingBlanks(headings, index));
+    emitHeading(lines, state, trailingBlanks(headings, index), style.align);
     if (style.pageAfter) {
       state.pageOpen = false;
       continueOnPage = false;
     }
   });
-  state.sceneNumber = 0;
   state.sceneOnPage = false;
 }
 
@@ -371,9 +369,9 @@ function dropSpace(state: EmitState) {
   state.pageOpen = true;
 }
 
-function emitHeading(lines: HeadingLine[], state: EmitState, trailing: number) {
+function emitHeading(lines: HeadingLine[], state: EmitState, trailing: number, align: HeadingAlign) {
   lines.forEach((line, index) => {
-    const paragraph = headingParagraph(line);
+    const paragraph = headingParagraph(line, align);
     if (!state.pageOpen) {
       paragraph.pageBreakBefore = true;
       state.pageOpen = true;
@@ -403,7 +401,7 @@ function writeScenes(run: Extract<ManuscriptRun, { kind: "text" }>, state: EmitS
       if (state.scenes.pageBefore) {
         state.pageOpen = false;
       }
-      emitHeading(lines, state, 0);
+      emitHeading(lines, state, 0, state.scenes.align);
       if (state.scenes.pageAfter) {
         state.pageOpen = false;
       }
@@ -427,8 +425,10 @@ function writeScenes(run: Extract<ManuscriptRun, { kind: "text" }>, state: EmitS
 
 function sceneLines(scene: ScenePiece, state: EmitState): HeadingLine[] {
   const style = state.scenes;
-  const number = style.number === "none" ? null : (state.sceneNumber += 1);
-  return headingPieces(style, scene.title, false, number);
+  if (!style.title || scene.title === "") {
+    return [];
+  }
+  return [{ runs: [faced(scene.title, style.titleFont, style.titlePoints)] }];
 }
 
 function headingPieces(style: CompileHeading, folderTitle: string, titleOnly: boolean, number: number | null): HeadingLine[] {
@@ -520,8 +520,8 @@ function faced(text: string, font: string, points: number): CompileRun {
   };
 }
 
-function headingParagraph(line: HeadingLine): CompileParagraph {
-  return { runs: line.runs, align: "center", indent: false, pageBreakBefore: false };
+function headingParagraph(line: HeadingLine, align: HeadingAlign): CompileParagraph {
+  return { runs: line.runs, align, indent: false, pageBreakBefore: false };
 }
 
 function joinLabel(label: string, value: string): string {
