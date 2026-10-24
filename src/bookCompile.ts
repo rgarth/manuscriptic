@@ -1,6 +1,6 @@
 import { alignmentById, alignments, type Alignment } from "./pageLayout.ts";
 
-export const numberStyles = ["none", "arabic", "word", "roman"] as const;
+export const numberStyles = ["none", "folder", "arabic", "word", "roman"] as const;
 export type NumberStyle = (typeof numberStyles)[number];
 
 export const headingJoins = ["line", "mark"] as const;
@@ -219,11 +219,15 @@ export function bookCompile(value: unknown): BookCompile {
     levels,
     scenes: parseScenes(value),
     sceneBreak: sceneBreak(value.sceneBreak),
-    titleOnly: Array.isArray(value.titleOnly) ? value.titleOnly.filter((id): id is string => typeof id === "string") : [],
+    titleOnly: stringList(value.titleOnly),
     useAppAuthor: value.useAppAuthor !== false,
     author: compileIdentity(value.author),
     format: compileFormat(value.format),
   };
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
 }
 
 function parseLevels(value: unknown[]): CompileLevel[] | null {
@@ -319,6 +323,7 @@ export function headingAlign(value: unknown): HeadingAlign {
 function numberStyle(value: unknown): NumberStyle {
   switch (value) {
     case "none":
+    case "folder":
     case "arabic":
     case "word":
     case "roman":

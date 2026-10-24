@@ -131,6 +131,25 @@ test("an unticked chapter is left out and the next number moves up", () => {
   assert.equal(text.includes("Chapter Two"), false);
 });
 
+test("a folder-name level prints each folder title and adds nothing", () => {
+  const first = folderNode("Chapter One", [documentNode("Opening", "scene", prose("Hello"))]);
+  const second = folderNode("Chapter Two", [documentNode("Later", "scene", prose("Again"))]);
+  let project = novel([first, second]);
+  project = setBookCompile(project, {
+    ...project.compile,
+    levels: project.compile.levels.map((entry, index) =>
+      index === 1 ? { ...entry, name: "Chapter", title: false, number: "folder" } : entry,
+    ),
+  });
+  const text = buildCompile(project, initialCompileTicks(project), defaultCompilePreferences(), 2026).paragraphs.map(
+    paragraphPlain,
+  );
+  assert.ok(text.includes("Chapter One"));
+  assert.ok(text.includes("Chapter Two"));
+  assert.equal(text.includes("Chapter 1"), false);
+  assert.equal(text.includes("Chapter 2"), false);
+});
+
 test("a part heading shares the first chapter page", () => {
   const chapter = folderNode("Tide", [documentNode("Opening", "scene", prose("Hello"))]);
   const part = folderNode("The Sea", [chapter]);
@@ -279,7 +298,7 @@ test("divisions around a chapter share its first page", () => {
     ...project.compile,
     levels: [
       level(false, ""),
-      level(true, "Chapter", { title: true }),
+      level(true, "", { title: true }),
       level(true, "Part", { number: "arabic" }),
       level(true, "Book", { number: "arabic" }),
     ],
@@ -308,7 +327,7 @@ test("a folder level left out does not print", () => {
     ...project.compile,
     levels: [
       level(false, ""),
-      level(true, "Chapter", { title: true }),
+      level(true, "", { title: true }),
       level(false, "Part", { title: true }),
       level(true, "Book", { number: "arabic" }),
     ],
@@ -451,12 +470,49 @@ test("a number and a title can share a line or take a line each", () => {
   assert.ok(joined.paragraphs.map(paragraphPlain).includes("Chapter i — Tide"));
 });
 
+test("a number or a name keeps its separator in front of the folder title", () => {
+  const first = folderNode("My Chapter Name", [documentNode("Opening", "scene", prose("Hello"))]);
+  const second = folderNode("My second chapter name", [documentNode("Later", "scene", prose("Again"))]);
+  let project = novel([first, second]);
+  project = setBookCompile(project, {
+    ...project.compile,
+    levels: [level(false, ""), level(true, "", { title: true, number: "arabic", join: "mark", mark: ": " })],
+  });
+  const numbered = buildCompile(project, initialCompileTicks(project), defaultCompilePreferences(), 2026).paragraphs.map(
+    paragraphPlain,
+  );
+  assert.ok(numbered.includes("1: My Chapter Name"));
+  assert.ok(numbered.includes("2: My second chapter name"));
+  project = setBookCompile(project, {
+    ...project.compile,
+    levels: project.compile.levels.map((entry, index) =>
+      index === 1 ? { ...entry, name: "Chapter", number: "none" } : entry,
+    ),
+  });
+  const named = buildCompile(project, initialCompileTicks(project), defaultCompilePreferences(), 2026).paragraphs.map(
+    paragraphPlain,
+  );
+  assert.ok(named.includes("Chapter: My Chapter Name"));
+  assert.ok(named.includes("Chapter: My second chapter name"));
+  project = setBookCompile(project, {
+    ...project.compile,
+    levels: project.compile.levels.map((entry, index) =>
+      index === 1 ? { ...entry, name: "", number: "none", join: "line" } : entry,
+    ),
+  });
+  const plain = buildCompile(project, initialCompileTicks(project), defaultCompilePreferences(), 2026).paragraphs.map(
+    paragraphPlain,
+  );
+  assert.equal(plain.includes("My Chapter Name"), true);
+  assert.equal(plain.some((line) => line.startsWith("\n")), false);
+});
+
 test("a new page after the heading starts the prose on the next page", () => {
   const chapter = folderNode("Tide", [documentNode("Opening", "scene", prose("Hello"))]);
   let project = novel([chapter]);
   project = setBookCompile(project, {
     ...project.compile,
-    levels: [level(false, ""), level(true, "Chapter", { title: true, pageAfter: true })],
+    levels: [level(false, ""), level(true, "", { title: true, pageAfter: true })],
   });
   const compiled = buildCompile(project, initialCompileTicks(project), defaultCompilePreferences(), 2026);
   const tide = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Tide");

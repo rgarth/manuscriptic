@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { withTitleOnly } from "./bookCompile.ts";
+import Hint from "./Hint.tsx";
 import {
   collapsedCompileFolders,
   compileRows,
@@ -67,22 +68,24 @@ export default function BookContents({
                 <span>{row.title}</span>
               </label>
               {row.numbering ? (
-                <select
-                  aria-label={`${row.title} heading`}
-                  value={project.compile.titleOnly.includes(row.id) ? "unnumbered" : "default"}
-                  onChange={(event) => {
-                    const choice = headingChoice(event.currentTarget.value);
-                    if (!choice) {
-                      return;
-                    }
-                    onProject((current) =>
-                      setBookCompile(current, withTitleOnly(current.compile, row.id, choice === "unnumbered")),
-                    );
-                  }}
-                >
-                  <option value="default">Default</option>
-                  <option value="unnumbered">Unnumbered</option>
-                </select>
+                <Hint label="Numbered uses the Structure numbering. Unnumbered keeps the title and stays out of the count.">
+                  <select
+                    aria-label={`${row.title} numbering`}
+                    value={project.compile.titleOnly.includes(row.id) ? "unnumbered" : "numbered"}
+                    onChange={(event) => {
+                      const choice = headingChoice(event.currentTarget.value);
+                      if (!choice) {
+                        return;
+                      }
+                      onProject((current) =>
+                        setBookCompile(current, withTitleOnly(current.compile, row.id, choice === "unnumbered")),
+                      );
+                    }}
+                  >
+                    <option value="numbered">Numbered</option>
+                    <option value="unnumbered">Unnumbered</option>
+                  </select>
+                </Hint>
               ) : null}
             </div>
           );
@@ -92,9 +95,9 @@ export default function BookContents({
   );
 }
 
-function headingChoice(value: string): "default" | "unnumbered" | null {
+function headingChoice(value: string): "numbered" | "unnumbered" | null {
   switch (value) {
-    case "default":
+    case "numbered":
     case "unnumbered":
       return value;
     default:

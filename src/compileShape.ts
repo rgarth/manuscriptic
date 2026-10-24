@@ -385,7 +385,7 @@ function emitHeading(lines: HeadingLine[], state: EmitState, trailing: number, a
 }
 
 function nextNumber(rank: number, style: NumberStyle, titleOnly: boolean, numbers: number[]): number | null {
-  if (style === "none" || titleOnly) {
+  if (style === "none" || style === "folder" || titleOnly) {
     return null;
   }
   const next = (numbers[rank] ?? 0) + 1;
@@ -432,9 +432,12 @@ function sceneLines(scene: ScenePiece, state: EmitState): HeadingLine[] {
 }
 
 function headingPieces(style: CompileHeading, folderTitle: string, titleOnly: boolean, number: number | null): HeadingLine[] {
+  if (style.number === "folder") {
+    return folderTitle === "" ? [] : [{ runs: [faced(folderTitle, style.titleFont, style.titlePoints)] }];
+  }
   const generated = style.title || style.number !== "none";
   const showTitle = (style.title || (titleOnly && generated)) && folderTitle !== "";
-  const label = style.number !== "none" && !titleOnly ? numberLabel(style.name, style.number, number) : "";
+  const label = titleOnly ? "" : headingLabel(style, showTitle, number);
   const title = showTitle ? folderTitle : "";
   if (!label && !title) {
     return [];
@@ -459,16 +462,18 @@ function headingPieces(style: CompileHeading, folderTitle: string, titleOnly: bo
   ];
 }
 
-function numberLabel(name: string, style: NumberStyle, number: number | null): string {
-  if (number === null) {
-    return "";
+function headingLabel(style: CompileHeading, showTitle: boolean, number: number | null): string {
+  const word = style.name.trim();
+  if (number !== null) {
+    return joinLabel(word, renderNumber(style.number, number));
   }
-  return joinLabel(name.trim(), renderNumber(style, number));
+  return showTitle ? word : "";
 }
 
 function renderNumber(style: NumberStyle, number: number): string {
   switch (style) {
     case "none":
+    case "folder":
       return "";
     case "arabic":
       return String(number);

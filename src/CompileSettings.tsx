@@ -24,7 +24,7 @@ import { addDictionaryWord, removeDictionaryWord, setBookCompile, type FolderNod
 import { FontChoice } from "./FontChoice.tsx";
 import { alignments } from "./pageLayout.ts";
 
-type CompilePane = "author" | "structure" | "contents" | "formatting" | "dictionary";
+type CompilePane = "author" | "contents" | "structure" | "formatting" | "dictionary";
 
 const breakChoice: Record<SceneBreak, string> = {
   hash: "#",
@@ -46,6 +46,7 @@ const numberChoice: Record<PageNumbers, string> = {
 
 const numberOptions: { id: NumberStyle; label: string }[] = [
   { id: "none", label: "None" },
+  { id: "folder", label: "Folder name" },
   { id: "arabic", label: "1" },
   { id: "word", label: "One" },
   { id: "roman", label: "i" },
@@ -64,8 +65,8 @@ const headingAlignments: { id: HeadingAlign; label: string }[] = [
 
 const panes: { id: CompilePane; label: string }[] = [
   { id: "author", label: "Author" },
-  { id: "structure", label: "Structure" },
   { id: "contents", label: "Contents" },
+  { id: "structure", label: "Structure" },
   { id: "formatting", label: "Formatting" },
   { id: "dictionary", label: "Dictionary" },
 ];
@@ -166,6 +167,8 @@ function compilerPane(
   switch (pane) {
     case "author":
       return <AuthorOverride compile={project.compile} appAuthor={appAuthor} onCompile={onCompile} />;
+    case "contents":
+      return <BookContents project={project} onProject={onProject} />;
     case "structure":
       return (
         <BookStructure
@@ -175,8 +178,6 @@ function compilerPane(
           onCompile={onCompile}
         />
       );
-    case "contents":
-      return <BookContents project={project} onProject={onProject} />;
     case "formatting":
       return (
         <FormattingSettings
@@ -583,8 +584,11 @@ function HeadingFields({
   pagesDisabled: boolean;
   onChange: (patch: Partial<CompileHeading>) => void;
 }) {
-  const numbered = heading.number !== "none";
-  const both = heading.title && numbered;
+  const folderName = heading.number === "folder";
+  const numbered = heading.number !== "none" && !folderName;
+  const named = !folderName && heading.title && heading.name.trim() !== "";
+  const labeled = numbered || named;
+  const separate = heading.title && labeled;
   return (
     <>
       <div className="structure-span">
@@ -593,7 +597,7 @@ function HeadingFields({
           ariaLabel={`${scope} name`}
           value={heading.name}
           placeholder={hint}
-          disabled={disabled}
+          disabled={disabled || folderName}
           onChange={(name) => onChange({ name })}
         />
       </div>
@@ -601,8 +605,8 @@ function HeadingFields({
         <input
           type="checkbox"
           aria-label={titleLabel}
-          checked={heading.title}
-          disabled={disabled}
+          checked={folderName || heading.title}
+          disabled={disabled || folderName}
           onChange={(event) => onChange({ title: event.currentTarget.checked })}
         />
         {titleLabel}
@@ -619,15 +623,15 @@ function HeadingFields({
       </div>
       <div className="structure-span">
         <Choice
-          label="Between the number and the title"
+          label="Between the heading and the title"
           ariaLabel={`${scope} break`}
           value={heading.join}
-          disabled={disabled || !both}
+          disabled={disabled || !separate}
           options={joinOptions}
           onChange={(join) => onChange({ join })}
         />
       </div>
-      {both && heading.join === "mark" ? (
+      {separate && heading.join === "mark" ? (
         <div className="structure-span">
           <Field
             label="Character"
@@ -643,7 +647,7 @@ function HeadingFields({
         ariaLabel={`${scope} heading font`}
         value={heading.nameFont}
         inherit
-        disabled={disabled || !numbered}
+        disabled={disabled || !labeled}
         onChange={(nameFont) => onChange({ nameFont })}
       />
       <Field
@@ -651,7 +655,7 @@ function HeadingFields({
         ariaLabel={`${scope} heading size`}
         value={heading.namePoints > 0 ? String(heading.namePoints) : ""}
         placeholder="Manuscript size"
-        disabled={disabled || !numbered}
+        disabled={disabled || !labeled}
         onChange={(value) => onChange({ namePoints: pointSize(value) })}
       />
       <FontMenu
@@ -659,7 +663,7 @@ function HeadingFields({
         ariaLabel={`${scope} title font`}
         value={heading.titleFont}
         inherit
-        disabled={disabled || !heading.title}
+        disabled={disabled || (!heading.title && !folderName)}
         onChange={(titleFont) => onChange({ titleFont })}
       />
       <Field
@@ -667,7 +671,7 @@ function HeadingFields({
         ariaLabel={`${scope} title size`}
         value={heading.titlePoints > 0 ? String(heading.titlePoints) : ""}
         placeholder="Manuscript size"
-        disabled={disabled || !heading.title}
+        disabled={disabled || (!heading.title && !folderName)}
         onChange={(value) => onChange({ titlePoints: pointSize(value) })}
       />
       <div className="structure-span">
