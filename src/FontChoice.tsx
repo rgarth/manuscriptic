@@ -10,7 +10,6 @@ export function FontChoice({
   className,
   disabled = false,
   inherit = false,
-  showFace = false,
 }: {
   value: string;
   onChange: (font: string) => void;
@@ -18,7 +17,6 @@ export function FontChoice({
   className?: string;
   disabled?: boolean;
   inherit?: boolean;
-  showFace?: boolean;
 }) {
   const fonts = useFontNames();
   const listed = value && !value.startsWith(".") && !fonts.includes(value) ? [value, ...fonts] : fonts;
@@ -28,7 +26,6 @@ export function FontChoice({
       aria-label={ariaLabel}
       value={value}
       disabled={disabled}
-      style={showFace && value ? { fontFamily: fontFamily(value) } : undefined}
       onChange={(event) => onChange(event.currentTarget.value)}
     >
       {inherit ? <option value="">Manuscript font</option> : null}

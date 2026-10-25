@@ -513,9 +513,20 @@ input:focus-visible {
 }
 
 .setting-label {
-  display: block;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
   margin: 0 0 4px;
   font-weight: 600;
+}
+
+.setting-label .token,
+.dialog.settings .token {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--faded);
 }
 
 .settings-value {
@@ -586,11 +597,18 @@ input:focus-visible {
 .dialog.settings input:not([type="checkbox"]),
 .dialog.settings textarea,
 .dialog.settings select {
+  font: inherit;
+  line-height: inherit;
   min-width: 0;
   padding: 6px 8px;
   border: 1px solid var(--rule);
   background: transparent;
   color: var(--ink);
+}
+
+.dialog.settings input:not([type="checkbox"]),
+.dialog.settings select {
+  height: calc(1.35em + 14px);
 }
 
 .dialog.settings .setting input,

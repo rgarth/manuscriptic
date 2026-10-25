@@ -31,6 +31,28 @@
   color: var(--faded);
 }
 
+.dialog.settings .token-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.dialog.settings .token-list div {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.dialog.settings .token-list dt,
+.dialog.settings .token-list dd {
+  margin: 0;
+}
+
+.dialog.settings .token-list dd {
+  color: var(--faded);
+}
+
 .dialog.settings .setting-group .preference,
 .dialog.settings .structure-level .preference {
   margin: 0;

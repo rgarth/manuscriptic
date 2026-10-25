@@ -273,6 +273,25 @@ function AuthorOverride({
         disabled={compile.useAppAuthor}
         onChange={(patch) => onCompile({ ...compile, author: { ...compile.author, ...patch } })}
       />
+      <p className="settings-value">Also filled in from the book.</p>
+      <dl className="token-list">
+        <div>
+          <dt className="token">{"{$title}"}</dt>
+          <dd>Book title</dd>
+        </div>
+        <div>
+          <dt className="token">{"{$words}"}</dt>
+          <dd>Manuscript words</dd>
+        </div>
+        <div>
+          <dt className="token">{"{$year}"}</dt>
+          <dd>Year of the compile</dd>
+        </div>
+        <div>
+          <dt className="token">{"{$page}"}</dt>
+          <dd>Page number, in the header or footer</dd>
+        </div>
+      </dl>
     </>
   );
 }
@@ -299,12 +318,12 @@ function AuthorFields({
   return (
     <>
       <div className="setting-grid">
-        <Field label="Author" value={value.author} disabled={disabled} onChange={(author) => onChange({ author })} />
-        <Field label="Pen name" value={value.pen} disabled={disabled} onChange={(pen) => onChange({ pen })} />
-        <Field label="Phone" value={value.phone} disabled={disabled} onChange={(phone) => onChange({ phone })} />
-        <Field label="Email" value={value.email} disabled={disabled} onChange={(email) => onChange({ email })} />
+        <Field label="Author" token="{$author}" value={value.author} disabled={disabled} onChange={(author) => onChange({ author })} />
+        <Field label="Pen name" token="{$pen}" value={value.pen} disabled={disabled} onChange={(pen) => onChange({ pen })} />
+        <Field label="Phone" token="{$phone}" value={value.phone} disabled={disabled} onChange={(phone) => onChange({ phone })} />
+        <Field label="Email" token="{$email}" value={value.email} disabled={disabled} onChange={(email) => onChange({ email })} />
       </div>
-      <Field label="Address" value={value.address} disabled={disabled} multiline onChange={(address) => onChange({ address })} />
+      <Field label="Address" token="{$address}" value={value.address} disabled={disabled} multiline onChange={(address) => onChange({ address })} />
     </>
   );
 }
@@ -762,7 +781,6 @@ function FontMenu({
         value={value}
         disabled={disabled}
         inherit={inherit}
-        showFace
         onChange={onChange}
       />
     </label>
@@ -777,6 +795,7 @@ function Field({
   multiline = false,
   placeholder,
   ariaLabel,
+  token,
 }: {
   label: string;
   value: string;
@@ -785,11 +804,15 @@ function Field({
   multiline?: boolean;
   placeholder?: string;
   ariaLabel?: string;
+  token?: string;
 }) {
   const name = ariaLabel ?? label;
   return (
     <label className="setting">
-      <span className="setting-label">{label}</span>
+      <span className="setting-label">
+        <span>{label}</span>
+        {token ? <span className="token">{token}</span> : null}
+      </span>
       {multiline ? (
         <textarea aria-label={name} value={value} disabled={disabled} rows={3} onChange={(event) => onChange(event.currentTarget.value)} />
       ) : (

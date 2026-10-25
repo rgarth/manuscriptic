@@ -50,6 +50,7 @@ export function useBookFile(showNotice: Notice) {
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [history, setHistory] = useState<BookHistory | null>(null);
+  const [answerImportMatter, setAnswerImportMatter] = useState<((choice: boolean | null) => void) | null>(null);
 
   const skipNextSave = useRef(true);
   const generation = useRef(0);
@@ -372,6 +373,15 @@ export function useBookFile(showNotice: Notice) {
     }
   }
 
+  function askManuscripticMatter(): Promise<boolean | null> {
+    return new Promise((resolve) => {
+      setAnswerImportMatter(() => (choice: boolean | null) => {
+        setAnswerImportMatter(null);
+        resolve(choice);
+      });
+    });
+  }
+
   async function importScrivener() {
     if (fileBusy.current) {
       return;
@@ -383,7 +393,12 @@ export function useBookFile(showNotice: Notice) {
       if (!picked) {
         return;
       }
-      const imported = projectFromScrivener(scrivenerTitle(picked), await readScrivener(picked));
+      const files = await readScrivener(picked);
+      const keep = await askManuscripticMatter();
+      if (keep === null) {
+        return;
+      }
+      const imported = projectFromScrivener(scrivenerTitle(picked), files, keep);
       if (!imported) {
         noticeRef.current("That Scrivener project has no binder.");
         return;
@@ -595,6 +610,7 @@ export function useBookFile(showNotice: Notice) {
     loadBook,
     createBook,
     importScrivener,
+    answerImportMatter,
     openNovelFile,
     saveNovelFile,
     onWindowBlur() {

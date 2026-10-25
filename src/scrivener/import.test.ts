@@ -61,7 +61,7 @@ test("a scrivener binder becomes the manuscript, the notes, and the trash", () =
     },
     notes: { SCENE: "{\\rtf1\\ansi\\uc0 Remember}" },
     synopsis: { CHAR: "A queen" },
-  });
+  }, true);
   assert.ok(project);
   assert.equal(project.title, "Castus");
   assert.equal(project.manuscript.title, "Manuscript");
@@ -162,7 +162,7 @@ test("scrivener front matter replaces the empty pages and stays out of the notes
     content: { SCENE: "{\\rtf1\\ansi\\uc0 Once}", TITLE: "{\\rtf1\\ansi\\uc0 The book}" },
     notes: { FRONT: "{\\rtf1\\ansi\\uc0 Section type}", TITLE: "{\\rtf1\\ansi\\uc0 A note}" },
     synopsis: {},
-  });
+  }, false);
   assert.ok(project);
   const opening = project.manuscript.children[0];
   assert.equal(opening?.kind, "document");
@@ -183,7 +183,7 @@ test("scrivener front matter replaces the empty pages and stays out of the notes
     }
     assert.deepEqual(
       back.children.map((child) => child.title),
-      ["Acknowledgements", "About the Author"],
+      [],
     );
   }
   assert.deepEqual(
@@ -240,7 +240,7 @@ test("scrivener folders outside the manuscript become notes", () => {
     },
     notes: { FERGUS: "{\\rtf1\\ansi\\uc0 Keeps a hammer}" },
     synopsis: { FERGUS: "A hero" },
-  });
+  }, false);
   assert.ok(project);
   assert.deepEqual(
     project.manuscript.children.map((child) => child.title),
@@ -267,7 +267,7 @@ test("scrivener folders outside the manuscript become notes", () => {
 });
 
 test("an imported scrivener book can be saved and opened again", () => {
-  const project = projectFromScrivener("Bone Eaters", boneEaters());
+  const project = projectFromScrivener("Bone Eaters", boneEaters(), false);
   assert.ok(project);
   const opened = bookFromFiles(filesForBook(project));
   assert.ok(opened);
@@ -340,7 +340,7 @@ test("an imported scrivener book can be saved and opened again", () => {
   }
   assert.deepEqual(
     back.children.map((child) => child.title),
-    ["Acknowledgements", "About the Author"],
+    [],
   );
 
   const cut = opened.trash.children[0];
@@ -361,7 +361,7 @@ test("a scrivener file name is the book title", () => {
 
 test("a file that is not a scrivener binder is refused", () => {
   assert.equal(
-    projectFromScrivener("Castus", { scrivx: "<Nope/>", content: {}, notes: {}, synopsis: {} }),
+    projectFromScrivener("Castus", { scrivx: "<Nope/>", content: {}, notes: {}, synopsis: {} }, false),
     null,
   );
 });

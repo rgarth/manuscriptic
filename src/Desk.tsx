@@ -139,6 +139,7 @@ export default function Desk({
                 layout={project.layout}
                 onLayout={(layout) => onProject((current) => setPageLayout(current, layout))}
                 dictionary={project.dictionary}
+                manuscript={selected.root === "manuscript"}
                 onAddWord={addWord}
                 onRemoveWord={removeWord}
               />

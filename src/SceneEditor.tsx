@@ -35,6 +35,7 @@ type SceneEditorProps = {
   onAddWord: (word: string) => void;
   onRemoveWord: (word: string) => void;
   hint?: string | null;
+  manuscript?: boolean;
 };
 
 type WordMenu = {
@@ -68,6 +69,7 @@ export default function SceneEditor({
   onAddWord,
   onRemoveWord,
   hint = null,
+  manuscript = false,
 }: SceneEditorProps) {
   const [wordMenu, setWordMenu] = useState<WordMenu | null>(null);
   const editor = useEditor({
@@ -121,13 +123,14 @@ export default function SceneEditor({
   const typewriter = useSyncExternalStore(subscribeEditorPrefs, readTypewriter, readTypewriter);
   const indent = useSyncExternalStore(subscribeEditorPrefs, readIndent, readIndent);
   const spacing = useSyncExternalStore(subscribeEditorPrefs, readSpacing, readSpacing);
+  const shape = manuscript ? indent : "none";
   const pageStyle = {
     "--editor-font": fontFamily(layout.font),
     "--editor-size": String(displayPixels(layout.points, zoom)),
     "--editor-align": layout.align,
-    "--editor-indent": indentEm(indent),
+    "--editor-indent": indentEm(shape),
     "--editor-spacing": spacingLine(spacing),
-    "--editor-gap": paragraphGap(indent),
+    "--editor-gap": paragraphGap(shape),
   } as CSSProperties;
   useEffect(() => {
     if (!editor) {

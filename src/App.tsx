@@ -326,28 +326,35 @@ export default function App() {
   const gateSettings = dialog === "settings" ? (
     <Settings onClose={() => setDialog(null)} />
   ) : null;
+  const importMatter = file.answerImportMatter ? (
+    <ImportMatterDialog onAnswer={file.answerImportMatter} />
+  ) : null;
 
   if (!project) {
     return (
-      <Gate
-        notice={notice}
-        ready={file.ready}
-        settings={gateSettings}
-        onOpen={() => {
-          void file.openNovelFile();
-        }}
-        onCreate={() => {
-          void file.createBook();
-        }}
-        onImport={() => {
-          void file.importScrivener();
-        }}
-      />
+      <>
+        <Gate
+          notice={notice}
+          ready={file.ready}
+          settings={gateSettings}
+          onOpen={() => {
+            void file.openNovelFile();
+          }}
+          onCreate={() => {
+            void file.createBook();
+          }}
+          onImport={() => {
+            void file.importScrivener();
+          }}
+        />
+        {importMatter}
+      </>
     );
   }
 
   return (
-    <Desk
+    <>
+      <Desk
       project={project}
       history={file.history}
       binderOpen={binderOpen}
@@ -369,5 +376,32 @@ export default function App() {
       onRestoreScene={file.restoreSnapshotScene}
       onDeleteSnapshot={file.removeSnapshot}
     />
+      {importMatter}
+    </>
+  );
+}
+
+function ImportMatterDialog({ onAnswer }: { onAnswer: (keep: boolean | null) => void }) {
+  const [keep, setKeep] = useState(true);
+  return (
+    <div className="dialog-backdrop">
+      <div className="dialog" role="dialog" aria-modal="true" aria-label="Import Scrivener">
+        <p>The Title page and the other starter pages stay beside the imported ones. Choose which pages compile in Contents.</p>
+        <label className="preference">
+          <input
+            type="checkbox"
+            checked={keep}
+            onChange={(event) => setKeep(event.currentTarget.checked)}
+          />
+          Create Manuscriptic front and back matter
+        </label>
+        <div className="dialog-actions">
+          <button type="button" onClick={() => onAnswer(keep)}>
+            Import
+          </button>
+          <button type="button" onClick={() => onAnswer(null)}>Cancel</button>
+        </div>
+      </div>
+    </div>
   );
 }

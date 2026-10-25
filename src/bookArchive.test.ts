@@ -147,7 +147,7 @@ test("a replaced front matter round-trips without the empty starter pages", () =
     frontMatter: [documentNode("Title Page", "page")],
     backMatter: null,
     trash: [],
-  });
+  }, false);
   const opened = bookFromFiles(filesForBook(project));
   assert.ok(opened);
   const front = opened.publishing.children.find((child) => child.title === "Front Matter");

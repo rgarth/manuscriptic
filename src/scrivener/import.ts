@@ -50,7 +50,7 @@ type PlacedBinder = {
   notes: ScrivenerItem[];
 };
 
-export function projectFromScrivener(title: string, files: ScrivenerPackage): ProjectFile | null {
+export function projectFromScrivener(title: string, files: ScrivenerPackage, keepStarters: boolean): ProjectFile | null {
   const xml = parseXml(files.scrivx);
   if (!xml) {
     return null;
@@ -66,15 +66,18 @@ export function projectFromScrivener(title: string, files: ScrivenerPackage): Pr
     [placed.manuscript, placed.trash].filter((item) => item !== null),
     files,
   );
-  return projectFromImport({
-    title,
-    manuscript: placed.manuscript ? convertList(placed.manuscript.children, "scene", files) : [],
-    notes: placed.notes.length > 0 ? convertList(placed.notes, "note", files) : null,
-    extraNotes: documentNotes.length > 0 ? [folderNode("Document notes", documentNotes, false)] : [],
-    frontMatter: placed.front ? convertList(placed.front.children, "page", files) : null,
-    backMatter: placed.back ? convertList(placed.back.children, "page", files) : null,
-    trash: placed.trash ? convertList(placed.trash.children, "scene", files) : [],
-  });
+  return projectFromImport(
+    {
+      title,
+      manuscript: placed.manuscript ? convertList(placed.manuscript.children, "scene", files) : [],
+      notes: placed.notes.length > 0 ? convertList(placed.notes, "note", files) : null,
+      extraNotes: documentNotes.length > 0 ? [folderNode("Document notes", documentNotes, false)] : [],
+      frontMatter: placed.front ? convertList(placed.front.children, "page", files) : null,
+      backMatter: placed.back ? convertList(placed.back.children, "page", files) : null,
+      trash: placed.trash ? convertList(placed.trash.children, "scene", files) : [],
+    },
+    keepStarters,
+  );
 }
 
 function placeBinder(binder: ScrivenerItem[], template: ScrivenerItem | undefined): PlacedBinder {
