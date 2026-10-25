@@ -6,6 +6,7 @@ mod scrivener;
 mod spellcheck;
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Condvar, Mutex};
 
 use book_file::{file_exists, read_book, read_history, write_book, write_export};
 use scrivener::read_scrivener;
@@ -20,6 +21,17 @@ use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 static BOOK_WINDOWS: AtomicU64 = AtomicU64::new(1);
+
+struct Launch {
+    settled: bool,
+    paths: Vec<String>,
+}
+
+static LAUNCH: Mutex<Launch> = Mutex::new(Launch {
+    settled: false,
+    paths: Vec::new(),
+});
+static LAUNCH_READY: Condvar = Condvar::new();
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,7 +52,8 @@ pub fn run() {
             take_book_lock,
             refresh_book_lock,
             release_book_lock,
-            misspellings
+            misspellings,
+            launch_books
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
@@ -59,12 +72,43 @@ pub fn run() {
 }
 
 fn open_requested_books(app: &tauri::AppHandle, event: tauri::RunEvent) {
-    #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
-    if let tauri::RunEvent::Opened { urls } = event {
-        open_books(app, urls);
+    match event {
+        tauri::RunEvent::MainEventsCleared => settle_launch(),
+        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+        tauri::RunEvent::Opened { urls } => note_or_open(app, urls),
+        _ => {}
     }
-    #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
-    let _ = (app, event);
+}
+
+fn settle_launch() {
+    // Finder's open callback arrives before the run loop goes idle, so this event means the launch list is complete.
+    let mut launch = LAUNCH.lock().unwrap_or_else(|err| err.into_inner());
+    if launch.settled {
+        return;
+    }
+    launch.settled = true;
+    LAUNCH_READY.notify_all();
+}
+
+#[tauri::command]
+async fn launch_books() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(wait_for_launch)
+        .await
+        .map_err(|err| err.to_string())
+}
+
+fn wait_for_launch() -> Vec<String> {
+    let mut launch = LAUNCH.lock().unwrap_or_else(|err| err.into_inner());
+    while !launch.settled {
+        launch = LAUNCH_READY.wait(launch).unwrap_or_else(|err| err.into_inner());
+    }
+    launch.paths.clone()
+}
+
+fn remember_launch(paths: &mut Vec<String>, path: &str) {
+    if !paths.iter().any(|have| have == path) {
+        paths.push(path.to_string());
+    }
 }
 
 fn opened_book(url: &tauri::Url) -> Option<String> {
@@ -80,6 +124,24 @@ fn book_page(path: &str) -> String {
     let mut url = tauri::Url::parse("https://manuscriptic.invalid/index.html").expect("book page");
     url.query_pairs_mut().append_pair("book", path);
     format!("index.html?{}", url.query().unwrap_or_default())
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn note_or_open(app: &tauri::AppHandle, urls: Vec<tauri::Url>) {
+    let books: Vec<String> = urls.iter().filter_map(opened_book).collect();
+    if books.is_empty() {
+        return;
+    }
+    {
+        let mut launch = LAUNCH.lock().unwrap_or_else(|err| err.into_inner());
+        if !launch.settled {
+            for path in &books {
+                remember_launch(&mut launch.paths, path);
+            }
+            return;
+        }
+    }
+    open_books(app, urls);
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
@@ -182,7 +244,7 @@ fn report_open(app: &tauri::AppHandle, path: &str, error: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{book_page, opened_book};
+    use super::{book_page, opened_book, remember_launch};
 
     #[test]
     fn a_manuscriptic_file_opens_and_another_file_does_not() {
@@ -203,5 +265,20 @@ mod tests {
             .find(|(key, _)| key == "book")
             .map(|(_, value)| value.into_owned());
         assert_eq!(book.as_deref(), Some("/Novels/My Book.manuscriptic"));
+    }
+
+    #[test]
+    fn a_launch_file_is_recorded_once() {
+        let mut paths = Vec::new();
+        remember_launch(&mut paths, "/Novels/Castus.manuscriptic");
+        remember_launch(&mut paths, "/Novels/Castus.manuscriptic");
+        remember_launch(&mut paths, "/Novels/Other.manuscriptic");
+        assert_eq!(
+            paths,
+            vec![
+                "/Novels/Castus.manuscriptic".to_string(),
+                "/Novels/Other.manuscriptic".to_string()
+            ]
+        );
     }
 }

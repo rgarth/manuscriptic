@@ -51,6 +51,10 @@ export function raiseBookWindow(path: string): Promise<boolean> {
   return invoke<boolean>("raise_book_window", { path });
 }
 
+export function launchBooks(): Promise<string[]> {
+  return invoke<string[]>("launch_books");
+}
+
 export function claimBookLock(path: string, holder: string): Promise<BookLock> {
   return invoke<BookLock>("claim_book_lock", { path, holder });
 }

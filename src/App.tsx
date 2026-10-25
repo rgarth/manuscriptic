@@ -10,6 +10,7 @@ import { booksOnStartup, markBookClosed, readSnapshotMinutes, type SnapshotMinut
 import { menuCommand, type MenuCommand } from "./menuCommand";
 import { removal } from "./model/binder";
 import { leafAction, setPageLayout } from "./model/project";
+import { launchBooks } from "./storage";
 import { useBookFile } from "./useBookFile";
 import { useNotice } from "./useNotice";
 import { bookQuery, openBookWindow, tauriAvailable, windowClose } from "./windows";
@@ -59,28 +60,34 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const startup = booksOnStartup(localStorage, bookQuery());
-    const first = startup.paths[0];
-    if (!first) {
-      file.markReady();
-      return;
-    }
-    preloadSceneEditor();
-    file.loadBook(first)
-      .then(async () => {
-        if (cancelled || !startup.openRest) {
+    void (async () => {
+      try {
+        const query = bookQuery();
+        const launched = query || !tauriAvailable() ? [] : await launchBooks();
+        if (cancelled) {
           return;
         }
-        for (const path of startup.paths.slice(1)) {
+        const paths = launched.length > 0 ? launched : booksOnStartup(localStorage, query).paths;
+        const first = paths[0];
+        if (!first) {
+          file.markReady();
+          return;
+        }
+        preloadSceneEditor();
+        await file.loadBook(first);
+        if (cancelled) {
+          return;
+        }
+        for (const path of paths.slice(1)) {
           await openBookWindow(path, path);
         }
-      })
-      .catch((error: unknown) => {
+      } catch (error: unknown) {
         if (!cancelled) {
           showNotice(error, "Could not open the project.");
           file.markReady();
         }
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };
