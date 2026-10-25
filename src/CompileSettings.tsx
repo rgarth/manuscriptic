@@ -402,7 +402,7 @@ function FormattingSettings({
               checked={format.differentFirstPage}
               onChange={(event) => onChange({ differentFirstPage: event.currentTarget.checked })}
             />
-            Different first page
+            No header and footer on first page
           </label>
         </div>
       </section>
