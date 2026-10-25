@@ -12,8 +12,7 @@ import { removal } from "./model/binder";
 import { leafAction, setPageLayout } from "./model/project";
 import { useBookFile } from "./useBookFile";
 import { useNotice } from "./useNotice";
-import { raiseBookWindow, restoreOpenedBooks, takeOpenedBooks } from "./storage";
-import { bookQuery, claimStartupBooks, openBookWindow, tauriAvailable, windowClose } from "./windows";
+import { bookQuery, openBookWindow, tauriAvailable, windowClose } from "./windows";
 import "./App.css";
 import "./editor.css";
 
@@ -60,89 +59,31 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    let stop = () => {};
-    void (async () => {
-      try {
-        const requested = bookQuery();
-        const fromFinder = requested ? [] : await claimStartupBooks();
-        if (cancelled) {
+    const startup = booksOnStartup(localStorage, bookQuery());
+    const first = startup.paths[0];
+    if (!first) {
+      file.markReady();
+      return;
+    }
+    preloadSceneEditor();
+    file.loadBook(first)
+      .then(async () => {
+        if (cancelled || !startup.openRest) {
           return;
         }
-        const startup = booksOnStartup(localStorage, requested ?? fromFinder[0] ?? null);
-        const first = startup.paths[0];
-        const rest = [
-          ...(startup.openRest ? startup.paths.slice(1) : []),
-          ...fromFinder.filter((path) => path !== first),
-        ];
-        if (first) {
-          preloadSceneEditor();
-          await file.loadBook(first);
-        } else {
-          file.markReady();
+        for (const path of startup.paths.slice(1)) {
+          await openBookWindow(path, path);
         }
-        if (cancelled) {
-          await giveBack(rest);
-          return;
-        }
-        for (let index = 0; index < rest.length; index += 1) {
-          if (cancelled) {
-            await giveBack(rest.slice(index));
-            return;
-          }
-          await openBookWindow(rest[index], rest[index]);
-        }
-        if (!tauriAvailable() || cancelled) {
-          return;
-        }
-        const unlisten = await listen("opened-books", () => {
-          void openHeldBooks();
-        });
-        if (cancelled) {
-          unlisten();
-          return;
-        }
-        stop = unlisten;
-        await openHeldBooks();
-      } catch (error: unknown) {
+      })
+      .catch((error: unknown) => {
         if (!cancelled) {
           showNotice(error, "Could not open the project.");
           file.markReady();
         }
-      }
-    })();
+      });
     return () => {
       cancelled = true;
-      stop();
     };
-
-    async function giveBack(paths: string[]) {
-      if (paths.length === 0) {
-        return;
-      }
-      await restoreOpenedBooks(paths).catch((error: unknown) => {
-        showNotice(error, "Could not open the project.");
-      });
-    }
-
-    async function openHeldBooks() {
-      const paths = await takeOpenedBooks();
-      for (let index = 0; index < paths.length; index += 1) {
-        if (cancelled) {
-          await giveBack(paths.slice(index));
-          return;
-        }
-        const path = paths[index];
-        try {
-          if (file.hasBook()) {
-            await openBookWindow(path, path);
-          } else if (!(await raiseBookWindow(path))) {
-            await file.loadBook(path);
-          }
-        } catch (error: unknown) {
-          showNotice(error, "Could not open the project.");
-        }
-      }
-    }
   }, []);
 
   useEffect(() => {

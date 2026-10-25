@@ -5,20 +5,21 @@ mod fonts;
 mod scrivener;
 mod spellcheck;
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use book_file::{file_exists, read_book, read_history, write_book, write_export};
 use scrivener::read_scrivener;
 use book_lock::{
-    book_is_open, claim_book_lock, raise_book_window, refresh_book_lock, release_book_lock, release_window,
-    take_book_lock,
+    book_is_open, claim_book_lock, holds_book, raise_book_window, refresh_book_lock, release_book_lock,
+    release_window, reserve_book, take_book_lock,
 };
 use documents::documents_directory;
 use fonts::list_fonts;
 use spellcheck::misspellings;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-static OPENED_BOOKS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+static BOOK_WINDOWS: AtomicU64 = AtomicU64::new(1);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -39,9 +40,7 @@ pub fn run() {
             take_book_lock,
             refresh_book_lock,
             release_book_lock,
-            misspellings,
-            take_opened_books,
-            restore_opened_books
+            misspellings
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
@@ -59,10 +58,10 @@ pub fn run() {
         .run(|app, event| open_requested_books(app, event));
 }
 
-fn open_requested_books<R: tauri::Runtime>(app: &tauri::AppHandle<R>, event: tauri::RunEvent) {
+fn open_requested_books(app: &tauri::AppHandle, event: tauri::RunEvent) {
     #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
     if let tauri::RunEvent::Opened { urls } = event {
-        remember_opened(app, urls);
+        open_books(app, urls);
     }
     #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
     let _ = (app, event);
@@ -77,53 +76,113 @@ fn opened_book(url: &tauri::Url) -> Option<String> {
     Some(path.to_string_lossy().into_owned())
 }
 
-fn remember_opened<R: tauri::Runtime>(app: &tauri::AppHandle<R>, urls: Vec<tauri::Url>) {
-    let books: Vec<String> = urls.iter().filter_map(opened_book).collect();
-    if books.is_empty() {
-        return;
-    }
-    if OPENED_BOOKS
-        .lock()
-        .map(|mut open| {
-            open.extend(books);
-        })
-        .is_err()
-    {
-        return;
-    }
-    let _ = app.emit("opened-books", ());
+fn book_page(path: &str) -> String {
+    let mut url = tauri::Url::parse("https://manuscriptic.invalid/index.html").expect("book page");
+    url.query_pairs_mut().append_pair("book", path);
+    format!("index.html?{}", url.query().unwrap_or_default())
 }
 
-#[tauri::command]
-fn take_opened_books() -> Vec<String> {
-    OPENED_BOOKS
-        .lock()
-        .map(|mut open| std::mem::take(&mut *open))
-        .unwrap_or_default()
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn open_books(app: &tauri::AppHandle, urls: Vec<tauri::Url>) {
+    for url in urls {
+        let Some(path) = opened_book(&url) else {
+            continue;
+        };
+        if show_open_book(app, &path) {
+            continue;
+        }
+        if let Err(error) = place_book(app, &path) {
+            report_open(app, &path, &error);
+        }
+    }
 }
 
-#[tauri::command]
-fn restore_opened_books(app: tauri::AppHandle, paths: Vec<String>) {
-    if paths.is_empty() {
-        return;
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn show_open_book(app: &tauri::AppHandle, path: &str) -> bool {
+    match raise_book_window(app.clone(), path.to_string()) {
+        Ok(false) => false,
+        Ok(true) => true,
+        Err(error) => {
+            report_open(app, path, &error);
+            true
+        }
     }
-    if OPENED_BOOKS
-        .lock()
-        .map(|mut open| {
-            let mut restored = paths;
-            restored.append(&mut *open);
-            *open = restored;
-        })
-        .is_err()
-    {
-        return;
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn place_book(app: &tauri::AppHandle, path: &str) -> Result<(), String> {
+    if let Some(window) = idle_window(app) {
+        if let Some(url) = book_location(&window, path) {
+            window.navigate(url).map_err(|err| err.to_string())?;
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+            reserve_book(window.label(), path);
+            return Ok(());
+        }
     }
-    let _ = app.emit("opened-books", ());
+    create_book_window(app, path)
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn book_location(window: &tauri::WebviewWindow, path: &str) -> Option<tauri::Url> {
+    let mut url = window.url().ok()?;
+    if url.scheme() != "http" && url.scheme() != "https" && url.scheme() != "tauri" {
+        return None;
+    }
+    url.query_pairs_mut().clear().append_pair("book", path);
+    Some(url)
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn idle_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow> {
+    let windows = app.webview_windows();
+    let mut labels: Vec<String> = windows.keys().cloned().collect();
+    labels.sort_by_key(|label| label != "main");
+    labels.into_iter().find_map(|label| {
+        if holds_book(&label) {
+            return None;
+        }
+        let window = windows.get(&label)?.clone();
+        match window.url() {
+            Ok(url) if url.query_pairs().all(|(key, _)| key != "book") => Some(window),
+            _ => None,
+        }
+    })
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn create_book_window(app: &tauri::AppHandle, path: &str) -> Result<(), String> {
+    let mut config = app
+        .config()
+        .app
+        .windows
+        .first()
+        .cloned()
+        .ok_or_else(|| "The app has no window.".to_string())?;
+    config.label = format!("book-{}", BOOK_WINDOWS.fetch_add(1, Ordering::Relaxed));
+    config.url = tauri::WebviewUrl::App(std::path::PathBuf::from(book_page(path)));
+    let label = config.label.clone();
+    let window = tauri::WebviewWindowBuilder::from_config(app, &config)
+        .map_err(|err| err.to_string())?
+        .build()
+        .map_err(|err| err.to_string())?;
+    let _ = window.set_focus();
+    reserve_book(&label, path);
+    Ok(())
+}
+
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+fn report_open(app: &tauri::AppHandle, path: &str, error: &str) {
+    app.dialog()
+        .message(format!("{path}\n{error}"))
+        .title("Could not open the project.")
+        .kind(MessageDialogKind::Error)
+        .show(|_| {});
 }
 
 #[cfg(test)]
 mod tests {
-    use super::opened_book;
+    use super::{book_page, opened_book};
 
     #[test]
     fn a_manuscriptic_file_opens_and_another_file_does_not() {
@@ -133,5 +192,16 @@ mod tests {
         assert_eq!(opened_book(&titled).as_deref(), Some("/Novels/Castus.MANUSCRIPTIC"));
         let other = tauri::Url::from_file_path("/Novels/notes.txt").expect("other");
         assert_eq!(opened_book(&other), None);
+    }
+
+    #[test]
+    fn a_book_page_keeps_the_path() {
+        let page = book_page("/Novels/My Book.manuscriptic");
+        let url = tauri::Url::parse(&format!("https://manuscriptic.invalid/{page}")).expect("page");
+        let book = url
+            .query_pairs()
+            .find(|(key, _)| key == "book")
+            .map(|(_, value)| value.into_owned());
+        assert_eq!(book.as_deref(), Some("/Novels/My Book.manuscriptic"));
     }
 }

@@ -107,6 +107,14 @@ pub fn raise_book_window(app: AppHandle, path: String) -> Result<bool, String> {
     Ok(false)
 }
 
+pub fn holds_book(label: &str) -> bool {
+    holds().iter().any(|hold| hold.window == label)
+}
+
+pub fn reserve_book(label: &str, path: &str) {
+    remember(label, path, "");
+}
+
 #[tauri::command]
 pub fn book_is_open(app: AppHandle, path: String) -> Result<bool, String> {
     let open_here = {

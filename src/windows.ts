@@ -1,15 +1,5 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { raiseBookWindow, takeOpenedBooks } from "./storage.ts";
-
-let startupBooks: Promise<string[]> | null = null;
-
-export function claimStartupBooks(): Promise<string[]> {
-  if (!tauriAvailable()) {
-    return Promise.resolve([]);
-  }
-  startupBooks ??= takeOpenedBooks();
-  return startupBooks;
-}
+import { raiseBookWindow } from "./storage.ts";
 
 export function bookQuery(): string | null {
   return new URLSearchParams(window.location.search).get("book");
