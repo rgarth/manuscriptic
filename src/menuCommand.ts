@@ -27,6 +27,10 @@ export type MenuCommand =
   | { name: "new-scene" }
   | { name: "new-section" }
   | { name: "trash" }
+  | { name: "find" }
+  | { name: "find-next" }
+  | { name: "find-previous" }
+  | { name: "replace" }
   | { name: "format"; command: SceneCommand }
   | { name: "align"; align: Alignment };
 
@@ -50,6 +54,10 @@ export function menuCommand(value: unknown): MenuCommand | null {
     case "new-scene":
     case "new-section":
     case "trash":
+    case "find":
+    case "find-next":
+    case "find-previous":
+    case "replace":
       return { name: value.name };
     case "format":
       return sceneCommand(value.command);

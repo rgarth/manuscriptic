@@ -174,6 +174,83 @@
   text-underline-offset: 0.18em;
 }
 
+.ProseMirror .find-hit {
+  background: color-mix(in srgb, var(--nib) 28%, transparent);
+  border-radius: 2px;
+}
+
+.ProseMirror .find-hit.current {
+  background: color-mix(in srgb, var(--nib) 55%, transparent);
+}
+
+.find-bar {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 24px 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--rule) 40%, var(--faded));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--paper) 90%, var(--ink));
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 14%, transparent);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+.find-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.find-bar input {
+  flex: 1;
+  min-width: 8rem;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--paper);
+  padding: 4px 8px;
+}
+
+.find-bar .mark {
+  flex: none;
+}
+
+.find-expand[aria-expanded="true"] .icon {
+  transform: rotate(90deg);
+}
+
+.find-case {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+
+.find-count {
+  flex: none;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--faded);
+  font-size: 12px;
+}
+
+.find-replace {
+  padding-left: 34px;
+}
+
+.find-action {
+  flex: none;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, var(--rule));
+  border-radius: 6px;
+  background: linear-gradient(180deg, var(--paper), color-mix(in srgb, var(--paper) 78%, var(--wash)));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 55%, var(--paper));
+  padding: 3px 10px;
+}
+
 .ProseMirror p {
   margin: 0 0 var(--editor-gap, 0.9em);
 }

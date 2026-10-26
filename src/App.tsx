@@ -227,6 +227,18 @@ export default function App() {
       case "trash":
         askTrash(project?.view.selectedId ?? null);
         return;
+      case "find":
+        commands().find?.();
+        return;
+      case "find-next":
+        commands().findNext?.();
+        return;
+      case "find-previous":
+        commands().findPrevious?.();
+        return;
+      case "replace":
+        commands().replace?.();
+        return;
       case "format":
         commands().format?.(command.command);
         return;

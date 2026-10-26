@@ -1,8 +1,8 @@
-import Subscript from "@tiptap/extension-subscript";
-import Superscript from "@tiptap/extension-superscript";
+import { TextSelection } from "@tiptap/pm/state";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useLayoutEffect, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { documentExtensions } from "./editorExtensions";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { findMarks, findMarksKey, type FindEditorState } from "./findView.ts";
 import { getEditorPrefs, indentEm, paragraphGap, spacingLine, subscribeEditorPrefs } from "./editorPrefs";
 import { scrollTopForCaret } from "./typewriter";
 import {
@@ -20,8 +20,10 @@ import { formatCommands, formatCommandsIn } from "./formatCommands";
 import Icon, { type IconName } from "./icons";
 import { includesWord } from "./dictionary.ts";
 import { parseEditorDoc, type EditorDoc } from "./model/editorDoc";
-import { dictionarySpellcheckKey, projectDictionary, wordFromPoint } from "./spellcheck";
+import { marksInside } from "./find";
+import { dictionarySpellcheckKey, isMisspelled, projectDictionary, suggestionCase, wordFromPoint } from "./spellcheck";
 import { reportFailure } from "./failures";
+import { spellingSuggestions } from "./storage";
 import { FontChoice } from "./FontChoice.tsx";
 
 type SceneEditorProps = {
@@ -36,27 +38,19 @@ type SceneEditorProps = {
   onRemoveWord: (word: string) => void;
   hint?: string | null;
   manuscript?: boolean;
+  find: FindEditorState;
 };
 
 type WordMenu = {
   x: number;
   y: number;
   word: string;
+  from: number;
+  to: number;
+  suggestions: string[];
 };
 
-const extensions = [
-  StarterKit.configure({
-    heading: false,
-    code: false,
-    codeBlock: false,
-    blockquote: false,
-    horizontalRule: false,
-    link: false,
-  }),
-  Superscript,
-  Subscript,
-  projectDictionary,
-];
+const extensions = [...documentExtensions, projectDictionary, findMarks];
 
 export default function SceneEditor({
   title,
@@ -70,6 +64,7 @@ export default function SceneEditor({
   onRemoveWord,
   hint = null,
   manuscript = false,
+  find,
 }: SceneEditorProps) {
   const [wordMenu, setWordMenu] = useState<WordMenu | null>(null);
   const editor = useEditor({
@@ -83,16 +78,34 @@ export default function SceneEditor({
       },
       handleDOMEvents: {
         contextmenu(view, event) {
-          const word = wordFromPoint(view, event.clientX, event.clientY);
-          if (!word) {
+          const found = wordFromPoint(view, event.clientX, event.clientY);
+          if (!found) {
             return false;
           }
           event.preventDefault();
+          const misspelled = isMisspelled(view, found.from, found.to);
           setWordMenu({
-            x: Math.min(event.clientX, window.innerWidth - 240),
-            y: Math.min(event.clientY, window.innerHeight - 48),
-            word,
+            x: event.clientX,
+            y: event.clientY,
+            word: found.word,
+            from: found.from,
+            to: found.to,
+            suggestions: [],
           });
+          if (misspelled) {
+            void spellingSuggestions(found.word)
+              .then((suggestions) => {
+                setWordMenu((current) => {
+                  if (!current || current.from !== found.from || current.to !== found.to) {
+                    return current;
+                  }
+                  return { ...current, suggestions };
+                });
+              })
+              .catch((error: unknown) => {
+                reportFailure(error, "Spelling suggestions could not be loaded.");
+              });
+          }
           return true;
         },
       },
@@ -119,6 +132,40 @@ export default function SceneEditor({
     }
     editor.commands.setContent(content, { emitUpdate: false });
   }, [editor, content]);
+  useLayoutEffect(() => {
+    if (!editor || editor.isDestroyed) {
+      return;
+    }
+    editor.view.dispatch(
+      editor.state.tr
+        .setMeta(findMarksKey, {
+          query: find.query,
+          matchCase: find.matchCase,
+          from: find.from,
+          to: find.to,
+        })
+        .setMeta("addToHistory", false),
+    );
+  }, [editor, find.query, find.matchCase, find.from, find.to]);
+  const revealed = useRef(0);
+  useLayoutEffect(() => {
+    if (!editor || editor.isDestroyed || find.reveal === 0 || find.reveal === revealed.current) {
+      return;
+    }
+    revealed.current = find.reveal;
+    if (find.from === null || find.to === null || find.from >= find.to || find.to > editor.state.doc.content.size) {
+      return;
+    }
+    const inFindBar =
+      document.activeElement instanceof HTMLElement && document.activeElement.closest(".find-bar") !== null;
+    if (inFindBar) {
+      scrollMatchIntoView(editor, find.from);
+      return;
+    }
+    editor.view.dispatch(
+      editor.state.tr.setSelection(TextSelection.create(editor.state.doc, find.from, find.to)).scrollIntoView(),
+    );
+  }, [editor, find.reveal, find.from, find.to]);
   const zoom = useSyncExternalStore(subscribeEditorPrefs, readZoom, readZoom);
   const typewriter = useSyncExternalStore(subscribeEditorPrefs, readTypewriter, readTypewriter);
   const indent = useSyncExternalStore(subscribeEditorPrefs, readIndent, readIndent);
@@ -235,6 +282,10 @@ export default function SceneEditor({
             onRemoveWord(wordMenu.word);
             setWordMenu(null);
           }}
+          onReplace={(suggestion) => {
+            replaceWord(editor, wordMenu.from, wordMenu.to, wordMenu.word, suggestion);
+            setWordMenu(null);
+          }}
           onClose={() => setWordMenu(null)}
         />
       ) : null}
@@ -256,6 +307,24 @@ function readIndent() {
 
 function readSpacing() {
   return getEditorPrefs().spacing;
+}
+
+function scrollMatchIntoView(editor: Editor, pos: number) {
+  const scroll = editor.view.dom.closest(".editor-scroll");
+  if (!(scroll instanceof HTMLElement)) {
+    return;
+  }
+  let coords: { top: number; bottom: number };
+  try {
+    coords = editor.view.coordsAtPos(pos);
+  } catch {
+    return;
+  }
+  const box = scroll.getBoundingClientRect();
+  if (coords.top >= box.top + 24 && coords.bottom <= box.bottom - 24) {
+    return;
+  }
+  scroll.scrollTop = scrollTopForCaret(scroll.scrollTop, (coords.top + coords.bottom) / 2, box.top, box.height);
 }
 
 function centerCaret(editor: Editor) {
@@ -280,32 +349,67 @@ function centerCaret(editor: Editor) {
   scroll.scrollTop = next;
 }
 
+function replaceWord(editor: Editor | null, from: number, to: number, word: string, suggestion: string) {
+  if (!editor || editor.isDestroyed || to > editor.state.doc.content.size || from >= to) {
+    return;
+  }
+  if (editor.state.doc.textBetween(from, to) !== word) {
+    return;
+  }
+  const text = suggestionCase(suggestion, word);
+  editor.view.dispatch(
+    editor.state.tr.replaceWith(from, to, editor.schema.text(text, marksInside(editor.state.doc, from))),
+  );
+}
+
 function WordMenuPop({
   menu,
   known,
   onAdd,
   onRemove,
+  onReplace,
   onClose,
 }: {
   menu: WordMenu;
   known: boolean;
   onAdd: () => void;
   onRemove: () => void;
+  onReplace: (suggestion: string) => void;
   onClose: () => void;
 }) {
+  const suggestions = [...new Set(menu.suggestions.map((suggestion) => suggestionCase(suggestion, menu.word)))];
+  const label = known ? `Remove “${menu.word}” from this project` : `Add “${menu.word}” to this project`;
+  const panel = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const node = panel.current;
+    if (!node) {
+      return;
+    }
+    const rect = node.getBoundingClientRect();
+    const margin = 8;
+    const left = Math.min(Math.max(margin, menu.x), Math.max(margin, window.innerWidth - rect.width - margin));
+    const top =
+      menu.y + rect.height <= window.innerHeight - margin ? menu.y : Math.max(margin, menu.y - rect.height);
+    node.style.left = `${left}px`;
+    node.style.top = `${top}px`;
+  }, [menu.x, menu.y, suggestions.length, label]);
   return (
     <>
       <button type="button" className="menu-dismiss" aria-label="Close menu" onClick={onClose} />
-      <div className="context-menu" style={{ left: menu.x, top: menu.y }} role="menu">
-        {known ? (
-          <button type="button" role="menuitem" onClick={onRemove}>
-            Remove “{menu.word}” from this project
+      <div ref={panel} className="context-menu" style={{ left: menu.x, top: menu.y }} role="menu">
+        {suggestions.map((suggestion) => (
+          <button type="button" role="menuitem" key={suggestion} onClick={() => onReplace(suggestion)}>
+            {suggestion}
           </button>
-        ) : (
-          <button type="button" role="menuitem" onClick={onAdd}>
-            Add “{menu.word}” to this project
-          </button>
-        )}
+        ))}
+        <button
+          type="button"
+          role="menuitem"
+          className={suggestions.length > 0 ? "menu-split" : undefined}
+          onClick={known ? onRemove : onAdd}
+        >
+          {label}
+        </button>
       </div>
     </>
   );

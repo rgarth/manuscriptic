@@ -336,10 +336,17 @@ input:focus-visible {
   position: fixed;
   z-index: 21;
   min-width: 11.5rem;
+  max-height: min(20rem, calc(100vh - 16px));
+  overflow: auto;
   padding: 4px;
   background: var(--paper);
   color: var(--ink);
   border: 1px solid var(--rule);
+}
+
+.context-menu .menu-split {
+  margin-top: 4px;
+  border-top: 1px solid var(--rule);
 }
 
 .context-menu button {
@@ -347,6 +354,10 @@ input:focus-visible {
   width: 100%;
   padding: 6px 8px;
   text-align: left;
+}
+
+.context-menu button:hover:not(:disabled) {
+  background: var(--wash);
 }
 
 .context-menu button:disabled {

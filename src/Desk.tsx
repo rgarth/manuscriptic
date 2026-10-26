@@ -39,7 +39,9 @@ import {
   setView,
   type ProjectFile,
 } from "./model/project";
+import FindBar from "./FindBar";
 import { publishingHint } from "./publishingPages";
+import { useFind } from "./useFind";
 import type { SaveState } from "./useBookFile";
 
 export type DeskDialog = "settings" | "snapshots" | "compile" | "book-settings";
@@ -94,6 +96,7 @@ export default function Desk({
   const sceneWords = selected?.node.kind === "document" ? wordCount(selected.node.content) : 0;
   const bookWords = manuscriptWordCount(project);
   const pendingRemoval = pendingTrash ? removal(project, pendingTrash) : null;
+  const find = useFind(project, onProject, dialog !== null || pendingRemoval !== null);
   const leaf = leafAction(project, selectedId);
   const addWord = (word: string) => {
     onProject((current) => addDictionaryWord(current, word));
@@ -121,12 +124,14 @@ export default function Desk({
           onToggleOpen={() => onBinderOpen(!binderOpen)}
         />
         <section className="editor-column">
+          {find.open ? <FindBar {...find.bar} /> : null}
           {selected?.node.kind === "document" ? (
             <Suspense fallback={<Opening />}>
               <SceneEditor
                 key={selected.node.id}
                 title={selected.node.title}
                 content={selected.node.content}
+                find={find.editor}
                 onTitle={(title) => {
                   const id = selected.node.id;
                   onProject((current) => renameNode(current, id, title));

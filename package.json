@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "node --experimental-strip-types --test src/model/project.test.ts src/themes/themes.test.ts src/editorPrefs.test.ts src/typewriter.test.ts src/hint.test.ts src/dictionary.test.ts src/spellcheck.test.ts src/filePrefs.test.ts src/compilePrefs.test.ts src/compileVars.test.ts src/compileShape.test.ts src/compileTicks.test.ts src/docx.test.ts src/failures.test.ts src/bookArchive.test.ts src/bookSession.test.ts src/bookLock.test.ts src/writingTime.test.ts src/importedBook.test.ts src/scrivener/rtf.test.ts src/scrivener/import.test.ts && cargo test --manifest-path src-tauri/Cargo.toml",
+    "test": "node --experimental-strip-types --test src/model/project.test.ts src/themes/themes.test.ts src/editorPrefs.test.ts src/typewriter.test.ts src/hint.test.ts src/dictionary.test.ts src/spellcheck.test.ts src/find.test.ts src/filePrefs.test.ts src/compilePrefs.test.ts src/compileVars.test.ts src/compileShape.test.ts src/compileTicks.test.ts src/docx.test.ts src/failures.test.ts src/bookArchive.test.ts src/bookSession.test.ts src/bookLock.test.ts src/writingTime.test.ts src/importedBook.test.ts src/scrivener/rtf.test.ts src/scrivener/import.test.ts && cargo test --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri"
   },
   "dependencies": {

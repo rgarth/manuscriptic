@@ -3,13 +3,17 @@ import { test } from "node:test";
 import { Schema } from "@tiptap/pm/model";
 import { EditorState } from "@tiptap/pm/state";
 import { DecorationSet } from "@tiptap/pm/view";
-import { dictionarySpellcheckKey, projectDictionaryPlugin, rangesInChunks, spellingText } from "./spellcheck.ts";
+import { marksInside } from "./find.ts";
+import { dictionarySpellcheckKey, projectDictionaryPlugin, rangesInChunks, spellingText, suggestionCase } from "./spellcheck.ts";
 
 const schema = new Schema({
   nodes: {
     doc: { content: "block+" },
     paragraph: { content: "inline*", group: "block" },
     text: { group: "inline" },
+  },
+  marks: {
+    strong: {},
   },
 });
 
@@ -33,6 +37,40 @@ test("a project word is left alone by the spellcheck, including a different casi
   assert.deepEqual(marked(["castus"], "Hello Castus"), ["Castus"]);
   assert.deepEqual(marked([], "Hello Castus"), []);
   assert.deepEqual(marked(["Lyra"], "Hello Castus"), []);
+});
+
+test("replacing a word keeps the marks on that word", () => {
+  const strong = schema.marks.strong.create();
+  const doc = schema.node("doc", null, [
+    schema.node("paragraph", null, [
+      schema.text("Hello "),
+      schema.text("brekfast", [strong]),
+      schema.text(" today"),
+    ]),
+  ]);
+  const from = 1 + "Hello ".length;
+  assert.equal(doc.textBetween(from, from + "brekfast".length), "brekfast");
+  assert.deepEqual(
+    marksInside(doc, from).map((mark) => mark.type.name),
+    ["strong"],
+  );
+  assert.deepEqual(
+    marksInside(doc, 1).map((mark) => mark.type.name),
+    [],
+  );
+  const opening = schema.node("doc", null, [
+    schema.node("paragraph", null, [schema.text("Brekfast", [strong]), schema.text(" was fine")]),
+  ]);
+  assert.deepEqual(
+    marksInside(opening, 1).map((mark) => mark.type.name),
+    ["strong"],
+  );
+});
+
+test("a suggestion keeps the capitalization of the word it replaces", () => {
+  assert.equal(suggestionCase("breakfast", "brekfast"), "breakfast");
+  assert.equal(suggestionCase("breakfast", "Brekfast"), "Breakfast");
+  assert.equal(suggestionCase("breakfast", "BREKFAST"), "BREAKFAST");
 });
 
 test("a misspelling keeps its place and a dictionary word is skipped", () => {

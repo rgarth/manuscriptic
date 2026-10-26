@@ -199,7 +199,11 @@ function requestMisspellings(text: string): Promise<SpellingRange[]> {
   return import("./storage.ts").then((storage) => storage.misspellings(text));
 }
 
-export function wordFromPoint(view: EditorView, x: number, y: number): string | null {
+export function wordFromPoint(
+  view: EditorView,
+  x: number,
+  y: number,
+): { word: string; from: number; to: number } | null {
   const found = view.posAtCoords({ left: x, top: y });
   if (!found) {
     return null;
@@ -207,5 +211,32 @@ export function wordFromPoint(view: EditorView, x: number, y: number): string | 
   const resolved = view.state.doc.resolve(found.pos);
   const text = resolved.parent.textBetween(0, resolved.parent.content.size, "\n", "\0");
   const index = Math.max(0, Math.min(found.pos - resolved.start(), text.length));
-  return wordAt(text, index)?.word ?? null;
+  const word = wordAt(text, index);
+  if (!word) {
+    return null;
+  }
+  return { word: word.word, from: resolved.start() + word.from, to: resolved.start() + word.to };
+}
+
+export function isMisspelled(view: EditorView, from: number, to: number): boolean {
+  const marks = spellingMarksKey.getState(view.state);
+  if (!marks || !marks.find(from, to).some((range) => range.from < to && range.to > from)) {
+    return false;
+  }
+  const known = dictionarySpellcheckKey.getState(view.state);
+  if (!known) {
+    return true;
+  }
+  return !known.has(view.state.doc.textBetween(from, to).toLocaleLowerCase());
+}
+
+export function suggestionCase(suggestion: string, original: string): string {
+  if (original.length > 1 && original === original.toLocaleUpperCase()) {
+    return suggestion.toLocaleUpperCase();
+  }
+  const first = original.charAt(0);
+  if (first && first !== first.toLocaleLowerCase()) {
+    return suggestion.charAt(0).toLocaleUpperCase() + suggestion.slice(1);
+  }
+  return suggestion;
 }

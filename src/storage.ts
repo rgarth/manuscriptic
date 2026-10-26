@@ -74,3 +74,7 @@ export function releaseBookLock(path: string, holder: string): Promise<void> {
 export function misspellings(text: string): Promise<{ from: number; to: number }[]> {
   return invoke("misspellings", { text });
 }
+
+export function spellingSuggestions(word: string): Promise<string[]> {
+  return invoke("spelling_suggestions", { word });
+}

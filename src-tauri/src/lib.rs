@@ -16,7 +16,7 @@ use book_lock::{
 };
 use documents::documents_directory;
 use fonts::list_fonts;
-use spellcheck::misspellings;
+use spellcheck::{misspellings, spelling_suggestions};
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
@@ -53,6 +53,7 @@ pub fn run() {
             refresh_book_lock,
             release_book_lock,
             misspellings,
+            spelling_suggestions,
             launch_books
         ])
         .on_window_event(|window, event| {

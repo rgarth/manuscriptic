@@ -12,6 +12,10 @@ export type CommandState = {
   newScene: (() => void) | null;
   newSection: (() => void) | null;
   trash: (() => void) | null;
+  find: (() => void) | null;
+  findNext: (() => void) | null;
+  findPrevious: (() => void) | null;
+  replace: (() => void) | null;
   format: ((command: SceneCommand) => void) | null;
   removal: Removal | null;
   align: Alignment;
@@ -29,6 +33,10 @@ const initial: CommandState = {
   newScene: null,
   newSection: null,
   trash: null,
+  find: null,
+  findNext: null,
+  findPrevious: null,
+  replace: null,
   format: null,
   removal: null,
   align: "justify",
