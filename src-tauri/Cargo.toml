@@ -1,6 +1,6 @@
 [package]
 name = "manuscriptic"
-version = "0.1.1"
+version = "0.2.0"
 description = "Desktop app for novel manuscripts"
 edition = "2024"
 
