@@ -6,6 +6,10 @@ I use it for my own books. I run it on a Mac. Windows and Linux are untested. A 
 
 ![A book open in Manuscriptic](docs/screenshot.png)
 
+## Download
+
+The latest build is on the [releases page](https://github.com/rgarth/manuscriptic/releases). For a Mac, take the Apple Silicon disk image.
+
 ## Features
 
 - A binder for the manuscript. Sections and scenes, in whatever order the book wants, and you can drag them into place.

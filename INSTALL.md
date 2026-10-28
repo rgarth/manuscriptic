@@ -4,6 +4,8 @@ These instructions are for a Mac. That is the only system I run, and the only on
 
 There is no support and no warranty. Read the warning in [README.md](README.md) before you trust this with a book.
 
+If you want the app, and not the source, get the latest disk image from the [releases page](https://github.com/rgarth/manuscriptic/releases). The notes there explain how to open it when Apple refuses to run an unsigned app.
+
 ## Requirements
 
 - macOS
