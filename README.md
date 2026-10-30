@@ -8,7 +8,7 @@ I use it for my own books. I run it on a Mac. Windows builds are on the releases
 
 ## Download
 
-The latest builds are on the [releases page](https://github.com/rgarth/manuscriptic/releases): the Apple Silicon disk image for a Mac, the ARM64 executable for a Windows ARM PC, or the x64 executable for an Intel or AMD Windows PC.
+The latest Windows and Mac builds are on the [releases page](https://github.com/rgarth/manuscriptic/releases).
 
 ## Features
 
