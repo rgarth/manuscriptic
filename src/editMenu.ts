@@ -1,5 +1,5 @@
-import { MenuItem, PredefinedMenuItem, type Submenu } from "@tauri-apps/api/menu";
-import { commands, onCommands } from "./commands";
+import { MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
+import { commands } from "./commands";
 import { sendMenuCommand } from "./menuCommand";
 
 function commandItem(
@@ -19,7 +19,7 @@ function commandItem(
   });
 }
 
-export async function installEditCommands(edit: Submenu): Promise<void> {
+export async function editCommandItems(): Promise<{ items: Array<MenuItem | PredefinedMenuItem>; sync: () => void }> {
   const scene = await commandItem("edit-new-scene", "New Scene", "new-scene");
   const section = await commandItem("edit-new-section", "New Section", "new-section");
   const trash = await commandItem("edit-trash", "Move to Trash", "trash");
@@ -29,9 +29,6 @@ export async function installEditCommands(edit: Submenu): Promise<void> {
   const replace = await commandItem("edit-replace", "Replace…", "replace", "CmdOrCtrl+Alt+F");
 
   function sync() {
-    if (!document.hasFocus()) {
-      return;
-    }
     const current = commands();
     const open = current.newScene !== null;
     const searching = current.find !== null;
@@ -46,12 +43,6 @@ export async function installEditCommands(edit: Submenu): Promise<void> {
     void replace.setEnabled(searching);
   }
 
-  onCommands(sync);
-  sync();
   const separator = await PredefinedMenuItem.new({ item: "Separator" });
-  await edit.prepend([scene, section, trash, separator]);
-  await edit.insert(find, 4);
-  await edit.insert(findNext, 5);
-  await edit.insert(findPrevious, 6);
-  await edit.insert(replace, 7);
+  return { items: [scene, section, trash, separator, find, findNext, findPrevious, replace], sync };
 }

@@ -213,6 +213,12 @@ export default function SceneEditor({
       format: (command) => {
         formatCommands[command].apply(editor.chain().focus());
       },
+      undo: () => {
+        editor.chain().focus().undo().run();
+      },
+      redo: () => {
+        editor.chain().focus().redo().run();
+      },
     });
   }, [editor]);
 

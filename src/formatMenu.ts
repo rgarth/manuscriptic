@@ -1,12 +1,14 @@
 import { CheckMenuItem, MenuItem, Submenu } from "@tauri-apps/api/menu";
-import { commands, onCommands } from "./commands";
+import { commands } from "./commands";
 import { sendMenuCommand } from "./menuCommand";
 import { alignments } from "./pageLayout";
-import { formatCommandsIn } from "./formatCommands";
+import { formatCommandsIn, type SceneCommand } from "./formatCommands";
 
-export async function createFormatMenu(): Promise<Submenu> {
-  const character = await menuItems("character");
-  const lists = await menuItems("list");
+type FormatChord = "strike" | "subscript";
+
+export async function createFormatMenu(overrides?: Record<FormatChord, string>): Promise<{ menu: Submenu; sync: () => void }> {
+  const character = await menuItems("character", overrides);
+  const lists = await menuItems("list", overrides);
   const alignItems = await Promise.all(
     alignments.map((item) =>
       CheckMenuItem.new({
@@ -23,9 +25,6 @@ export async function createFormatMenu(): Promise<Submenu> {
   const commandsToEnable = [...character, ...lists, ...alignItems];
 
   function sync() {
-    if (!document.hasFocus()) {
-      return;
-    }
     const current = commands();
     const enabled = current.format !== null;
     for (const item of commandsToEnable) {
@@ -36,23 +35,32 @@ export async function createFormatMenu(): Promise<Submenu> {
     }
   }
 
-  onCommands(sync);
-  sync();
-
   const alignMenu = await Submenu.new({ text: "Alignment", items: alignItems });
-  return Submenu.new({
+  const menu = await Submenu.new({
     text: "Format",
     items: [...character, { item: "Separator" }, ...lists, { item: "Separator" }, alignMenu],
   });
+  return { menu, sync };
 }
 
-function menuItems(group: "character" | "list") {
+function formatAccelerator(
+  command: SceneCommand,
+  accelerator: string | undefined,
+  overrides?: Record<FormatChord, string>,
+): string | undefined {
+  if (overrides && (command === "strike" || command === "subscript")) {
+    return overrides[command];
+  }
+  return accelerator;
+}
+
+function menuItems(group: "character" | "list", overrides?: Record<FormatChord, string>) {
   return Promise.all(
     formatCommandsIn(group).map(([command, spec]) =>
       MenuItem.new({
         id: `format-${command}`,
         text: spec.label,
-        accelerator: spec.accelerator,
+        accelerator: formatAccelerator(command, spec.accelerator, overrides),
         enabled: false,
         action: () => {
           sendMenuCommand({ name: "format", command });

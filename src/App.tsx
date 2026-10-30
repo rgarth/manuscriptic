@@ -8,6 +8,7 @@ import Desk, { Gate, preloadSceneEditor, type DeskDialog } from "./Desk";
 import Settings from "./Settings";
 import { booksOnStartup, markBookClosed, readSnapshotMinutes, type SnapshotMinutes } from "./filePrefs";
 import { menuCommand, type MenuCommand } from "./menuCommand";
+import { pageKey } from "./menuPlan";
 import { removal } from "./model/binder";
 import { leafAction, setPageLayout } from "./model/project";
 import { launchBooks } from "./storage";
@@ -95,32 +96,32 @@ export default function App() {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "f") {
+      const hit = pageKey({
+        key: event.key,
+        ctrl: event.ctrlKey,
+        meta: event.metaKey,
+        shift: event.shiftKey,
+        alt: event.altKey,
+      });
+      if (hit) {
         event.preventDefault();
-        setBinderOpen((value) => !value);
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "o") {
-        event.preventDefault();
-        runMenu.current({ name: "open" });
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
-        event.preventDefault();
-        if (event.shiftKey) {
-          runMenu.current({ name: "save-as" });
+        switch (hit.name) {
+          case "binder":
+            setBinderOpen((value) => !value);
+            return;
+          case "ignore":
+            return;
+          case "open":
+          case "save-as":
+          case "settings":
+          case "new":
+            runMenu.current({ name: hit.name });
+            return;
+          default: {
+            const unexpected: never = hit;
+            return unexpected;
+          }
         }
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key === ",") {
-        event.preventDefault();
-        runMenu.current({ name: "settings" });
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
-        event.preventDefault();
-        runMenu.current({ name: "new" });
-        return;
       }
       if (event.key === "Escape") {
         if (open.current.dialog) {
@@ -238,6 +239,12 @@ export default function App() {
         return;
       case "replace":
         commands().replace?.();
+        return;
+      case "undo":
+        commands().undo?.();
+        return;
+      case "redo":
+        commands().redo?.();
         return;
       case "format":
         commands().format?.(command.command);

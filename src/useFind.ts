@@ -12,6 +12,7 @@ import {
 } from "./find.ts";
 import type { FindBarProps } from "./FindBar.tsx";
 import type { FindEditorState } from "./findView.ts";
+import { findKey } from "./menuPlan.ts";
 import type { ProjectFile } from "./model/project.ts";
 
 type FindSession = {
@@ -209,26 +210,35 @@ export function useFind(
         setOpen(false);
         return;
       }
-      if (!command) {
+      const found = findKey({
+        key: event.key,
+        ctrl: event.ctrlKey,
+        meta: event.metaKey,
+        shift: event.shiftKey,
+        alt: event.altKey,
+      });
+      if (!found) {
         return;
       }
-      const key = event.key.toLowerCase();
-      if (key === "f" && !event.shiftKey) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (!event.repeat) {
-          openFind(event.altKey);
-        }
-        return;
-      }
-      if (key === "g") {
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.shiftKey) {
+      event.preventDefault();
+      event.stopPropagation();
+      switch (found) {
+        case "find":
+        case "replace":
+          if (!event.repeat) {
+            openFind(found === "replace");
+          }
+          return;
+        case "find-previous":
           move(-1);
           return;
+        case "find-next":
+          findNext();
+          return;
+        default: {
+          const unexpected: never = found;
+          return unexpected;
         }
-        findNext();
       }
     }
     window.addEventListener("keydown", onKey, true);

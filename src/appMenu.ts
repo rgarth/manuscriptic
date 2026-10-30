@@ -1,30 +1,132 @@
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Menu, MenuItem, Submenu } from "@tauri-apps/api/menu";
 import { commands, onCommands } from "./commands";
-import { sendMenuCommand } from "./menuCommand";
-import { installEditCommands } from "./editMenu";
+import { editCommandItems } from "./editMenu";
 import { createFormatMenu } from "./formatMenu";
+import { sendMenuCommand } from "./menuCommand";
 import { createViewMenu } from "./viewMenu";
 
 let installed: Menu | null = null;
+let field: HTMLInputElement | HTMLTextAreaElement | null = null;
+let watching = false;
 
 export async function installAppMenu(): Promise<void> {
+  if (navigator.userAgent.includes("Windows")) {
+    await installWindowsMenu();
+    return;
+  }
+  await installMacMenu();
+}
+
+async function installMacMenu(): Promise<void> {
   const menu = await Menu.default();
-  const newProject = {
+  const file = await fileCommandItems("Cmd+Option+,");
+  const edit = await editCommandItems();
+  const format = await createFormatMenu();
+  followFocus(file.sync);
+  followFocus(edit.sync);
+  followFocus(format.sync);
+  const bar = await menu.items();
+  let fileMenu: Submenu | null = null;
+  for (const item of bar) {
+    if (item instanceof Submenu && (await item.text()) === "File") {
+      fileMenu = item;
+      break;
+    }
+  }
+  if (fileMenu) {
+    await fileMenu.insert(file.items, 0);
+  } else {
+    const submenu = await Submenu.new({ text: "File", items: file.items });
+    const afterAppMenu = navigator.userAgent.includes("Mac") ? 1 : 0;
+    await menu.insert(submenu, afterAppMenu);
+  }
+  const itemsAfterFile = await menu.items();
+  for (const item of itemsAfterFile) {
+    if (item instanceof Submenu && (await item.text()) === "Edit") {
+      await item.insert(edit.items, 0);
+      break;
+    }
+  }
+  await insertAfter(menu, "Edit", await createViewMenu());
+  await insertAfter(menu, "View", format.menu);
+  if (!document.hasFocus()) {
+    await menu.close();
+    return;
+  }
+  const previous = await menu.setAsAppMenu();
+  await previous?.close();
+  if (!navigator.userAgent.includes("Mac")) {
+    await menu.setAsWindowMenu();
+  }
+  await installed?.close();
+  installed = menu;
+}
+
+async function installWindowsMenu(): Promise<void> {
+  rememberTextField();
+  const file = await fileCommandItems("Ctrl+Alt+,");
+  const edit = await editCommandItems();
+  const format = await createFormatMenu({ strike: "CmdOrCtrl+Shift+X", subscript: "CmdOrCtrl+Shift+," });
+  keepUpdated(file.sync);
+  keepUpdated(edit.sync);
+  keepUpdated(format.sync);
+  const menu = await Menu.new({
+    items: [
+      await Submenu.new({
+        text: "File",
+        items: [...file.items, { item: "Separator" }, { item: "CloseWindow" }, { item: "Quit" }],
+      }),
+      await Submenu.new({
+        text: "Edit",
+        items: [
+          ...edit.items,
+          await historyItem("undo"),
+          await historyItem("redo"),
+          { item: "Separator" },
+          { item: "Cut" },
+          { item: "Copy" },
+          { item: "Paste" },
+          { item: "SelectAll" },
+        ],
+      }),
+      await createViewMenu(),
+      format.menu,
+      await Submenu.new({
+        text: "Window",
+        items: [{ item: "Minimize" }, { item: "Maximize" }, { item: "Separator" }, { item: "CloseWindow" }],
+      }),
+      await Submenu.new({
+        text: "Help",
+        items: [{ item: { About: null } }],
+      }),
+    ],
+  });
+  const previous = await menu.setAsWindowMenu(getCurrentWindow());
+  await previous?.close();
+  if (installed && installed !== previous) {
+    await installed.close();
+  }
+  installed = menu;
+}
+
+async function fileCommandItems(bookSettingsAccelerator: string): Promise<{ items: MenuItem[]; sync: () => void }> {
+  const newProject = await MenuItem.new({
     id: "new-project",
     text: "New Project…",
     accelerator: "CmdOrCtrl+N",
     action: () => {
       sendMenuCommand({ name: "new" });
     },
-  };
-  const openNovel = {
+  });
+  const openNovel = await MenuItem.new({
     id: "open-novel",
     text: "Open…",
     accelerator: "CmdOrCtrl+O",
     action: () => {
       sendMenuCommand({ name: "open" });
     },
-  };
+  });
   const importScrivener = await MenuItem.new({
     id: "import-scrivener",
     text: "Import Scrivener…",
@@ -60,32 +162,12 @@ export async function installAppMenu(): Promise<void> {
   const bookSettings = await MenuItem.new({
     id: "book-settings",
     text: "Book Settings…",
-    accelerator: "Cmd+Option+,",
+    accelerator: bookSettingsAccelerator,
     enabled: false,
     action: () => {
       sendMenuCommand({ name: "book-settings" });
     },
   });
-  function syncFile() {
-    if (!document.hasFocus()) {
-      return;
-    }
-    const current = commands();
-    void saveNovelAs.setEnabled(current.saveNovelAs !== null);
-    void takeSnapshot.setEnabled(current.takeSnapshot !== null);
-    void compileBook.setEnabled(current.compile !== null);
-    void bookSettings.setEnabled(current.bookSettings !== null);
-  }
-  onCommands(syncFile);
-  syncFile();
-  const items = await menu.items();
-  let fileMenu: Submenu | null = null;
-  for (const item of items) {
-    if (item instanceof Submenu && (await item.text()) === "File") {
-      fileMenu = item;
-      break;
-    }
-  }
   const settings = await MenuItem.new({
     id: "settings",
     text: "Settings…",
@@ -94,43 +176,60 @@ export async function installAppMenu(): Promise<void> {
       sendMenuCommand({ name: "settings" });
     },
   });
-  if (fileMenu) {
-    await fileMenu.prepend(newProject);
-    await fileMenu.insert(openNovel, 1);
-    await fileMenu.insert(importScrivener, 2);
-    await fileMenu.insert(saveNovelAs, 3);
-    await fileMenu.insert(takeSnapshot, 4);
-    await fileMenu.insert(compileBook, 5);
-    await fileMenu.insert(bookSettings, 6);
-    await fileMenu.insert(settings, 7);
-  } else {
-    const file = await Submenu.new({
-      text: "File",
-      items: [newProject, openNovel, importScrivener, saveNovelAs, takeSnapshot, compileBook, bookSettings, settings],
-    });
-    const afterAppMenu = navigator.userAgent.includes("Mac") ? 1 : 0;
-    await menu.insert(file, afterAppMenu);
+
+  function sync() {
+    const current = commands();
+    void saveNovelAs.setEnabled(current.saveNovelAs !== null);
+    void takeSnapshot.setEnabled(current.takeSnapshot !== null);
+    void compileBook.setEnabled(current.compile !== null);
+    void bookSettings.setEnabled(current.bookSettings !== null);
   }
-  const itemsAfterFile = await menu.items();
-  for (const item of itemsAfterFile) {
-    if (item instanceof Submenu && (await item.text()) === "Edit") {
-      await installEditCommands(item);
-      break;
+
+  return { items: [newProject, openNovel, importScrivener, saveNovelAs, takeSnapshot, compileBook, bookSettings, settings], sync };
+}
+
+function followFocus(sync: () => void) {
+  function run() {
+    if (!document.hasFocus()) {
+      return;
     }
+    sync();
   }
-  await insertAfter(menu, "Edit", await createViewMenu());
-  await insertAfter(menu, "View", await createFormatMenu());
-  if (!document.hasFocus()) {
-    await menu.close();
+  onCommands(run);
+  run();
+}
+
+function keepUpdated(sync: () => void) {
+  onCommands(sync);
+  sync();
+}
+
+function historyItem(kind: "undo" | "redo") {
+  return MenuItem.new({
+    id: `edit-${kind}`,
+    text: kind === "undo" ? "Undo" : "Redo",
+    accelerator: kind === "undo" ? "CmdOrCtrl+Z" : "CmdOrCtrl+Y",
+    action: () => {
+      const target = field;
+      if (target && target.isConnected) {
+        target.focus();
+        document.execCommand(kind);
+        return;
+      }
+      sendMenuCommand({ name: kind });
+    },
+  });
+}
+
+function rememberTextField() {
+  if (watching) {
     return;
   }
-  const previous = await menu.setAsAppMenu();
-  await previous?.close();
-  if (!navigator.userAgent.includes("Mac")) {
-    await menu.setAsWindowMenu();
-  }
-  await installed?.close();
-  installed = menu;
+  watching = true;
+  window.addEventListener("focusin", () => {
+    const active = document.activeElement;
+    field = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
+  });
 }
 
 async function insertAfter(menu: Menu, after: string, item: Submenu) {

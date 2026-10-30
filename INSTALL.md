@@ -1,6 +1,6 @@
 # Building Manuscriptic from source
 
-These instructions are for a Mac. That is the only system I run, and the only one I have tested. Windows and Linux are untested. A release for them will come later.
+These instructions are for building on a Mac. That is the system I run. Windows executables are on the [releases page](https://github.com/rgarth/manuscriptic/releases). Linux is untested.
 
 There is no support and no warranty. Read the warning in [README.md](README.md) before you trust this with a book.
 

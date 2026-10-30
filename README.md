@@ -2,13 +2,13 @@
 
 Manuscriptic is a writing app for authors, made for the long work of a novel. Rich text lets you control headings, fonts, and style. Compile can override those editor settings to match a publisher's guide.
 
-I use it for my own books. I run it on a Mac. Windows and Linux are untested. A release for them will come later.
+I use it for my own books. I run it on a Mac. Windows builds are on the releases page. Linux is untested.
 
 ![A book open in Manuscriptic](docs/screenshot.png)
 
 ## Download
 
-The latest build is on the [releases page](https://github.com/rgarth/manuscriptic/releases). For a Mac, take the Apple Silicon disk image.
+The latest build is on the [releases page](https://github.com/rgarth/manuscriptic/releases). On a Mac, take the Apple Silicon disk image. On Windows, take the ARM64 executable for an ARM PC, or the x64 executable for an Intel or AMD PC.
 
 ## Features
 
