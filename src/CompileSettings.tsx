@@ -1,12 +1,19 @@
 import { useState } from "react";
 import {
+  firstPreset,
   defaultCompileIdentity,
+  deletePreset,
+  duplicatePreset,
+  editPreset,
   levelAt,
+  renamePreset,
   sceneBreaks,
   withLevel,
   type BookCompile,
   type CompileFormat,
   type CompileHeading,
+  type CompileLevel,
+  type CompilePreset,
   type HeadingAlign,
   type CompileIdentity,
   type CompileSpacing,
@@ -16,8 +23,8 @@ import {
   type SceneBreak,
 } from "./bookCompile.ts";
 import BookContents from "./BookContents.tsx";
+import CompilePresets from "./CompilePresets.tsx";
 import { folderRanks } from "./compileShape.ts";
-import { initialCompileTicks } from "./compileTicks.ts";
 import { readCompileIdentity, writeCompileIdentity } from "./compilePrefs.ts";
 import { failureMessage, reportFailure } from "./failures.ts";
 import { addDictionaryWord, removeDictionaryWord, setBookCompile, type FolderNode, type ProjectFile } from "./model/project.ts";
@@ -117,6 +124,8 @@ export default function CompileSettings({
     onProject((current) => setBookCompile(current, next));
   }
   const [pane, setPane] = useState<CompilePane>("author");
+  const [presetId, setPresetId] = useState(() => firstPreset(project.compile).id);
+  const preset = project.compile.presets.find((item) => item.id === presetId) ?? firstPreset(project.compile);
   const [appAuthor] = useState<CompileIdentity>(() => {
     try {
       return readCompileIdentity(localStorage);
@@ -149,7 +158,31 @@ export default function CompileSettings({
             ))}
           </nav>
           <section className={pane === "structure" ? "settings-pane structure-pane" : "settings-pane"}>
-            {compilerPane(pane, project, appAuthor, onCompile, onProject)}
+            {pane !== "author" && pane !== "dictionary" ? (
+              <CompilePresets
+                presets={project.compile.presets}
+                selectedId={preset.id}
+                onSelect={setPresetId}
+                onRename={(name) => onProject((current) => setBookCompile(current, renamePreset(current.compile, preset.id, name)))}
+                onAdd={() => {
+                  const id = crypto.randomUUID();
+                  onProject((current) => setBookCompile(current, duplicatePreset(current.compile, preset.id, id)));
+                  setPresetId(id);
+                }}
+                onDelete={() => {
+                  const removed = deletePreset(project.compile, preset.id);
+                  if (!removed) {
+                    return;
+                  }
+                  setPresetId(removed.selectedId);
+                  onProject((current) => {
+                    const next = deletePreset(current.compile, preset.id);
+                    return next ? setBookCompile(current, next.compile) : current;
+                  });
+                }}
+              />
+            ) : null}
+            {compilerPane(pane, project, appAuthor, preset, onCompile, onProject)}
           </section>
         </div>
       </div>
@@ -161,6 +194,7 @@ function compilerPane(
   pane: CompilePane,
   project: ProjectFile,
   appAuthor: CompileIdentity,
+  preset: CompilePreset,
   onCompile: (compile: BookCompile) => void,
   onProject: (update: (project: ProjectFile) => ProjectFile) => void,
 ) {
@@ -168,21 +202,24 @@ function compilerPane(
     case "author":
       return <AuthorOverride compile={project.compile} appAuthor={appAuthor} onCompile={onCompile} />;
     case "contents":
-      return <BookContents project={project} onProject={onProject} />;
+      return <BookContents project={project} preset={preset} onProject={onProject} />;
     case "structure":
       return (
         <BookStructure
-          compile={project.compile}
+          preset={preset}
           manuscript={project.manuscript}
-          included={initialCompileTicks(project)}
-          onCompile={onCompile}
+          onChange={(next) => onProject((current) => setBookCompile(current, editPreset(current.compile, next.id, () => next)))}
         />
       );
     case "formatting":
       return (
         <FormattingSettings
-          format={project.compile.format}
-          onChange={(format) => onCompile({ ...project.compile, format: { ...project.compile.format, ...format } })}
+          format={preset.format}
+          onChange={(format) =>
+            onProject((current) =>
+              setBookCompile(current, editPreset(current.compile, preset.id, (item) => ({ ...item, format: { ...item.format, ...format } }))),
+            )
+          }
         />
       );
     case "dictionary":
@@ -411,21 +448,20 @@ function FormattingSettings({
 }
 
 function BookStructure({
-  compile,
+  preset,
   manuscript,
-  included,
-  onCompile,
+  onChange,
 }: {
-  compile: BookCompile;
+  preset: CompilePreset;
   manuscript: FolderNode;
-  included: ReadonlySet<string>;
-  onCompile: (compile: BookCompile) => void;
+  onChange: (preset: CompilePreset) => void;
 }) {
+  const included = new Set(preset.included);
   const ranks = folderRanks(manuscript, included);
   const [selected, setSelected] = useState<number | "scenes">(ranks[0] ?? "scenes");
   const shown = selected === "scenes" || ranks.includes(selected) ? selected : (ranks[0] ?? "scenes");
   const place = typeof shown === "number" ? ranks.indexOf(shown) : -1;
-  const level = typeof shown === "number" ? levelAt(compile, shown) : null;
+  const level = typeof shown === "number" ? levelAt(preset, shown) : null;
   const label = typeof shown === "number" ? levelLabel(place) : "Scenes";
   return (
     <div className="structure-body">
@@ -455,10 +491,10 @@ function BookStructure({
             hint=""
             titleLabel="Include the folder title"
             level={level}
-            onChange={(next) => onCompile(withLevel(compile, shown, next))}
+            onChange={(next) => onChange(withLevel(preset, shown, next))}
           />
         ) : (
-          <SceneCard compile={compile} onCompile={onCompile} />
+          <SceneCard preset={preset} onChange={onChange} />
         )}
       </div>
     </div>
@@ -479,8 +515,8 @@ function LevelCard({
   label: string;
   hint: string;
   titleLabel: string;
-  level: BookCompile["levels"][number];
-  onChange: (level: BookCompile["levels"][number]) => void;
+  level: CompileLevel;
+  onChange: (level: CompileLevel) => void;
 }) {
   return (
     <div className="structure-level">
@@ -507,13 +543,13 @@ function LevelCard({
 }
 
 function SceneCard({
-  compile,
-  onCompile,
+  preset,
+  onChange,
 }: {
-  compile: BookCompile;
-  onCompile: (compile: BookCompile) => void;
+  preset: CompilePreset;
+  onChange: (preset: CompilePreset) => void;
 }) {
-  const scenes = compile.scenes;
+  const scenes = preset.scenes;
   const titled = scenes.title;
   return (
     <div className="structure-level">
@@ -522,7 +558,7 @@ function SceneCard({
           type="checkbox"
           aria-label="Include the scene title"
           checked={scenes.title}
-          onChange={(event) => onCompile({ ...compile, scenes: { ...scenes, title: event.currentTarget.checked } })}
+          onChange={(event) => onChange({ ...preset, scenes: { ...scenes, title: event.currentTarget.checked } })}
         />
         Include the scene title
       </label>
@@ -532,7 +568,7 @@ function SceneCard({
         value={scenes.titleFont}
         inherit
         disabled={!titled}
-        onChange={(titleFont) => onCompile({ ...compile, scenes: { ...scenes, titleFont } })}
+        onChange={(titleFont) => onChange({ ...preset, scenes: { ...scenes, titleFont } })}
       />
       <Field
         label="Size"
@@ -540,7 +576,7 @@ function SceneCard({
         value={scenes.titlePoints > 0 ? String(scenes.titlePoints) : ""}
         placeholder="Manuscript size"
         disabled={!titled}
-        onChange={(value) => onCompile({ ...compile, scenes: { ...scenes, titlePoints: pointSize(value) } })}
+        onChange={(value) => onChange({ ...preset, scenes: { ...scenes, titlePoints: pointSize(value) } })}
       />
       <div className="structure-span">
         <Choice
@@ -549,7 +585,7 @@ function SceneCard({
           value={scenes.align}
           disabled={!titled}
           options={headingAlignments}
-          onChange={(align) => onCompile({ ...compile, scenes: { ...scenes, align } })}
+          onChange={(align) => onChange({ ...preset, scenes: { ...scenes, align } })}
         />
       </div>
       <div className="structure-span structure-ticks">
@@ -559,7 +595,7 @@ function SceneCard({
             aria-label="Scenes new page before"
             checked={scenes.pageBefore}
             disabled={!titled}
-            onChange={(event) => onCompile({ ...compile, scenes: { ...scenes, pageBefore: event.currentTarget.checked } })}
+            onChange={(event) => onChange({ ...preset, scenes: { ...scenes, pageBefore: event.currentTarget.checked } })}
           />
           New page before
         </label>
@@ -569,7 +605,7 @@ function SceneCard({
             aria-label="Scenes new page after"
             checked={scenes.pageAfter}
             disabled={!titled}
-            onChange={(event) => onCompile({ ...compile, scenes: { ...scenes, pageAfter: event.currentTarget.checked } })}
+            onChange={(event) => onChange({ ...preset, scenes: { ...scenes, pageAfter: event.currentTarget.checked } })}
           />
           New page after
         </label>
@@ -577,9 +613,9 @@ function SceneCard({
       <div className="structure-span">
         <Choice
           label="Separator"
-          value={compile.sceneBreak}
+          value={preset.sceneBreak}
           options={sceneBreaks.map((id) => ({ id, label: breakChoice[id] }))}
-          onChange={(sceneBreak) => onCompile({ ...compile, sceneBreak })}
+          onChange={(sceneBreak) => onChange({ ...preset, sceneBreak })}
         />
       </div>
     </div>

@@ -1,6 +1,4 @@
-import type { CompilePreferences } from "./bookCompile.ts";
-import { buildCompile, type CompileDocument, type CompileParagraph, type CompileRun } from "./compileShape.ts";
-import type { ProjectFile } from "./model/project.ts";
+import type { CompileDocument, CompileParagraph, CompileRun } from "./compileShape.ts";
 import type { Alignment } from "./pageLayout.ts";
 import type { Mark } from "./model/editorDoc.ts";
 
@@ -8,29 +6,6 @@ const word = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const relationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const packageRelationships = "http://schemas.openxmlformats.org/package/2006/relationships";
 const contentTypes = "http://schemas.openxmlformats.org/package/2006/content-types";
-
-export type CompiledFile =
-  | { kind: "empty" }
-  | { kind: "docx"; bytes: Uint8Array; missing: string[] };
-
-export function compiledFile(
-  project: ProjectFile,
-  included: ReadonlySet<string>,
-  preferences: CompilePreferences,
-  year: number,
-): CompiledFile {
-  const compiled = buildCompile(project, included, preferences, year);
-  switch (compiled.hasDocument) {
-    case false:
-      return { kind: "empty" };
-    case true:
-      return { kind: "docx", bytes: compileDocx(compiled), missing: compiled.missing };
-    default: {
-      const unexpected: never = compiled.hasDocument;
-      return unexpected;
-    }
-  }
-}
 
 export function compileDocx(doc: CompileDocument): Uint8Array {
   const files: { path: string; data: Uint8Array }[] = [

@@ -92,6 +92,9 @@ test("manuscriptic pages stay beside imported matter until they are ticked", () 
     }
   }
   assert.equal(front.children[0]?.kind === "document" ? front.children[0].includeInCompile : false, true);
+  const included = project.compile.presets[0]?.included ?? [];
+  assert.equal(front.children[0] ? included.includes(front.children[0].id) : false, true);
+  assert.equal(starter ? included.includes(starter.id) : true, false);
   assert.deepEqual(
     back.children.map((child) => child.title),
     ["Also by", "Acknowledgements", "About the Author"],

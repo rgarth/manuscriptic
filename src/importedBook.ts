@@ -4,6 +4,7 @@ import {
   openFolders,
   renameProject,
   replaceMatter,
+  seedCompileTicks,
   setView,
   type BinderNode,
   type ProjectFile,
@@ -30,6 +31,7 @@ export function projectFromImport(imported: ImportedBook, keepStarters: boolean)
   };
   project = applyMatter(project, "front", imported.frontMatter, keepStarters);
   project = applyMatter(project, "back", imported.backMatter, keepStarters);
+  project = seedCompileTicks(project);
   const opened = setView(project, { expanded: null });
   return setView(opened, {
     selectedId: firstDocumentId(opened.manuscript) ?? opened.manuscript.id,

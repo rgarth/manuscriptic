@@ -1,4 +1,4 @@
-import { bookCompile, defaultBookCompile, type BookCompile } from "../bookCompile.ts";
+import { bookCompile, defaultBookCompile, editPreset, type BookCompile } from "../bookCompile.ts";
 import { uniqueWords } from "../dictionary.ts";
 import { defaultPageLayout, pageLayout, type PageLayout } from "../pageLayout.ts";
 import { publishingStarter } from "../publishingPages.ts";
@@ -96,7 +96,49 @@ export function createNovelProject(): ProjectFile {
     compile: defaultBookCompile(),
     view: { selectedId: manuscript.id, expanded: null },
   };
-  return setView(novel, { expanded: [manuscript.id] });
+  return setView(seedCompileTicks(novel), { expanded: [manuscript.id] });
+}
+
+export function seedCompileTicks(project: ProjectFile): ProjectFile {
+  const first = project.compile.presets[0];
+  if (!first) {
+    return project;
+  }
+  const included = compileTicksFromNodes(project);
+  return { ...project, compile: editPreset(project.compile, first.id, (preset) => ({ ...preset, included })) };
+}
+
+export function includeNewBinderNode(project: ProjectFile, parentId: string, id: string): ProjectFile {
+  let changed = false;
+  const presets = project.compile.presets.map((preset) => {
+    if (!preset.included.includes(parentId) || preset.included.includes(id)) {
+      return preset;
+    }
+    changed = true;
+    return { ...preset, included: [...preset.included, id] };
+  });
+  if (!changed) {
+    return project;
+  }
+  return { ...project, compile: { ...project.compile, presets } };
+}
+
+function compileTicksFromNodes(project: ProjectFile): string[] {
+  const included: string[] = [];
+  collectTicks(project.manuscript, included);
+  collectTicks(project.publishing, included);
+  return included;
+}
+
+function collectTicks(node: BinderNode, included: string[]) {
+  if (node.includeInCompile) {
+    included.push(node.id);
+  }
+  if (node.kind === "folder") {
+    for (const child of node.children) {
+      collectTicks(child, included);
+    }
+  }
 }
 
 export function setBookCompile(project: ProjectFile, compile: BookCompile): ProjectFile {
@@ -472,7 +514,7 @@ function parseVersion2(value: Record<string, unknown>): ProjectFile | null {
     }
     roots[key] = node;
   }
-  return {
+  const project: ProjectFile = {
     version: 2,
     title: value.title,
     ...roots,
@@ -482,6 +524,10 @@ function parseVersion2(value: Record<string, unknown>): ProjectFile | null {
     compile: bookCompile(value.compile),
     view: parseView(value.view),
   };
+  if (!isRecord(value.compile) || !Array.isArray(value.compile.presets)) {
+    return seedCompileTicks(project);
+  }
+  return project;
 }
 
 function migrateVersion1(value: Record<string, unknown>): ProjectFile | null {
@@ -502,7 +548,7 @@ function migrateVersion1(value: Record<string, unknown>): ProjectFile | null {
   ) {
     return null;
   }
-  return {
+  const migrated: ProjectFile = {
     version: 2,
     title: value.title,
     manuscript: assignFolder(manuscript, "scene", null),
@@ -532,6 +578,7 @@ function migrateVersion1(value: Record<string, unknown>): ProjectFile | null {
     compile: defaultBookCompile(),
     view: { selectedId: null, expanded: null },
   };
+  return seedCompileTicks(migrated);
 }
 
 const frontPages = ["Title page", "Copyright", "Dedication", "Epigraph"];

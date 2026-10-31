@@ -5,21 +5,37 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { bookFromFiles, filesForBook } from "./bookArchive.ts";
-import { defaultCompilePreferences, defaultLevel, type CompilePreferences } from "./bookCompile.ts";
-import { buildCompile } from "./compileShape.ts";
-import { compileRows, initialCompileTicks, rememberCompile, toggleCompileRow } from "./compileTicks.ts";
-import { compiledFile, compileDocx } from "./docx.ts";
+import { defaultCompilePreferences, defaultLevel, editPreset, type CompilePreferences, type CompilePreset } from "./bookCompile.ts";
+import { buildCompile as compileDocument } from "./compileShape.ts";
+import { compileRows, toggleCompileRow } from "./compileTicks.ts";
+import { compileDocx } from "./docx.ts";
 import type { EditorDoc } from "./model/editorDoc.ts";
 import {
   createNovelProject,
   documentNode,
-  findNode,
   folderNode,
+  seedCompileTicks,
   setBookCompile,
   setDocumentContent,
   setPageLayout,
   type ProjectFile,
 } from "./model/project.ts";
+
+function compileOf(project: ProjectFile, included: Iterable<string>, preferences: CompilePreferences, year: number) {
+  const preset = project.compile.presets[0];
+  if (!preset) {
+    throw new Error("A book has a compile.");
+  }
+  return compileDocument(project, { ...preset, included: [...included] }, preferences, year);
+}
+
+function tune(project: ProjectFile, update: (preset: CompilePreset) => CompilePreset): ProjectFile {
+  const preset = project.compile.presets[0];
+  if (!preset) {
+    throw new Error("A book has a compile.");
+  }
+  return setBookCompile(project, editPreset(project.compile, preset.id, update));
+}
 
 function scene(): EditorDoc {
   return {
@@ -87,7 +103,7 @@ test("a docx carries the paragraph, the mark, the margin, and the header", () =>
     manuscript: { ...project.manuscript, children: [chapter] },
   };
   const included = new Set([book.manuscript.id, chapter.id, opening.id]);
-  const compiled = buildCompile(
+  const compiled = compileOf(
     book,
     included,
     { ...defaultCompilePreferences(), author: "Ada Garth" },
@@ -119,13 +135,13 @@ test("a saved book compiles the ticked pages in order", () => {
   const discarded = documentNode("Discarded", "scene", prose("Discarded words"));
   const old = folderNode("Old Draft", [discarded]);
   let book = createNovelProject();
-  book = {
+  book = seedCompileTicks({
     ...book,
     title: "Bone Road",
     manuscript: { ...book.manuscript, children: [prologue, part, old] },
-  };
-  book = setBookCompile(book, {
-    ...book.compile,
+  });
+  book = tune(book, (preset) => ({
+    ...preset,
     levels: [
       defaultLevel(false, ""),
       { ...defaultLevel(true, "Chapter"), number: "arabic" },
@@ -133,25 +149,25 @@ test("a saved book compiles the ticked pages in order", () => {
     ],
     sceneBreak: "hash",
     titleOnly: [prologue.id],
-  });
+    included: [...toggleCompileRow(book, new Set(preset.included), old.id)],
+  }));
   book = setDocumentContent(book, rowId(book, "Acknowledgements"), prose("With thanks"));
   book = setDocumentContent(book, rowId(book, "Synopsis"), prose("The whole plot."));
-  const ticks = toggleCompileRow(book, initialCompileTicks(book), old.id);
-  const remembered = rememberCompile(book, ticks);
-  const loaded = bookFromFiles(filesForBook(remembered));
+  const loaded = bookFromFiles(filesForBook(book));
   assert.ok(loaded);
   if (!loaded) {
     return;
   }
-  assert.equal(loaded.compile.levels[1]?.number, "arabic");
-  assert.equal(loaded.compile.levels[2]?.number, "arabic");
-  assert.equal(loaded.compile.levels[1]?.title, false);
-  assert.deepEqual(loaded.compile.titleOnly, [prologue.id]);
-  const included = initialCompileTicks(loaded);
+  const saved = loaded.compile.presets[0];
+  assert.equal(saved?.levels[1]?.number, "arabic");
+  assert.equal(saved?.levels[2]?.number, "arabic");
+  assert.equal(saved?.levels[1]?.title, false);
+  assert.deepEqual(saved?.titleOnly, [prologue.id]);
+  const included = new Set(saved?.included ?? []);
   assert.equal(included.has(rowId(loaded, "Old Draft")), false);
   assert.equal(included.has(rowId(loaded, "A Silver Tide")), true);
   assert.equal(included.has(rowId(loaded, "Synopsis")), true);
-  const compiled = buildCompile(loaded, included, submission(), 2026);
+  const compiled = compileOf(loaded, included, submission(), 2026);
   assert.deepEqual(compiled.missing, ["pen"]);
   const { document, header, firstHeader, core } = unzip(compileDocx(compiled));
   const text = visibleText(document);
@@ -208,12 +224,11 @@ test("a saved book compiles the ticked pages in order", () => {
   assert.match(header, /PAGE/);
   assert.equal(firstHeader.includes("PAGE"), false);
   assert.match(core, /<dc:title>Bone Road<\/dc:title>/);
-  const synopsisOnly = buildCompile(loaded, new Set([rowId(loaded, "Synopsis")]), submission(), 2026);
+  const synopsisOnly = compileOf(loaded, new Set([rowId(loaded, "Synopsis")]), submission(), 2026);
   const synopsisFile = unzip(compileDocx(synopsisOnly));
   const synopsisText = visibleText(synopsisFile.document);
   assert.deepEqual(synopsisText, ["The whole plot."]);
-  const oldNode = findNode(loaded, rowId(loaded, "Old Draft"));
-  assert.equal(oldNode?.node.includeInCompile, false);
+  assert.equal(included.has(rowId(loaded, "Old Draft")), false);
 });
 
 test("a bullet list and the book's font pass through", () => {
@@ -238,7 +253,7 @@ test("a bullet list and the book's font pass through", () => {
     { font: "Courier", points: 14, align: "left" },
   );
   const included = new Set([book.manuscript.id, chapter.id, listed.id]);
-  const compiled = buildCompile(book, included, { ...submission(), passFont: true }, 2026);
+  const compiled = compileOf(book, included, { ...submission(), passFont: true }, 2026);
   const { document } = unzip(compileDocx(compiled));
   assert.equal(visibleText(document).includes("• "), true);
   assert.equal(visibleText(document).includes("item"), true);
@@ -251,8 +266,8 @@ test("an empty selection and a chapter with no scenes write nothing", () => {
   const chapter = folderNode("Tide", [scene]);
   const project = createNovelProject();
   const book = { ...project, manuscript: { ...project.manuscript, children: [chapter] } };
-  assert.equal(compiledFile(book, new Set(), submission(), 2026).kind, "empty");
-  assert.equal(compiledFile(book, new Set([book.manuscript.id, chapter.id]), submission(), 2026).kind, "empty");
+  assert.equal(compileOf(book, [], submission(), 2026).hasDocument, false);
+  assert.equal(compileOf(book, [book.manuscript.id, chapter.id], submission(), 2026).hasDocument, false);
   const titlePage = book.publishing.children.find((child) => child.kind === "folder" && child.matter === "front");
   assert.equal(titlePage?.kind, "folder");
   const page = titlePage?.kind === "folder" ? titlePage.children.find((child) => child.title === "Title page") : undefined;
@@ -260,12 +275,10 @@ test("an empty selection and a chapter with no scenes write nothing", () => {
   if (page?.kind !== "document") {
     return;
   }
-  const file = compiledFile(book, new Set([page.id]), submission(), 2026);
-  assert.equal(file.kind, "docx");
-  if (file.kind === "docx") {
-    assert.deepEqual(file.missing, ["pen"]);
-    assert.match(unzip(file.bytes).document, /Untitled Novel/);
-  }
+  const file = compileOf(book, [page.id], submission(), 2026);
+  assert.equal(file.hasDocument, true);
+  assert.deepEqual(file.missing, ["pen"]);
+  assert.match(unzip(compileDocx(file)).document, /Untitled Novel/);
 });
 
 test("a heading keeps the font of each piece", () => {
@@ -273,8 +286,8 @@ test("a heading keeps the font of each piece", () => {
   const chapter = folderNode("Tide", [scene]);
   let book = createNovelProject();
   book = { ...book, manuscript: { ...book.manuscript, children: [chapter] } };
-  book = setBookCompile(book, {
-    ...book.compile,
+  book = tune(book, (preset) => ({
+    ...preset,
     levels: [
       defaultLevel(false, ""),
       {
@@ -287,8 +300,8 @@ test("a heading keeps the font of each piece", () => {
         titlePoints: 14,
       },
     ],
-  });
-  const compiled = buildCompile(book, new Set([book.manuscript.id, chapter.id, scene.id]), submission(), 2026);
+  }));
+  const compiled = compileOf(book, new Set([book.manuscript.id, chapter.id, scene.id]), submission(), 2026);
   const document = unzip(compileDocx(compiled)).document;
   assert.match(document, /Courier/);
   assert.match(document, /Palatino/);

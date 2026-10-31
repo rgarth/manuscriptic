@@ -24,7 +24,7 @@ import {
   setView,
   type ProjectFile,
 } from "./project.ts";
-import { withTitleOnly } from "../bookCompile.ts";
+import { editPreset, withTitleOnly } from "../bookCompile.ts";
 import { parseEditorDoc, wordCount, type EditorDoc, type TextRun } from "./editorDoc.ts";
 
 const rootTitles = {
@@ -99,15 +99,15 @@ test("a new novel has the manuscript roots", () => {
       assert.equal(first.content?.[0]?.type === "text" ? first.content[0].text : "", "{$author}");
     }
   }
-  assert.equal(project.compile.levels[0]?.include, false);
-  assert.equal(project.compile.levels[1]?.include, true);
-  assert.equal(project.compile.levels[1]?.name, "");
-  assert.equal(project.compile.levels[1]?.title, true);
-  assert.equal(project.compile.levels[1]?.number, "none");
-  assert.equal(project.compile.sceneBreak, "hash");
-  assert.equal(project.compile.scenes.title, false);
+  assert.equal(project.compile.presets[0]?.levels[0]?.include, false);
+  assert.equal(project.compile.presets[0]?.levels[1]?.include, true);
+  assert.equal(project.compile.presets[0]?.levels[1]?.name, "");
+  assert.equal(project.compile.presets[0]?.levels[1]?.title, true);
+  assert.equal(project.compile.presets[0]?.levels[1]?.number, "none");
+  assert.equal(project.compile.presets[0]?.sceneBreak, "hash");
+  assert.equal(project.compile.presets[0]?.scenes.title, false);
   assert.equal(project.compile.useAppAuthor, true);
-  assert.equal(project.compile.format.spacing, "double");
+  assert.equal(project.compile.presets[0]?.format.spacing, "double");
 });
 
 test("compile settings without levels keep the default divisions", () => {
@@ -122,35 +122,63 @@ test("compile settings without levels keep the default divisions", () => {
       compile: { chapterHeading: "word", partHeading: "number", sceneTitles: true, sceneBreak: "stars", titleOnly: ["pro"] },
     }),
   );
-  assert.equal(project?.compile.levels.length, 2);
-  assert.equal(project?.compile.levels[0]?.include, false);
-  assert.equal(project?.compile.levels[1]?.name, "");
-  assert.equal(project?.compile.levels[1]?.title, true);
-  assert.equal(project?.compile.levels[1]?.number, "none");
-  assert.equal(project?.compile.scenes.title, true);
-  assert.equal(project?.compile.sceneBreak, "stars");
-  assert.deepEqual(project?.compile.titleOnly, ["pro"]);
+  assert.equal(project?.compile.presets[0]?.levels.length, 2);
+  assert.equal(project?.compile.presets[0]?.levels[0]?.include, false);
+  assert.equal(project?.compile.presets[0]?.levels[1]?.name, "");
+  assert.equal(project?.compile.presets[0]?.levels[1]?.title, true);
+  assert.equal(project?.compile.presets[0]?.levels[1]?.number, "none");
+  assert.equal(project?.compile.presets[0]?.scenes.title, true);
+  assert.equal(project?.compile.presets[0]?.sceneBreak, "stars");
+  assert.deepEqual(project?.compile.presets[0]?.titleOnly, ["pro"]);
   assert.equal(project?.compile.useAppAuthor, true);
-  assert.equal(project?.compile.format.font, "Times New Roman");
+  assert.equal(project?.compile.presets[0]?.format.font, "Times New Roman");
+});
+
+test("a new section joins every compile that already includes its parent", () => {
+  const project = createNovelProject();
+  const manuscript = project.compile.presets[0];
+  if (!manuscript) {
+    assert.fail("a new book has a compile");
+  }
+  assert.equal(manuscript.included.includes(project.manuscript.id), true);
+  const ebook = { ...manuscript, id: "ebook", name: "Ebook", included: [] as string[] };
+  const withBoth = setBookCompile(project, { ...project.compile, presets: [manuscript, ebook] });
+  const added = addSection(withBoth, withBoth.manuscript.id);
+  assert.equal(added.project.compile.presets[0]?.included.includes(added.id), true);
+  assert.equal(added.project.compile.presets[1]?.included.includes(added.id), false);
+  const note = addLeaf(added.project, added.project.notes.id);
+  assert.equal(note.project.compile.presets[0]?.included.includes(note.id), false);
 });
 
 test("saving compile keeps the book's format and leaves an unchanged book alone", () => {
   const project = createNovelProject();
-  const next = setBookCompile(project, {
-    ...project.compile,
-    format: { ...project.compile.format, spacing: "single" },
-  });
-  assert.equal(next.compile.format.spacing, "single");
+  const preset = project.compile.presets[0];
+  if (!preset) {
+    assert.fail("a new book has a compile");
+  }
+  const next = setBookCompile(
+    project,
+    editPreset(project.compile, preset.id, (item) => ({ ...item, format: { ...item.format, spacing: "single" } })),
+  );
+  assert.equal(next.compile.presets[0]?.format.spacing, "single");
   assert.equal(setBookCompile(next, next.compile), next);
 });
 
 test("an unnumbered folder stays out of the count until it is numbered again", () => {
   const project = createNovelProject();
-  const marked = setBookCompile(project, withTitleOnly(project.compile, "prologue", true));
-  assert.deepEqual(marked.compile.titleOnly, ["prologue"]);
-  assert.equal(setBookCompile(marked, withTitleOnly(marked.compile, "prologue", true)), marked);
-  const cleared = setBookCompile(marked, withTitleOnly(marked.compile, "prologue", false));
-  assert.deepEqual(cleared.compile.titleOnly, []);
+  const preset = project.compile.presets[0];
+  if (!preset) {
+    assert.fail("a new book has a compile");
+  }
+  const marked = setBookCompile(project, editPreset(project.compile, preset.id, (item) => withTitleOnly(item, "prologue", true)));
+  assert.deepEqual(marked.compile.presets[0]?.titleOnly, ["prologue"]);
+  const markedPreset = marked.compile.presets[0];
+  if (!markedPreset) {
+    assert.fail("the compile is still there");
+  }
+  assert.equal(setBookCompile(marked, editPreset(marked.compile, markedPreset.id, (item) => withTitleOnly(item, "prologue", true))), marked);
+  const cleared = setBookCompile(marked, editPreset(marked.compile, markedPreset.id, (item) => withTitleOnly(item, "prologue", false)));
+  assert.deepEqual(cleared.compile.presets[0]?.titleOnly, []);
 });
 
 test("a broken folder level falls back and an empty list stays empty", () => {
@@ -168,21 +196,21 @@ test("a broken folder level falls back and an empty list stays empty", () => {
     );
   }
   const broken = book({ levels: [{ include: true, name: "Chapter", heading: "nope" }] });
-  assert.equal(broken?.compile.levels[1]?.include, true);
-  assert.equal(broken?.compile.levels[1]?.title, true);
-  assert.equal(broken?.compile.levels[1]?.number, "none");
+  assert.equal(broken?.compile.presets[0]?.levels[1]?.include, true);
+  assert.equal(broken?.compile.presets[0]?.levels[1]?.title, true);
+  assert.equal(broken?.compile.presets[0]?.levels[1]?.number, "none");
   const legacy = book({
     levels: [{ include: true, name: "Chapter", heading: "numberTitle" }, { include: true, name: "Part", heading: "written" }],
     sceneTitles: true,
   });
-  assert.equal(legacy?.compile.levels[0]?.number, "arabic");
-  assert.equal(legacy?.compile.levels[0]?.title, true);
-  assert.equal(legacy?.compile.levels[0]?.join, "mark");
-  assert.equal(legacy?.compile.levels[0]?.mark, ": ");
-  assert.equal(legacy?.compile.levels[1]?.blankOpening, true);
-  assert.equal(legacy?.compile.scenes.title, true);
+  assert.equal(legacy?.compile.presets[0]?.levels[0]?.number, "arabic");
+  assert.equal(legacy?.compile.presets[0]?.levels[0]?.title, true);
+  assert.equal(legacy?.compile.presets[0]?.levels[0]?.join, "mark");
+  assert.equal(legacy?.compile.presets[0]?.levels[0]?.mark, ": ");
+  assert.equal(legacy?.compile.presets[0]?.levels[1]?.blankOpening, true);
+  assert.equal(legacy?.compile.presets[0]?.scenes.title, true);
   const empty = book({ levels: [] });
-  assert.deepEqual(empty?.compile.levels, []);
+  assert.deepEqual(empty?.compile.presets[0]?.levels, []);
 });
 
 test("a publishing page the author already wrote is not replaced", () => {

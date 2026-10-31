@@ -260,6 +260,55 @@ input:focus-visible {
   background: var(--wash);
 }
 
+.compile-choices {
+  display: grid;
+  grid-template-columns: 1fr 10rem;
+  gap: 16px;
+}
+
+.compile-presets {
+  display: grid;
+  grid-template-columns: minmax(10rem, 16rem) 1fr auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.compile-preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 9rem;
+  overflow: auto;
+}
+
+.compile-preset-list button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.compile-preset-list button[aria-selected="true"] {
+  background: var(--paper);
+}
+
+.compile-body .compile-choice-label,
+.compile-preset-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 4px;
+  color: var(--faded);
+  font-size: 0.75rem;
+}
+
+.compile-preset-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .gate-actions {
   display: flex;
   gap: 8px;

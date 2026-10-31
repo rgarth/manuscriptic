@@ -3,6 +3,7 @@ import {
   defaultLevel,
   type CompileHeading,
   type CompileLevel,
+  type CompilePreset,
   type HeadingAlign,
   type CompilePreferences,
   type CompileSpacing,
@@ -56,10 +57,11 @@ const linesAfterHeading = 2;
 
 export function buildCompile(
   project: ProjectFile,
-  included: ReadonlySet<string>,
+  preset: CompilePreset,
   preferences: CompilePreferences,
   year: number,
 ): CompileDocument {
+  const included = new Set(preset.included);
   const missing: string[] = [];
   const chosen = { hasDocument: false };
   const values: CompileValues = {
@@ -69,12 +71,12 @@ export function buildCompile(
     phone: preferences.phone,
     email: preferences.email,
     title: project.title,
-    words: String(compileWordCount(project)),
+    words: String(compileWordCount(project, included)),
     year: String(year),
   };
   const paragraphs = [
     ...matterParagraphs(project, included, "front", values, missing, chosen),
-    ...manuscriptParagraphs(project, included, values, missing, preferences.align, chosen),
+    ...manuscriptParagraphs(project, included, values, missing, preferences.align, chosen, preset),
     ...matterParagraphs(project, included, "back", values, missing, chosen),
     ...matterParagraphs(project, included, "other", values, missing, chosen),
   ];
@@ -97,16 +99,16 @@ export function buildCompile(
   };
 }
 
-function compileWordCount(project: ProjectFile): number {
-  return countedWords(project.manuscript);
+function compileWordCount(project: ProjectFile, included: ReadonlySet<string>): number {
+  return countedWords(project.manuscript, included);
 }
 
-function countedWords(node: BinderNode): number {
+function countedWords(node: BinderNode, included: ReadonlySet<string>): number {
   switch (node.kind) {
     case "document":
-      return node.includeInCompile ? wordCount(node.content) : 0;
+      return included.has(node.id) ? wordCount(node.content) : 0;
     case "folder":
-      return node.children.reduce((sum, child) => sum + countedWords(child), 0);
+      return node.children.reduce((sum, child) => sum + countedWords(child, included), 0);
     default: {
       const unexpected: never = node;
       return unexpected;
@@ -143,12 +145,13 @@ function manuscriptParagraphs(
   missing: string[],
   align: Alignment,
   chosen: { hasDocument: boolean },
+  preset: CompilePreset,
 ): CompileParagraph[] {
   const structure: Structure = {
     included,
-    titleOnly: new Set(project.compile.titleOnly),
-    levels: project.compile.levels,
-    scenes: project.compile.scenes,
+    titleOnly: new Set(preset.titleOnly),
+    levels: preset.levels,
+    scenes: preset.scenes,
   };
   const state: EmitState = {
     paragraphs: [],
@@ -158,7 +161,7 @@ function manuscriptParagraphs(
     scenes: structure.scenes,
     missing,
     align,
-    sceneBreak: project.compile.sceneBreak,
+    sceneBreak: preset.sceneBreak,
     chosen,
     values,
   };
