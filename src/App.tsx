@@ -194,6 +194,9 @@ export default function App() {
       case "open":
         void file.openNovelFile();
         return;
+      case "open-recent":
+        void file.openRecentBook(command.path);
+        return;
       case "import":
         void file.importScrivener();
         return;
@@ -280,18 +283,24 @@ export default function App() {
     });
   }, [project, selectedId]);
 
+  const menuBook = useRef<string | null>(null);
+  menuBook.current = file.filePath;
+
   useEffect(() => {
-    void installAppMenu().catch((error: unknown) => {
+    if (!document.hasFocus()) {
+      return;
+    }
+    void installAppMenu(menuBook.current).catch((error: unknown) => {
       showNotice(error, "Could not install the menu.");
     });
-  }, []);
+  }, [file.filePath, showNotice]);
 
   useEffect(() => {
     if (!tauriAvailable()) {
       return;
     }
     function onFocus() {
-      void installAppMenu().catch((error: unknown) => {
+      void installAppMenu(menuBook.current).catch((error: unknown) => {
         showNotice(error, "Could not install the menu.");
       });
       file.onWindowFocus();

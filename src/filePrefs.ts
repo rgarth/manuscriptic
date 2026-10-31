@@ -127,6 +127,13 @@ export function rememberRecentBook(storage: PrefStorage, path: string): void {
   storage.setItem(recentBooksKey, JSON.stringify(books.slice(0, recentLimit)));
 }
 
+export function recentMenuBooks(books: readonly string[], openPath: string | null): string[] {
+  if (!openPath) {
+    return [...books];
+  }
+  return books.filter((path) => path !== openPath);
+}
+
 export function rememberBook(storage: PrefStorage, path: string): void {
   const cleanPath = path.trim();
   if (!cleanPath) {

@@ -11,6 +11,7 @@ import {
   readFilePreferences,
   presentRecentBooks,
   readRecentBooks,
+  recentMenuBooks,
   rememberBook,
   rememberOpenBook,
   rememberRecentBook,
@@ -134,6 +135,14 @@ test("remembering a book records it as open and recent, and closing leaves it re
   markBookClosed(storage, "/Users/me/Novels/Castus.manuscriptic");
   assert.deepEqual(booksOnStartup(storage, null).paths, []);
   assert.deepEqual(readRecentBooks(storage), ["/Users/me/Novels/Castus.manuscriptic"]);
+});
+
+test("the open book is left out of that window's recent menu", () => {
+  const books = ["/Users/me/Novels/Castus.manuscriptic", "/Users/me/Novels/Bone Eaters.manuscriptic"];
+  assert.deepEqual(recentMenuBooks(books, "/Users/me/Novels/Castus.manuscriptic"), [
+    "/Users/me/Novels/Bone Eaters.manuscriptic",
+  ]);
+  assert.deepEqual(recentMenuBooks(books, null), books);
 });
 
 test("recent books keep the last ten paths, and a missing file is dropped", async () => {

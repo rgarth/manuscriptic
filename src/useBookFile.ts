@@ -519,6 +519,12 @@ export function useBookFile(showNotice: Notice) {
     }
     fileBusy.current = true;
     try {
+      if (tauriAvailable() && (await raiseBookWindow(path))) {
+        return;
+      }
+      if (filePathRef.current === path) {
+        return;
+      }
       await openKnownBook(path, titleFromBookPath(path));
     } catch (error: unknown) {
       noticeRef.current(error, "Could not open that novel.");

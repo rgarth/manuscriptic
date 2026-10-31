@@ -2,25 +2,27 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Menu, MenuItem, Submenu } from "@tauri-apps/api/menu";
 import { commands, onCommands } from "./commands";
 import { editCommandItems } from "./editMenu";
+import { recentMenuBooks, titleFromBookPath } from "./filePrefs";
 import { createFormatMenu } from "./formatMenu";
 import { sendMenuCommand } from "./menuCommand";
 import { createViewMenu } from "./viewMenu";
+import { loadRecentBooks } from "./windows";
 
 let installed: Menu | null = null;
 let field: HTMLInputElement | HTMLTextAreaElement | null = null;
 let watching = false;
 
-export async function installAppMenu(): Promise<void> {
+export async function installAppMenu(openPath: string | null): Promise<void> {
   if (navigator.userAgent.includes("Windows")) {
-    await installWindowsMenu();
+    await installWindowsMenu(openPath);
     return;
   }
-  await installMacMenu();
+  await installMacMenu(openPath);
 }
 
-async function installMacMenu(): Promise<void> {
+async function installMacMenu(openPath: string | null): Promise<void> {
   const menu = await Menu.default();
-  const file = await fileCommandItems("Cmd+Option+,");
+  const file = await fileCommandItems("Cmd+Option+,", openPath);
   const edit = await editCommandItems();
   const format = await createFormatMenu();
   followFocus(file.sync);
@@ -63,9 +65,9 @@ async function installMacMenu(): Promise<void> {
   installed = menu;
 }
 
-async function installWindowsMenu(): Promise<void> {
+async function installWindowsMenu(openPath: string | null): Promise<void> {
   rememberTextField();
-  const file = await fileCommandItems("Ctrl+Alt+,");
+  const file = await fileCommandItems("Ctrl+Alt+,", openPath);
   const edit = await editCommandItems();
   const format = await createFormatMenu({ strike: "CmdOrCtrl+Shift+X", subscript: "CmdOrCtrl+Shift+," });
   keepUpdated(file.sync);
@@ -110,7 +112,10 @@ async function installWindowsMenu(): Promise<void> {
   installed = menu;
 }
 
-async function fileCommandItems(bookSettingsAccelerator: string): Promise<{ items: MenuItem[]; sync: () => void }> {
+async function fileCommandItems(
+  bookSettingsAccelerator: string,
+  openPath: string | null,
+): Promise<{ items: Array<MenuItem | Submenu>; sync: () => void }> {
   const newProject = await MenuItem.new({
     id: "new-project",
     text: "New Project…",
@@ -127,6 +132,7 @@ async function fileCommandItems(bookSettingsAccelerator: string): Promise<{ item
       sendMenuCommand({ name: "open" });
     },
   });
+  const openRecent = await openRecentMenu(openPath);
   const importScrivener = await MenuItem.new({
     id: "import-scrivener",
     text: "Import Scrivener…",
@@ -185,7 +191,29 @@ async function fileCommandItems(bookSettingsAccelerator: string): Promise<{ item
     void bookSettings.setEnabled(current.bookSettings !== null);
   }
 
-  return { items: [newProject, openNovel, importScrivener, saveNovelAs, takeSnapshot, compileBook, bookSettings, settings], sync };
+  return {
+    items: [newProject, openNovel, openRecent, importScrivener, saveNovelAs, takeSnapshot, compileBook, bookSettings, settings],
+    sync,
+  };
+}
+
+async function openRecentMenu(openPath: string | null): Promise<Submenu> {
+  const books = recentMenuBooks(await loadRecentBooks(localStorage), openPath);
+  const items =
+    books.length === 0
+      ? [await MenuItem.new({ id: "open-recent-empty", text: "None", enabled: false })]
+      : await Promise.all(
+          books.map((path, index) =>
+            MenuItem.new({
+              id: `open-recent-${index}`,
+              text: titleFromBookPath(path) || path,
+              action: () => {
+                sendMenuCommand({ name: "open-recent", path });
+              },
+            }),
+          ),
+        );
+  return Submenu.new({ id: "open-recent", text: "Open Recent", items });
 }
 
 function followFocus(sync: () => void) {

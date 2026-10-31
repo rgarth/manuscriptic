@@ -117,6 +117,12 @@ test("a menu command is one of the known actions", () => {
   assert.deepEqual(menuCommand({ name: "compile" }), { name: "compile" });
   assert.deepEqual(menuCommand({ name: "book-settings" }), { name: "book-settings" });
   assert.deepEqual(menuCommand({ name: "import" }), { name: "import" });
+  assert.deepEqual(menuCommand({ name: "open-recent", path: "/Books/Bone Eaters.manuscriptic" }), {
+    name: "open-recent",
+    path: "/Books/Bone Eaters.manuscriptic",
+  });
+  assert.equal(menuCommand({ name: "open-recent" }), null);
+  assert.equal(menuCommand({ name: "open-recent", path: "  " }), null);
   assert.deepEqual(menuCommand({ name: "undo" }), { name: "undo" });
   assert.deepEqual(menuCommand({ name: "redo" }), { name: "redo" });
   assert.deepEqual(menuCommand({ name: "format", command: "bold" }), { name: "format", command: "bold" });

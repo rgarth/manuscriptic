@@ -14,6 +14,16 @@ type ExportKind = "docx" | "pdf";
 
 const formatOrder: ExportKind[] = ["docx", "pdf"];
 
+function exportKind(value: string): ExportKind | null {
+  switch (value) {
+    case "docx":
+    case "pdf":
+      return value;
+    default:
+      return null;
+  }
+}
+
 const formats: {
   [Kind in ExportKind]: { label: string; extension: string; write: (doc: CompileDocument) => Uint8Array };
 } = {
@@ -79,34 +89,35 @@ export default function ExportDialog({
           </button>
         </header>
         <div className="compile-body">
-          <p>{`${preset.name} is written as ${format.label}.`}</p>
           <div className="compile-choices">
-            <div>
-              <p className="compile-choice-label">Compile</p>
-              <div className="compile-preset-list" role="listbox" aria-label="Compile">
+            <label className="compile-choice-label">
+              Compile
+              <select value={preset.id} onChange={(event) => setPresetId(event.currentTarget.value)}>
                 {project.compile.presets.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    role="option"
-                    aria-selected={item.id === preset.id}
-                    onClick={() => setPresetId(item.id)}
-                  >
+                  <option key={item.id} value={item.id}>
                     {item.name}
-                  </button>
+                  </option>
                 ))}
-              </div>
-            </div>
-            <div>
-              <p className="compile-choice-label">Format</p>
-              <div className="compile-preset-list" role="listbox" aria-label="Format">
+              </select>
+            </label>
+            <label className="compile-choice-label">
+              Format
+              <select
+                value={kind}
+                onChange={(event) => {
+                  const next = exportKind(event.currentTarget.value);
+                  if (next) {
+                    setKind(next);
+                  }
+                }}
+              >
                 {formatOrder.map((id) => (
-                  <button key={id} type="button" role="option" aria-selected={id === kind} onClick={() => setKind(id)}>
+                  <option key={id} value={id}>
                     {formats[id].label}
-                  </button>
+                  </option>
                 ))}
-              </div>
-            </div>
+              </select>
+            </label>
           </div>
           <div className="dialog-actions">
             <button type="button" onClick={() => void compile()} disabled={busy}>
