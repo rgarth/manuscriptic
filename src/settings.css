@@ -68,8 +68,51 @@
 
 .dialog.settings .structure-pane {
   display: flex;
+  flex-direction: column;
   padding: 0;
   overflow: hidden;
+}
+
+.dialog.settings .structure-pane > .compile-presets {
+  flex: none;
+  margin: 0;
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, var(--rule));
+}
+
+.dialog.settings .compile-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.dialog.settings .compile-preset-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  color: var(--faded);
+  font-size: 0.75rem;
+}
+
+.dialog.settings .compile-preset-name select,
+.dialog.settings .compile-preset-name input {
+  width: 12rem;
+}
+
+.dialog.settings .compile-preset-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dialog.settings .compile-preset-note {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--faded);
+  font-size: 0.75rem;
+  line-height: 1.35;
 }
 
 .dialog.settings .structure-body {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   bookFileName,
+  exportPath,
   titleFromBookPath,
   booksOnStartup,
   joinNovelPath,
@@ -11,6 +12,7 @@ import {
   readFilePreferences,
   presentRecentBooks,
   readRecentBooks,
+  recentMenuBooks,
   rememberBook,
   rememberOpenBook,
   rememberRecentBook,
@@ -134,6 +136,20 @@ test("remembering a book records it as open and recent, and closing leaves it re
   markBookClosed(storage, "/Users/me/Novels/Castus.manuscriptic");
   assert.deepEqual(booksOnStartup(storage, null).paths, []);
   assert.deepEqual(readRecentBooks(storage), ["/Users/me/Novels/Castus.manuscriptic"]);
+});
+
+test("a compile keeps the format extension even when the save sheet changes it", () => {
+  assert.equal(exportPath("/Users/me/Documents/Bone Eaters.docx", ".pdf"), "/Users/me/Documents/Bone Eaters.pdf");
+  assert.equal(exportPath("/Users/me/Documents/Bone Eaters.pdf", ".pdf"), "/Users/me/Documents/Bone Eaters.pdf");
+  assert.equal(exportPath("/Users/me/Documents/Bone Eaters", ".docx"), "/Users/me/Documents/Bone Eaters.docx");
+});
+
+test("the open book is left out of that window's recent menu", () => {
+  const books = ["/Users/me/Novels/Castus.manuscriptic", "/Users/me/Novels/Bone Eaters.manuscriptic"];
+  assert.deepEqual(recentMenuBooks(books, "/Users/me/Novels/Castus.manuscriptic"), [
+    "/Users/me/Novels/Bone Eaters.manuscriptic",
+  ]);
+  assert.deepEqual(recentMenuBooks(books, null), books);
 });
 
 test("recent books keep the last ten paths, and a missing file is dropped", async () => {

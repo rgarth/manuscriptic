@@ -260,6 +260,38 @@ input:focus-visible {
   background: var(--wash);
 }
 
+.compile-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.compile-body .compile-choice-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  color: var(--faded);
+  font-size: 0.75rem;
+}
+
+.compile-body .compile-choice-label select {
+  width: 100%;
+  font: inherit;
+  line-height: inherit;
+  height: calc(1.35em + 14px);
+  padding: 6px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink);
+}
+
+.compile-body .compile-choice-label select:focus-visible {
+  outline: 1px solid var(--nib);
+  outline-offset: 2px;
+}
+
 .gate-actions {
   display: flex;
   gap: 8px;
@@ -455,11 +487,6 @@ input:focus-visible {
   gap: 12px;
   min-height: 0;
   padding: 16px;
-}
-
-.dialog.compile .compile-body > p {
-  margin: 0;
-  color: var(--faded);
 }
 
 .dialog.compile .dialog-actions {

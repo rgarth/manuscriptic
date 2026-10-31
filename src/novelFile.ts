@@ -4,6 +4,7 @@ import { documentsDirectory } from "./storage.ts";
 
 const novelFilter = [{ name: "Manuscriptic book", extensions: ["manuscriptic"] }];
 const docxFilter = [{ name: "Word document", extensions: ["docx"] }];
+const pdfFilter = [{ name: "PDF", extensions: ["pdf"] }];
 const scrivenerFilter = [{ name: "Scrivener project", extensions: ["scriv", "scrivx"] }];
 
 export async function resolveDirectory(directory: string | null): Promise<string> {
@@ -44,11 +45,11 @@ export async function pickNovelSaveAs(
   });
 }
 
-export async function pickDocxSave(directory: string, fileName: string): Promise<string | null> {
+export async function pickExportSave(directory: string, fileName: string, kind: "docx" | "pdf"): Promise<string | null> {
   return save({
     title: "Compile",
     defaultPath: joinNovelPath(directory, fileName),
-    filters: docxFilter,
+    filters: kind === "pdf" ? pdfFilter : docxFilter,
   });
 }
 

@@ -127,6 +127,13 @@ export function rememberRecentBook(storage: PrefStorage, path: string): void {
   storage.setItem(recentBooksKey, JSON.stringify(books.slice(0, recentLimit)));
 }
 
+export function recentMenuBooks(books: readonly string[], openPath: string | null): string[] {
+  if (!openPath) {
+    return [...books];
+  }
+  return books.filter((path) => path !== openPath);
+}
+
 export function rememberBook(storage: PrefStorage, path: string): void {
   const cleanPath = path.trim();
   if (!cleanPath) {
@@ -174,6 +181,14 @@ export function folderFromBookPath(path: string): string {
     return "";
   }
   return path.slice(0, slash);
+}
+
+export function exportPath(path: string, extension: string): string {
+  const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  const name = path.slice(slash + 1);
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? path.slice(0, slash + 1 + dot) : path;
+  return `${stem}${extension}`;
 }
 
 export function joinNovelPath(directory: string, fileName: string): string {

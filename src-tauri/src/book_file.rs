@@ -57,14 +57,7 @@ pub fn read_history(path: String) -> Result<Option<String>, String> {
 
 #[tauri::command]
 pub fn write_export(path: String, bytes: Vec<u8>) -> Result<(), String> {
-    let mut target = PathBuf::from(&path);
-    let docx = target
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("docx"));
-    if !docx {
-        target.set_extension("docx");
-    }
+    let target = PathBuf::from(&path);
     if let Some(parent) = target.parent() {
         if !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent).map_err(|err| err.to_string())?;
@@ -175,7 +168,7 @@ fn temp_path(target: &Path) -> PathBuf {
 
 #[cfg(test)]
 mod tests {
-    use super::{file_exists, read_book, read_history, write_book};
+    use super::{file_exists, read_book, read_history, write_book, write_export};
     use std::fs::{self, File};
     use std::io::Write;
     use zip::write::SimpleFileOptions;
@@ -188,6 +181,19 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("manuscriptic-zip-{}-{id}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         dir
+    }
+
+    #[test]
+    fn an_export_keeps_the_extension_it_was_given() {
+        let dir = book_dir();
+        let pdf = dir.join("Bone Eaters.pdf");
+        write_export(pdf.to_string_lossy().to_string(), b"%PDF".to_vec()).unwrap();
+        assert_eq!(fs::read(&pdf).unwrap(), b"%PDF");
+        assert!(!dir.join("Bone Eaters.docx").exists());
+        let docx = dir.join("Bone Eaters.docx");
+        write_export(docx.to_string_lossy().to_string(), b"PK".to_vec()).unwrap();
+        assert_eq!(fs::read(&docx).unwrap(), b"PK");
+        fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

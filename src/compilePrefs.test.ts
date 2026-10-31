@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  firstPreset,
   defaultBookCompile,
   defaultCompileFormat,
   defaultCompileIdentity,
@@ -48,7 +49,8 @@ test("author information round-trips and a broken file is refused", () => {
 test("a book inherits the settings author until it keeps its own", () => {
   const book = defaultBookCompile();
   const app = { ...defaultCompileIdentity(), author: "Ada Garth" };
-  const inherited = resolvedCompilePreferences({ ...book, useAppAuthor: true }, app);
+  const preset = firstPreset(book);
+  const inherited = resolvedCompilePreferences({ ...book, useAppAuthor: true }, app, preset);
   assert.equal(inherited.author, "Ada Garth");
   assert.equal(inherited.spacing, "double");
   const own = resolvedCompilePreferences(
@@ -56,9 +58,10 @@ test("a book inherits the settings author until it keeps its own", () => {
       ...book,
       useAppAuthor: false,
       author: { ...defaultCompileIdentity(), author: "A. Leigh" },
-      format: { ...book.format, spacing: "single" },
+      presets: [{ ...preset, format: { ...preset.format, spacing: "single" } }],
     },
     app,
+    { ...preset, format: { ...preset.format, spacing: "single" } },
   );
   assert.equal(own.author, "A. Leigh");
   assert.equal(own.spacing, "single");

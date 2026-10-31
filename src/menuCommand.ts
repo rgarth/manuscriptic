@@ -18,6 +18,7 @@ const sceneCommands = {
 export type MenuCommand =
   | { name: "new" }
   | { name: "open" }
+  | { name: "open-recent"; path: string }
   | { name: "import" }
   | { name: "save-as" }
   | { name: "snapshot" }
@@ -63,6 +64,8 @@ export function menuCommand(value: unknown): MenuCommand | null {
     case "undo":
     case "redo":
       return { name: value.name };
+    case "open-recent":
+      return recentCommand(value.path);
     case "format":
       return sceneCommand(value.command);
     case "align":
@@ -70,6 +73,13 @@ export function menuCommand(value: unknown): MenuCommand | null {
     default:
       return null;
   }
+}
+
+function recentCommand(value: unknown): MenuCommand | null {
+  if (typeof value !== "string" || value.trim() === "") {
+    return null;
+  }
+  return { name: "open-recent", path: value };
 }
 
 function alignCommand(value: unknown): MenuCommand | null {

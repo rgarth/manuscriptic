@@ -3,6 +3,7 @@ import {
   documentNode,
   editNode,
   findNode,
+  includeNewBinderNode,
   folderNode,
   isRoot,
   isStoredInTrash,
@@ -173,7 +174,7 @@ function addNode(project: ProjectFile, selectedId: string | null, child: BinderN
   if (!next) {
     throw new Error("Could not insert into the binder.");
   }
-  return { project: next, id: child.id };
+  return { project: includeNewBinderNode(next, parentId, child.id), id: child.id };
 }
 
 function destinationId(project: ProjectFile, selectedId: string | null): string {

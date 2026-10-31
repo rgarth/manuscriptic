@@ -51,26 +51,96 @@ export function defaultLevel(include: boolean, name: string, title = false): Com
   return { ...defaultHeading(name), title, include };
 }
 
-export function levelAt(compile: BookCompile, rank: number): CompileLevel {
-  return compile.levels[rank] ?? defaultLevel(false, "");
+export function levelAt(preset: CompilePreset, rank: number): CompileLevel {
+  return preset.levels[rank] ?? defaultLevel(false, "");
 }
 
-export function withTitleOnly(compile: BookCompile, id: string, unnumbered: boolean): BookCompile {
-  const has = compile.titleOnly.includes(id);
+export function withTitleOnly(preset: CompilePreset, id: string, unnumbered: boolean): CompilePreset {
+  const has = preset.titleOnly.includes(id);
   if (has === unnumbered) {
-    return compile;
+    return preset;
   }
-  const titleOnly = unnumbered ? [...compile.titleOnly, id] : compile.titleOnly.filter((item) => item !== id);
-  return { ...compile, titleOnly };
+  const titleOnly = unnumbered ? [...preset.titleOnly, id] : preset.titleOnly.filter((item) => item !== id);
+  return { ...preset, titleOnly };
 }
 
-export function withLevel(compile: BookCompile, rank: number, level: CompileLevel): BookCompile {
-  const levels = compile.levels.slice();
+export function withLevel(preset: CompilePreset, rank: number, level: CompileLevel): CompilePreset {
+  const levels = preset.levels.slice();
   while (levels.length <= rank) {
     levels.push(defaultLevel(false, ""));
   }
   levels[rank] = level;
-  return { ...compile, levels };
+  return { ...preset, levels };
+}
+
+export function editPreset(
+  compile: BookCompile,
+  presetId: string,
+  update: (preset: CompilePreset) => CompilePreset,
+): BookCompile {
+  return {
+    ...compile,
+    presets: compile.presets.map((preset) => (preset.id === presetId ? update(preset) : preset)),
+  };
+}
+
+export function firstPreset(compile: BookCompile): CompilePreset {
+  const first = compile.presets[0];
+  if (!first) {
+    throw new Error("A book has a compile.");
+  }
+  return first;
+}
+
+export function compilePreset(compile: BookCompile, id: string): CompilePreset {
+  const found = compile.presets.find((preset) => preset.id === id);
+  if (!found) {
+    throw new Error("That compile is not in this book.");
+  }
+  return found;
+}
+
+export function duplicatePreset(compile: BookCompile, sourceId: string, id: string): BookCompile {
+  const source = compilePreset(compile, sourceId);
+  const copy: CompilePreset = {
+    ...source,
+    id,
+    name: nextCompileName(compile.presets),
+    included: [...source.included],
+    titleOnly: [...source.titleOnly],
+    levels: source.levels.map((level) => ({ ...level })),
+    scenes: { ...source.scenes },
+    format: { ...source.format, margins: { ...source.format.margins } },
+  };
+  return { ...compile, presets: [...compile.presets, copy] };
+}
+
+export function renamePreset(compile: BookCompile, id: string, name: string): BookCompile {
+  return editPreset(compile, id, (preset) => ({ ...preset, name }));
+}
+
+export function deletePreset(compile: BookCompile, id: string): { compile: BookCompile; selectedId: string } | null {
+  if (compile.presets.length < 2) {
+    return null;
+  }
+  const presets = compile.presets.filter((preset) => preset.id !== id);
+  const selected = presets[0];
+  if (!selected) {
+    return null;
+  }
+  return { compile: { ...compile, presets }, selectedId: selected.id };
+}
+
+function nextCompileName(presets: readonly CompilePreset[]): string {
+  const names = new Set(presets.map((preset) => preset.name));
+  if (!names.has("Untitled")) {
+    return "Untitled";
+  }
+  let index = 2;
+  while (names.has(`Untitled ${index}`)) {
+    index += 1;
+  }
+  return `Untitled ${index}`;
 }
 
 export const sceneBreaks = ["hash", "stars", "blank"] as const;
@@ -106,14 +176,21 @@ export type CompileFormat = {
 
 export type CompilePreferences = CompileIdentity & CompileFormat;
 
-export type BookCompile = {
+export type CompilePreset = {
+  id: string;
+  name: string;
+  included: string[];
   levels: CompileLevel[];
   scenes: CompileHeading;
   sceneBreak: SceneBreak;
   titleOnly: string[];
+  format: CompileFormat;
+};
+
+export type BookCompile = {
   useAppAuthor: boolean;
   author: CompileIdentity;
-  format: CompileFormat;
+  presets: CompilePreset[];
 };
 
 export function defaultCompileIdentity(): CompileIdentity {
@@ -142,20 +219,33 @@ export function defaultCompilePreferences(): CompilePreferences {
   return { ...defaultCompileIdentity(), ...defaultCompileFormat() };
 }
 
-export function defaultBookCompile(): BookCompile {
-  return bookCompile({
+export function defaultPreset(name: string, included: string[] = []): CompilePreset {
+  return {
+    id: crypto.randomUUID(),
+    name,
+    included,
     levels: [defaultLevel(false, ""), defaultLevel(true, "", true)],
     scenes: defaultHeading(),
     sceneBreak: "hash",
     titleOnly: [],
-    useAppAuthor: true,
-    author: defaultCompileIdentity(),
     format: defaultCompileFormat(),
-  });
+  };
 }
 
-export function resolvedCompilePreferences(book: BookCompile, app: CompileIdentity): CompilePreferences {
-  return { ...(book.useAppAuthor ? app : book.author), ...book.format };
+export function defaultBookCompile(): BookCompile {
+  return {
+    useAppAuthor: true,
+    author: defaultCompileIdentity(),
+    presets: [defaultPreset("Manuscript")],
+  };
+}
+
+export function resolvedCompilePreferences(
+  book: BookCompile,
+  app: CompileIdentity,
+  preset: CompilePreset,
+): CompilePreferences {
+  return { ...(book.useAppAuthor ? app : book.author), ...preset.format };
 }
 
 export function compileIdentity(value: unknown): CompileIdentity {
@@ -202,26 +292,52 @@ export function compileFormat(value: unknown): CompileFormat {
 }
 
 export function bookCompile(value: unknown): BookCompile {
-  const fallbackLevels = [defaultLevel(false, ""), defaultLevel(true, "", true)];
   if (!isRecord(value)) {
-    return {
-      levels: fallbackLevels,
-      scenes: defaultHeading(),
-      sceneBreak: "hash",
-      titleOnly: [],
-      useAppAuthor: true,
-      author: defaultCompileIdentity(),
-      format: defaultCompileFormat(),
-    };
+    return defaultBookCompile();
   }
-  const levels = Array.isArray(value.levels) ? parseLevels(value.levels) ?? fallbackLevels : fallbackLevels;
+  const author = compileIdentity(value.author);
+  const useAppAuthor = value.useAppAuthor !== false;
+  if (Array.isArray(value.presets)) {
+    const presets = value.presets.flatMap((item, index) => {
+      const preset = parsePreset(item, index);
+      return preset ? [preset] : [];
+    });
+    return { useAppAuthor, author, presets: presets.length > 0 ? presets : [defaultPreset("Manuscript")] };
+  }
+  return { useAppAuthor, author, presets: [legacyPreset(value)] };
+}
+
+function legacyPreset(value: Record<string, unknown>): CompilePreset {
+  return {
+    id: crypto.randomUUID(),
+    name: "Manuscript",
+    included: [],
+    ...presetBody(value),
+  };
+}
+
+function parsePreset(value: unknown, index: number): CompilePreset | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const name = text(value.name).trim();
+  const id = text(value.id).trim();
+  return {
+    id: id || crypto.randomUUID(),
+    name: name || `Compile ${index + 1}`,
+    included: stringList(value.included),
+    ...presetBody(value),
+  };
+}
+
+function presetBody(value: Record<string, unknown>): Omit<CompilePreset, "id" | "name" | "included"> {
+  const fallbackLevels = [defaultLevel(false, ""), defaultLevel(true, "", true)];
+  const levels = Array.isArray(value.levels) ? (parseLevels(value.levels) ?? fallbackLevels) : fallbackLevels;
   return {
     levels,
     scenes: parseScenes(value),
     sceneBreak: sceneBreak(value.sceneBreak),
     titleOnly: stringList(value.titleOnly),
-    useAppAuthor: value.useAppAuthor !== false,
-    author: compileIdentity(value.author),
     format: compileFormat(value.format),
   };
 }

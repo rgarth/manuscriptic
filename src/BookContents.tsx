@@ -1,11 +1,9 @@
 import { useState } from "react";
-import { withTitleOnly } from "./bookCompile.ts";
+import { editPreset, withTitleOnly, type CompilePreset } from "./bookCompile.ts";
 import Hint from "./Hint.tsx";
 import {
   collapsedCompileFolders,
   compileRows,
-  initialCompileTicks,
-  rememberCompile,
   shownCompileRows,
   toggleCompileRow,
 } from "./compileTicks.ts";
@@ -14,13 +12,15 @@ import { setBookCompile, type ProjectFile } from "./model/project.ts";
 
 export default function BookContents({
   project,
+  preset,
   onProject,
 }: {
   project: ProjectFile;
+  preset: CompilePreset;
   onProject: (update: (project: ProjectFile) => ProjectFile) => void;
 }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => collapsedCompileFolders(compileRows(project)));
-  const included = initialCompileTicks(project);
+  const included = new Set(preset.included);
   const rows = shownCompileRows(compileRows(project), collapsed);
 
   function toggleFolder(id: string) {
@@ -62,7 +62,17 @@ export default function BookContents({
                   type="checkbox"
                   checked={included.has(row.id)}
                   onChange={() =>
-                    onProject((current) => rememberCompile(current, toggleCompileRow(current, initialCompileTicks(current), row.id)))
+                    onProject((current) => {
+                      const currentPreset = current.compile.presets.find((item) => item.id === preset.id);
+                      if (!currentPreset) {
+                        return current;
+                      }
+                      const next = toggleCompileRow(current, new Set(currentPreset.included), row.id);
+                      return setBookCompile(
+                        current,
+                        editPreset(current.compile, currentPreset.id, (item) => ({ ...item, included: [...next] })),
+                      );
+                    })
                   }
                 />
                 <span>{row.title}</span>
@@ -71,14 +81,17 @@ export default function BookContents({
                 <Hint label="Numbered uses the Structure numbering. Unnumbered keeps the title and stays out of the count.">
                   <select
                     aria-label={`${row.title} numbering`}
-                    value={project.compile.titleOnly.includes(row.id) ? "unnumbered" : "numbered"}
+                    value={preset.titleOnly.includes(row.id) ? "unnumbered" : "numbered"}
                     onChange={(event) => {
                       const choice = headingChoice(event.currentTarget.value);
                       if (!choice) {
                         return;
                       }
                       onProject((current) =>
-                        setBookCompile(current, withTitleOnly(current.compile, row.id, choice === "unnumbered")),
+                        setBookCompile(
+                          current,
+                          editPreset(current.compile, preset.id, (item) => withTitleOnly(item, row.id, choice === "unnumbered")),
+                        ),
                       );
                     }}
                   >
