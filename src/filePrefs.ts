@@ -183,6 +183,14 @@ export function folderFromBookPath(path: string): string {
   return path.slice(0, slash);
 }
 
+export function exportPath(path: string, extension: string): string {
+  const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  const name = path.slice(slash + 1);
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? path.slice(0, slash + 1 + dot) : path;
+  return `${stem}${extension}`;
+}
+
 export function joinNovelPath(directory: string, fileName: string): string {
   const separator = directory.includes("\\") ? "\\" : "/";
   const base = directory.endsWith("/") || directory.endsWith("\\") ? directory.slice(0, -1) : directory;

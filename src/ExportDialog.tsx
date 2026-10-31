@@ -4,7 +4,7 @@ import { buildCompile, type CompileDocument } from "./compileShape.ts";
 import { readCompileIdentity } from "./compilePrefs.ts";
 import { compileDocx } from "./docx.ts";
 import { reportFailure } from "./failures.ts";
-import { bookFileName, readFilePreferences } from "./filePrefs.ts";
+import { bookFileName, exportPath, readFilePreferences } from "./filePrefs.ts";
 import type { ProjectFile } from "./model/project.ts";
 import { pickExportSave, resolveDirectory } from "./novelFile.ts";
 import { compilePdf } from "./pdf.ts";
@@ -62,11 +62,11 @@ export default function ExportDialog({
     try {
       const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
       const fileName = bookFileName(project.title).replace(/\.manuscriptic$/i, format.extension);
-      const path = await pickExportSave(directory, fileName, kind);
-      if (!path) {
+      const picked = await pickExportSave(directory, fileName, kind);
+      if (!picked) {
         return;
       }
-      await writeExport(path, bytes);
+      await writeExport(exportPath(picked, format.extension), bytes);
       if (compiled.missing.length > 0) {
         const names = compiled.missing.join(", ");
         reportFailure(`Left blank: ${names}.`, `Left blank: ${names}.`);
