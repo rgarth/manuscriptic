@@ -29,7 +29,7 @@ import { createBookLock, heldElsewhere } from "./bookLock";
 import {
   bookFileName,
   markBookClosed,
-  rememberOpenBook,
+  rememberBook,
   titleFromBookPath,
   readFilePreferences,
 } from "./filePrefs";
@@ -208,6 +208,14 @@ export function useBookFile(showNotice: Notice) {
     );
   }
 
+  function rememberThisBook(path: string) {
+    try {
+      rememberBook(localStorage, path);
+    } catch (error: unknown) {
+      noticeRef.current(error, "Could not remember this open book.");
+    }
+  }
+
   function showBook(next: ProjectFile, path: string, bookHistory: BookHistory) {
     if (pendingSave.current !== null) {
       window.clearTimeout(pendingSave.current);
@@ -219,11 +227,7 @@ export function useBookFile(showNotice: Notice) {
     setFilePath(path);
     openProject(next);
     setReady(true);
-    try {
-      rememberOpenBook(localStorage, path);
-    } catch (error: unknown) {
-      noticeRef.current(error, "Could not remember this open book.");
-    }
+    rememberThisBook(path);
   }
 
   function markReady() {
@@ -498,6 +502,31 @@ export function useBookFile(showNotice: Notice) {
     setHistory(next);
   }
 
+  async function openKnownBook(path: string, title: string) {
+    if (projectRef.current) {
+      await openBookWindow(path, title);
+      return;
+    }
+    if (tauriAvailable() && (await raiseBookWindow(path))) {
+      return;
+    }
+    await loadBook(path);
+  }
+
+  async function openRecentBook(path: string) {
+    if (fileBusy.current) {
+      return;
+    }
+    fileBusy.current = true;
+    try {
+      await openKnownBook(path, titleFromBookPath(path));
+    } catch (error: unknown) {
+      noticeRef.current(error, "Could not open that novel.");
+    } finally {
+      fileBusy.current = false;
+    }
+  }
+
   async function openNovelFile() {
     if (fileBusy.current) {
       return;
@@ -509,14 +538,7 @@ export function useBookFile(showNotice: Notice) {
       if (!picked) {
         return;
       }
-      if (projectRef.current) {
-        await openBookWindow(picked, picked);
-        return;
-      }
-      if (tauriAvailable() && (await raiseBookWindow(picked))) {
-        return;
-      }
-      await loadBook(picked);
+      await openKnownBook(picked, picked);
     } catch (error: unknown) {
       noticeRef.current(error, "Could not open that novel.");
     } finally {
@@ -556,7 +578,7 @@ export function useBookFile(showNotice: Notice) {
       bookLock.held();
       setSaveState("saved");
       setSaveError(null);
-      rememberOpenBook(localStorage, path);
+      rememberThisBook(path);
     } catch (error: unknown) {
       noticeRef.current(error, "Could not save.");
     } finally {
@@ -608,6 +630,7 @@ export function useBookFile(showNotice: Notice) {
     saveState,
     saveError,
     loadBook,
+    openRecentBook,
     createBook,
     importScrivener,
     answerImportMatter,

@@ -4,7 +4,7 @@ export type FilePreferences = {
   lastProject: string | null;
 };
 
-type PrefStorage = {
+export type PrefStorage = {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
@@ -14,7 +14,9 @@ const directoryKey = "manuscriptic-save-directory";
 const openLastKey = "manuscriptic-open-last";
 const lastProjectKey = "manuscriptic-last-project";
 const openBooksKey = "manuscriptic-open-books";
+const recentBooksKey = "manuscriptic-recent-books";
 const snapshotMinutesKey = "manuscriptic-snapshot-minutes";
+const recentLimit = 10;
 
 export function readFilePreferences(storage: PrefStorage): FilePreferences {
   return {
@@ -79,6 +81,61 @@ export function markBookClosed(storage: PrefStorage, path: string): void {
   storage.setItem(openBooksKey, JSON.stringify(remaining));
 }
 
+export function readRecentBooks(storage: PrefStorage): string[] {
+  const raw = storage.getItem(recentBooksKey);
+  if (!raw) {
+    return [];
+  }
+  const parsed: unknown = JSON.parse(raw);
+  if (!Array.isArray(parsed)) {
+    throw new Error("The list of recent books could not be read.");
+  }
+  const books: string[] = [];
+  for (const item of parsed) {
+    if (typeof item !== "string") {
+      continue;
+    }
+    const path = item.trim();
+    if (!path || books.includes(path)) {
+      continue;
+    }
+    books.push(path);
+  }
+  return books.slice(0, recentLimit);
+}
+
+export async function presentRecentBooks(
+  storage: PrefStorage,
+  exists: (path: string) => Promise<boolean>,
+): Promise<string[]> {
+  const books = readRecentBooks(storage);
+  const checks = await Promise.all(books.map((path) => exists(path)));
+  const kept = books.filter((_path, index) => checks[index]);
+  if (kept.length !== books.length) {
+    storage.setItem(recentBooksKey, JSON.stringify(kept));
+  }
+  return kept;
+}
+
+export function rememberRecentBook(storage: PrefStorage, path: string): void {
+  const cleanPath = path.trim();
+  if (!cleanPath) {
+    return;
+  }
+  const books = readRecentBooks(storage).filter((item) => item !== cleanPath);
+  books.unshift(cleanPath);
+  storage.setItem(recentBooksKey, JSON.stringify(books.slice(0, recentLimit)));
+}
+
+export function rememberBook(storage: PrefStorage, path: string): void {
+  const cleanPath = path.trim();
+  if (!cleanPath) {
+    return;
+  }
+  rememberOpenBook(storage, cleanPath);
+  rememberRecentBook(storage, cleanPath);
+}
+
 export const snapshotMinuteChoices = [0, 5, 15, 60] as const;
 
 export type SnapshotMinutes = (typeof snapshotMinuteChoices)[number];
@@ -109,6 +166,14 @@ export function bookFileName(title: string): string {
 export function titleFromBookPath(path: string): string {
   const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
   return path.slice(slash + 1).replace(/\.manuscriptic$/i, "").trim();
+}
+
+export function folderFromBookPath(path: string): string {
+  const slash = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  if (slash <= 0) {
+    return "";
+  }
+  return path.slice(0, slash);
 }
 
 export function joinNovelPath(directory: string, fileName: string): string {

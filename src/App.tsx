@@ -366,6 +366,9 @@ export default function App() {
           onOpen={() => {
             void file.openNovelFile();
           }}
+          onOpenRecent={(path) => {
+            void file.openRecentBook(path);
+          }}
           onCreate={() => {
             void file.createBook();
           }}

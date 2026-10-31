@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import Binder from "./Binder";
 import CompileSettings from "./CompileSettings";
 import ExportDialog from "./ExportDialog";
@@ -21,7 +21,9 @@ import Settings from "./Settings";
 import Snapshots from "./Snapshots";
 import WritingClock from "./WritingClock";
 import type { BookHistory } from "./bookSession";
-import type { SnapshotMinutes } from "./filePrefs";
+import { reportFailure } from "./failures";
+import { folderFromBookPath, titleFromBookPath, type SnapshotMinutes } from "./filePrefs";
+import { loadRecentBooks } from "./windows";
 import { removal, restoreNode } from "./model/binder";
 import { wordCount, type EditorDoc } from "./model/editorDoc";
 import {
@@ -254,6 +256,7 @@ export function Gate({
   ready,
   settings,
   onOpen,
+  onOpenRecent,
   onCreate,
   onImport,
 }: {
@@ -261,9 +264,35 @@ export function Gate({
   ready: boolean;
   settings: ReactNode;
   onOpen: () => void;
+  onOpenRecent: (path: string) => void;
   onCreate: () => void;
   onImport: () => void;
 }) {
+  const [recent, setRecent] = useState<string[]>([]);
+  useEffect(() => {
+    let generation = 0;
+    function refreshRecent() {
+      const gen = ++generation;
+      void loadRecentBooks(localStorage)
+        .then((books) => {
+          if (gen === generation) {
+            setRecent(books);
+          }
+        })
+        .catch((error: unknown) => {
+          if (gen !== generation) {
+            return;
+          }
+          reportFailure(error, "Could not read recent books.");
+        });
+    }
+    refreshRecent();
+    window.addEventListener("focus", refreshRecent);
+    return () => {
+      generation += 1;
+      window.removeEventListener("focus", refreshRecent);
+    };
+  }, []);
   if (!ready) {
     return <Opening />;
   }
@@ -282,6 +311,21 @@ export function Gate({
           Import Scrivener
         </button>
       </div>
+      {recent.length > 0 ? (
+        <section className="gate-recent" aria-label="Recent">
+          <h2>Recent</h2>
+          <ul>
+            {recent.map((path) => (
+              <li key={path}>
+                <button type="button" onClick={() => onOpenRecent(path)}>
+                  <span>{titleFromBookPath(path)}</span>
+                  <span className="gate-recent-folder">{folderFromBookPath(path)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {settings}
     </main>
   );

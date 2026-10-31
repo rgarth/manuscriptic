@@ -1,5 +1,6 @@
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { raiseBookWindow } from "./storage.ts";
+import { presentRecentBooks, readRecentBooks, type PrefStorage } from "./filePrefs.ts";
+import { fileExists, raiseBookWindow } from "./storage.ts";
 
 export function bookQuery(): string | null {
   return new URLSearchParams(window.location.search).get("book");
@@ -15,7 +16,14 @@ export function clearBookQuery(): void {
 }
 
 export function tauriAvailable(): boolean {
-  return "__TAURI_INTERNALS__" in window;
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+export async function loadRecentBooks(storage: PrefStorage): Promise<string[]> {
+  if (!tauriAvailable()) {
+    return readRecentBooks(storage);
+  }
+  return presentRecentBooks(storage, fileExists);
 }
 
 export function windowClose(hasBook: boolean, windowCount: number): "leave" | "destroy" {

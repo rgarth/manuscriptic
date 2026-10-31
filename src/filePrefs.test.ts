@@ -5,14 +5,20 @@ import {
   titleFromBookPath,
   booksOnStartup,
   joinNovelPath,
+  folderFromBookPath,
   markBookClosed,
   preferenceDirectoryLabel,
   readFilePreferences,
+  presentRecentBooks,
+  readRecentBooks,
+  rememberBook,
   rememberOpenBook,
+  rememberRecentBook,
   writeLastProject,
   writeOpenLast,
   writeSaveDirectory,
 } from "./filePrefs.ts";
+import { loadRecentBooks } from "./windows.ts";
 
 type Memory = {
   getItem(key: string): string | null;
@@ -118,4 +124,38 @@ test("closing the last book leaves the landing page for the next launch", () => 
   rememberOpenBook(storage, "/Users/me/Novels/Castus.manuscriptic");
   markBookClosed(storage, "/Users/me/Novels/Castus.manuscriptic");
   assert.deepEqual(booksOnStartup(storage, null), { paths: [], openRest: true });
+});
+
+test("remembering a book records it as open and recent, and closing leaves it recent", () => {
+  const storage = memory();
+  rememberBook(storage, "/Users/me/Novels/Castus.manuscriptic");
+  assert.deepEqual(booksOnStartup(storage, null).paths, ["/Users/me/Novels/Castus.manuscriptic"]);
+  assert.deepEqual(readRecentBooks(storage), ["/Users/me/Novels/Castus.manuscriptic"]);
+  markBookClosed(storage, "/Users/me/Novels/Castus.manuscriptic");
+  assert.deepEqual(booksOnStartup(storage, null).paths, []);
+  assert.deepEqual(readRecentBooks(storage), ["/Users/me/Novels/Castus.manuscriptic"]);
+});
+
+test("recent books keep the last ten paths, and a missing file is dropped", async () => {
+  const storage = memory();
+  for (let index = 0; index < 12; index += 1) {
+    rememberRecentBook(storage, `/Users/me/Novels/Book ${index}.manuscriptic`);
+  }
+  assert.deepEqual(
+    readRecentBooks(storage),
+    [11, 10, 9, 8, 7, 6, 5, 4, 3, 2].map((index) => `/Users/me/Novels/Book ${index}.manuscriptic`),
+  );
+  rememberRecentBook(storage, "/Users/me/Novels/Book 2.manuscriptic");
+  assert.equal(readRecentBooks(storage)[0], "/Users/me/Novels/Book 2.manuscriptic");
+  assert.equal(readRecentBooks(storage).length, 10);
+  markBookClosed(storage, "/Users/me/Novels/Book 2.manuscriptic");
+  assert.equal(readRecentBooks(storage)[0], "/Users/me/Novels/Book 2.manuscriptic");
+  assert.equal(folderFromBookPath("/Users/me/Novels/Book 2.manuscriptic"), "/Users/me/Novels");
+  const shown = await presentRecentBooks(storage, async (path) => path !== "/Users/me/Novels/Book 2.manuscriptic");
+  assert.deepEqual(
+    shown,
+    [11, 10, 9, 8, 7, 6, 5, 4, 3].map((index) => `/Users/me/Novels/Book ${index}.manuscriptic`),
+  );
+  assert.deepEqual(readRecentBooks(storage), shown);
+  assert.deepEqual(await loadRecentBooks(storage), shown);
 });
