@@ -208,7 +208,26 @@ test("a broken folder level falls back and an empty list stays empty", () => {
   assert.equal(legacy?.compile.presets[0]?.levels[0]?.join, "mark");
   assert.equal(legacy?.compile.presets[0]?.levels[0]?.mark, ": ");
   assert.equal(legacy?.compile.presets[0]?.levels[1]?.blankOpening, true);
+  assert.equal(legacy?.compile.presets[0]?.levels[1]?.linesBefore, 8);
+  assert.equal(legacy?.compile.presets[0]?.levels[1]?.linesAfter, 2);
   assert.equal(legacy?.compile.presets[0]?.scenes.title, true);
+  assert.equal(legacy?.compile.presets[0]?.scenes.linesBefore, 0);
+  assert.equal(legacy?.compile.presets[0]?.scenes.linesAfter, 0);
+  const spaced = book({
+    levels: [{ include: true, title: true, name: "Part", pageBefore: true, linesBefore: 12, linesAfter: 4 }],
+    scenes: { title: false },
+  });
+  assert.equal(spaced?.compile.presets[0]?.levels[0]?.linesBefore, 12);
+  assert.equal(spaced?.compile.presets[0]?.levels[0]?.linesAfter, 4);
+  assert.equal(spaced?.compile.presets[0]?.scenes.linesBefore, 0);
+  assert.equal(spaced?.compile.presets[0]?.scenes.linesAfter, 0);
+  const kept = book({
+    levels: [{ include: true, title: true, name: "Chapter" }, { include: true, title: true, name: "Part", linesBefore: 200, linesAfter: -3 }],
+  });
+  assert.equal(kept?.compile.presets[0]?.levels[0]?.linesBefore, 8);
+  assert.equal(kept?.compile.presets[0]?.levels[0]?.linesAfter, 2);
+  assert.equal(kept?.compile.presets[0]?.levels[1]?.linesBefore, 80);
+  assert.equal(kept?.compile.presets[0]?.levels[1]?.linesAfter, 0);
   const empty = book({ levels: [] });
   assert.deepEqual(empty?.compile.presets[0]?.levels, []);
 });
@@ -421,6 +440,28 @@ test("scene text keeps bold and italic and drops unknown marks", () => {
       content: [{ type: "paragraph", content: [{ type: "text", text: "Hi", marks: [{ type: "link" }] }] }],
     }),
     null,
+  );
+  assert.deepEqual(
+    parseEditorDoc({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            {
+              type: "text",
+              text: "Hel",
+              marks: [{ type: "textStyle", attrs: { fontFamily: "Courier", fontSize: "32pt" } }],
+            },
+            { type: "text", text: "lo" },
+          ],
+        },
+      ],
+    }),
+    textDoc("", [
+      { type: "text", text: "Hel", marks: [{ type: "textStyle", attrs: { fontFamily: "Courier", fontSize: "32pt" } }] },
+      { type: "text", text: "lo" },
+    ]),
   );
 });
 

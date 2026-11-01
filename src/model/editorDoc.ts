@@ -1,10 +1,13 @@
+import { fontName, fontSizePoints, fontSizeText } from "../pageLayout.ts";
+
 export type Mark =
   | { type: "bold" }
   | { type: "italic" }
   | { type: "underline" }
   | { type: "strike" }
   | { type: "superscript" }
-  | { type: "subscript" };
+  | { type: "subscript" }
+  | { type: "textStyle"; attrs: { fontFamily?: string; fontSize?: string } };
 
 export type TextRun = {
   type: "text";
@@ -244,11 +247,38 @@ function parseMarks(value: unknown): Mark[] | null {
       case "subscript":
         marks.push({ type: mark.type });
         break;
+      case "textStyle":
+        {
+          const face = textStyleMark(mark.attrs);
+          if (face) {
+            marks.push(face);
+          }
+        }
+        break;
       default:
         return null;
     }
   }
   return marks;
+}
+
+function textStyleMark(value: unknown): Mark | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const raw = typeof value.fontFamily === "string" ? value.fontFamily.trim() : "";
+  const fontFamily = raw && !raw.includes("[") && !raw.includes("]") ? fontName(raw) : "";
+  const points = typeof value.fontSize === "string" ? fontSizePoints(value.fontSize) : null;
+  if (!fontFamily && !points) {
+    return null;
+  }
+  return {
+    type: "textStyle",
+    attrs: {
+      ...(fontFamily ? { fontFamily } : {}),
+      ...(points ? { fontSize: fontSizeText(points) } : {}),
+    },
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

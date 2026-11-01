@@ -1,3 +1,5 @@
+<img src="docs/icon.png" width="128" alt="Manuscriptic">
+
 # Manuscriptic
 
 Manuscriptic is a writing app for authors. Rich text lets you control headings, fonts, and style. Compile can override those editor settings to match a publisher's guide.

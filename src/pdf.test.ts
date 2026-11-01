@@ -76,3 +76,50 @@ test("justified lines spread the extra space and the last line stays flush left"
   assert.match(text, /Tw/);
   assert.match(text, /\(Done\.\)/);
 });
+
+test("a heading keeps the size and font set on that structure level", () => {
+  const pdf = compilePdf(
+    document([
+      {
+        runs: [{ kind: "text", text: "Chapter", marks: [], font: "Courier", points: 32 }],
+        align: "center",
+        indent: false,
+        pageBreakBefore: false,
+      },
+    ]),
+  );
+  const text = new TextDecoder().decode(pdf);
+  assert.match(text, /\(Chapter\)/);
+  assert.match(text, /Courier/);
+  assert.match(text, /32 Tf/);
+});
+
+test("pdf keeps the same marks as a word compile", () => {
+  const pdf = compilePdf(
+    document([
+      {
+        runs: [
+          { kind: "text", text: "under", marks: [{ type: "underline" }] },
+          { kind: "text", text: " struck", marks: [{ type: "strike" }] },
+          { kind: "text", text: "up", marks: [{ type: "superscript" }] },
+          { kind: "text", text: "down", marks: [{ type: "subscript" }] },
+          { kind: "text", text: "both", marks: [{ type: "bold" }, { type: "italic" }, { type: "underline" }] },
+        ],
+        align: "left",
+        indent: false,
+        pageBreakBefore: false,
+      },
+    ]),
+  );
+  const text = new TextDecoder().decode(pdf);
+  assert.match(text, /\(under\)/);
+  assert.match(text, /\(struck\)/);
+  assert.match(text, /\(up\)/);
+  assert.match(text, /\(down\)/);
+  assert.match(text, /\(both\)/);
+  assert.match(text, /Times-BoldItalic/);
+  assert.match(text, /3\.96 Ts/);
+  assert.match(text, /-2\.4 Ts/);
+  assert.match(text, /7\.2 Tf/);
+  assert.match(text, /\nS\n/);
+});

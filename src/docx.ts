@@ -82,6 +82,8 @@ function markXml(mark: Mark): string {
       return `<w:vertAlign w:val="superscript"/>`;
     case "subscript":
       return `<w:vertAlign w:val="subscript"/>`;
+    case "textStyle":
+      return "";
     default: {
       const unexpected: never = mark;
       return unexpected;

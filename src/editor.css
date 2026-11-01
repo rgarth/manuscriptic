@@ -85,6 +85,10 @@
   border-radius: 10px;
 }
 
+.marks > .character-face {
+  display: contents;
+}
+
 .marks {
   display: flex;
   align-items: center;

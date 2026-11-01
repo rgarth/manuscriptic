@@ -23,6 +23,8 @@ export type CompileHeading = {
   pageBefore: boolean;
   pageAfter: boolean;
   blankOpening: boolean;
+  linesBefore: number;
+  linesAfter: number;
 };
 
 export type CompileLevel = CompileHeading & {
@@ -44,7 +46,13 @@ export function defaultHeading(name = ""): CompileHeading {
     pageBefore: false,
     pageAfter: false,
     blankOpening: false,
+    linesBefore: 8,
+    linesAfter: 2,
   };
+}
+
+export function defaultSceneHeading(): CompileHeading {
+  return { ...defaultHeading(), linesBefore: 0, linesAfter: 0 };
 }
 
 export function defaultLevel(include: boolean, name: string, title = false): CompileLevel {
@@ -172,6 +180,8 @@ export type CompileFormat = {
   indent: number;
   align: Alignment;
   passFont: boolean;
+  passFront: boolean;
+  passBack: boolean;
 };
 
 export type CompilePreferences = CompileIdentity & CompileFormat;
@@ -212,6 +222,8 @@ export function defaultCompileFormat(): CompileFormat {
     indent: 0.5,
     align: "left",
     passFont: false,
+    passFront: true,
+    passBack: true,
   };
 }
 
@@ -225,7 +237,7 @@ export function defaultPreset(name: string, included: string[] = []): CompilePre
     name,
     included,
     levels: [defaultLevel(false, ""), defaultLevel(true, "", true)],
-    scenes: defaultHeading(),
+    scenes: defaultSceneHeading(),
     sceneBreak: "hash",
     titleOnly: [],
     format: defaultCompileFormat(),
@@ -287,7 +299,9 @@ export function compileFormat(value: unknown): CompileFormat {
     align: alignments.some((item) => item.id === value.align)
       ? alignmentById(typeof value.align === "string" ? value.align : null)
       : fallback.align,
-    passFont: value.passFont === true,
+    passFont: booleanFlag(value.passFont, fallback.passFont),
+    passFront: booleanFlag(value.passFront, fallback.passFront),
+    passBack: booleanFlag(value.passBack, fallback.passBack),
   };
 }
 
@@ -360,9 +374,9 @@ function parseLevels(value: unknown[]): CompileLevel[] | null {
 
 function parseScenes(value: Record<string, unknown>): CompileHeading {
   if (isRecord(value.scenes)) {
-    return parseHeading(value.scenes, text(value.scenes.name));
+    return parseHeading(value.scenes, text(value.scenes.name), defaultSceneHeading());
   }
-  return { ...defaultHeading(), title: value.sceneTitles === true };
+  return { ...defaultSceneHeading(), title: value.sceneTitles === true };
 }
 
 function parseLevel(value: unknown): CompileLevel | null {
@@ -385,8 +399,8 @@ function isCurrentLevel(value: Record<string, unknown>): boolean {
   return typeof value.title === "boolean" || isNumberStyle(value.number) || typeof value.pageBefore === "boolean";
 }
 
-function parseHeading(value: Record<string, unknown>, name: string): CompileHeading {
-  const heading = defaultHeading(name);
+function parseHeading(value: Record<string, unknown>, name: string, fallback: CompileHeading = defaultHeading(name)): CompileHeading {
+  const heading = { ...fallback, name };
   return {
     ...heading,
     name,
@@ -402,6 +416,8 @@ function parseHeading(value: Record<string, unknown>, name: string): CompileHead
     pageBefore: value.pageBefore === true,
     pageAfter: value.pageAfter === true,
     blankOpening: value.blankOpening === true,
+    linesBefore: lineCount(value.linesBefore, heading.linesBefore),
+    linesAfter: lineCount(value.linesAfter, heading.linesAfter),
   };
 }
 
@@ -505,11 +521,19 @@ function numberValue(value: unknown): number | null {
   return null;
 }
 
+function lineCount(value: unknown, fallback: number): number {
+  return Math.floor(clamp(numberValue(value), 0, 80, fallback));
+}
+
 function clamp(value: number | null, min: number, max: number, fallback: number): number {
   if (value === null) {
     return fallback;
   }
   return Math.min(max, Math.max(min, value));
+}
+
+function booleanFlag(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function text(value: unknown): string {
