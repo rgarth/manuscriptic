@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   firstPreset,
   defaultBookCompile,
+  compileFormat,
   defaultCompileFormat,
   defaultCompileIdentity,
   defaultCompilePreferences,
@@ -30,6 +31,8 @@ test("a new compile format is a double-spaced submission", () => {
   assert.equal(format.indent, 0.5);
   assert.equal(format.align, "left");
   assert.equal(format.passFont, false);
+  assert.equal(format.passFront, true);
+  assert.equal(format.passBack, true);
   assert.equal(format.pageNumbers, "header");
   assert.equal(format.differentFirstPage, true);
   assert.deepEqual(format.margins, { top: 1, right: 1, bottom: 1, left: 1 });
@@ -44,6 +47,21 @@ test("author information round-trips and a broken file is refused", () => {
   assert.equal(readCompileIdentity(storage).pen, "A. Garth");
   storage.setItem("manuscriptic-compile", "{");
   assert.throws(() => readCompileIdentity(storage), /could not be read/);
+});
+
+test("an older format lets front and back matter keep the editor face", () => {
+  const older = compileFormat({ font: "Courier", passFont: false });
+  assert.equal(older.passFont, false);
+  assert.equal(older.passFront, true);
+  assert.equal(older.passBack, true);
+  assert.equal(older.font, "Courier");
+  const flat = compileFormat({ passFront: false, passBack: false });
+  assert.equal(flat.passFront, false);
+  assert.equal(flat.passBack, false);
+  const broken = compileFormat({ passFont: "yes", passFront: null, passBack: 0 });
+  assert.equal(broken.passFont, false);
+  assert.equal(broken.passFront, true);
+  assert.equal(broken.passBack, true);
 });
 
 test("a book inherits the settings author until it keeps its own", () => {

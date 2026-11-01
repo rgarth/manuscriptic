@@ -180,6 +180,8 @@ export type CompileFormat = {
   indent: number;
   align: Alignment;
   passFont: boolean;
+  passFront: boolean;
+  passBack: boolean;
 };
 
 export type CompilePreferences = CompileIdentity & CompileFormat;
@@ -220,6 +222,8 @@ export function defaultCompileFormat(): CompileFormat {
     indent: 0.5,
     align: "left",
     passFont: false,
+    passFront: true,
+    passBack: true,
   };
 }
 
@@ -295,7 +299,9 @@ export function compileFormat(value: unknown): CompileFormat {
     align: alignments.some((item) => item.id === value.align)
       ? alignmentById(typeof value.align === "string" ? value.align : null)
       : fallback.align,
-    passFont: value.passFont === true,
+    passFont: booleanFlag(value.passFont, fallback.passFont),
+    passFront: booleanFlag(value.passFront, fallback.passFront),
+    passBack: booleanFlag(value.passBack, fallback.passBack),
   };
 }
 
@@ -524,6 +530,10 @@ function clamp(value: number | null, min: number, max: number, fallback: number)
     return fallback;
   }
   return Math.min(max, Math.max(min, value));
+}
+
+function booleanFlag(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function text(value: unknown): string {

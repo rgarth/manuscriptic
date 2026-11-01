@@ -72,10 +72,10 @@ export function buildCompile(
     year: String(year),
   };
   const paragraphs = [
-    ...matterParagraphs(project, included, "front", values, missing, chosen, preferences.passFont),
-    ...manuscriptParagraphs(project, included, values, missing, preferences.align, chosen, preset, preferences.passFont),
-    ...matterParagraphs(project, included, "back", values, missing, chosen, preferences.passFont),
-    ...matterParagraphs(project, included, "other", values, missing, chosen, preferences.passFont),
+    ...matterParagraphs(project, included, "front", values, missing, chosen, matterPolicy("front", preferences, project)),
+    ...manuscriptParagraphs(project, included, values, missing, preferences.align, chosen, preset, manuscriptFace(preferences.passFont)),
+    ...matterParagraphs(project, included, "back", values, missing, chosen, matterPolicy("back", preferences, project)),
+    ...matterParagraphs(project, included, "other", values, missing, chosen, matterPolicy("other", preferences, project)),
   ];
   return {
     paragraphs,
@@ -143,7 +143,7 @@ function manuscriptParagraphs(
   align: Alignment,
   chosen: { hasDocument: boolean },
   preset: CompilePreset,
-  carryFont: boolean,
+  face: TextFace,
 ): CompileParagraph[] {
   const structure: Structure = {
     included,
@@ -162,7 +162,7 @@ function manuscriptParagraphs(
     sceneBreak: preset.sceneBreak,
     chosen,
     values,
-    carryFont,
+    face,
   };
   emitRuns(walk(project.manuscript, structure).runs, [], state);
   return state.paragraphs;
@@ -273,7 +273,7 @@ type EmitState = {
   sceneBreak: SceneBreak;
   chosen: { hasDocument: boolean };
   values: CompileValues;
-  carryFont: boolean;
+  face: TextFace;
 };
 
 function emitRuns(runs: ManuscriptRun[], pending: SectionHeading[], state: EmitState) {
@@ -400,7 +400,7 @@ function writeScenes(run: Extract<ManuscriptRun, { kind: "text" }>, state: EmitS
     }
     const filled = fillDocument(scene.content, state.values);
     rememberMissing(state.missing, filled.missing);
-    blocks.push(...blocksToParagraphs(filled.doc.content, state.align, true, state.carryFont));
+    blocks.push(...blocksToParagraphs(filled.doc.content, state.align, true, state.face));
     if (!state.pageOpen && blocks[0]) {
       blocks[0].pageBreakBefore = true;
       state.pageOpen = true;
@@ -563,6 +563,49 @@ function numberName(value: number): string {
   return String(value);
 }
 
+type TextFace =
+  | { kind: "strip" }
+  | { kind: "carry" }
+  | { kind: "fill"; font: string; points: number };
+
+type MatterPolicy = {
+  align: Alignment;
+  face: TextFace;
+};
+
+function manuscriptFace(passFont: boolean): TextFace {
+  return passFont ? { kind: "carry" } : { kind: "strip" };
+}
+
+function matterPolicy(
+  place: "front" | "back" | "other",
+  preferences: CompilePreferences,
+  project: ProjectFile,
+): MatterPolicy {
+  switch (place) {
+    case "front":
+      return passedMatter(preferences.passFront, project);
+    case "back":
+      return passedMatter(preferences.passBack, project);
+    case "other":
+      return { align: "left", face: manuscriptFace(preferences.passFont) };
+    default: {
+      const unexpected: never = place;
+      return unexpected;
+    }
+  }
+}
+
+function passedMatter(pass: boolean, project: ProjectFile): MatterPolicy {
+  if (!pass) {
+    return { align: "left", face: { kind: "strip" } };
+  }
+  return {
+    align: project.layout.align,
+    face: { kind: "fill", font: project.layout.font, points: project.layout.points },
+  };
+}
+
 function matterParagraphs(
   project: ProjectFile,
   included: ReadonlySet<string>,
@@ -570,7 +613,7 @@ function matterParagraphs(
   values: CompileValues,
   missing: string[],
   chosen: { hasDocument: boolean },
-  carryFont: boolean,
+  policy: MatterPolicy,
 ): CompileParagraph[] {
   const pages = publishingDocs(project.publishing, included, place);
   if (pages.length > 0) {
@@ -580,7 +623,7 @@ function matterParagraphs(
   for (const page of pages) {
     const filled = fillDocument(page, values);
     rememberMissing(missing, filled.missing);
-    const body = blocksToParagraphs(filled.doc.content, "left", false, carryFont);
+    const body = blocksToParagraphs(filled.doc.content, policy.align, false, policy.face);
     const start = body.length > 0 ? body : [blankParagraph()];
     const opening = start[0];
     if (opening) {
@@ -656,24 +699,24 @@ function blocksToParagraphs(
   blocks: readonly EditorBlock[],
   align: Alignment,
   indent: boolean,
-  carryFont: boolean,
+  face: TextFace,
 ): CompileParagraph[] {
   const paragraphs: CompileParagraph[] = [];
   for (const block of blocks) {
     switch (block.type) {
       case "paragraph":
         paragraphs.push({
-          runs: inlinesToRuns(block.content ?? [], carryFont),
+          runs: inlinesToRuns(block.content ?? [], face),
           align,
           indent,
           pageBreakBefore: false,
         });
         break;
       case "bulletList":
-        paragraphs.push(...listParagraphs(block.content, align, "bullet", 1, carryFont));
+        paragraphs.push(...listParagraphs(block.content, align, "bullet", 1, face));
         break;
       case "orderedList":
-        paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1, carryFont));
+        paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1, face));
         break;
       default: {
         const unexpected: never = block;
@@ -689,7 +732,7 @@ function listParagraphs(
   align: Alignment,
   kind: "bullet" | "number",
   start: number,
-  carryFont: boolean,
+  face: TextFace,
 ): CompileParagraph[] {
   const paragraphs: CompileParagraph[] = [];
   items.forEach((item, itemIndex) => {
@@ -700,7 +743,7 @@ function listParagraphs(
           const marker = marked ? "" : kind === "bullet" ? "• " : `${start + itemIndex}. `;
           marked = true;
           paragraphs.push({
-            runs: [...(marker ? [{ kind: "text" as const, text: marker, marks: [] }] : []), ...inlinesToRuns(block.content ?? [], carryFont)],
+            runs: [...(marker ? [runFace(marker, [], face)] : []), ...inlinesToRuns(block.content ?? [], face)],
             align,
             indent: false,
             pageBreakBefore: false,
@@ -708,10 +751,10 @@ function listParagraphs(
           break;
         }
         case "bulletList":
-          paragraphs.push(...listParagraphs(block.content, align, "bullet", 1, carryFont));
+          paragraphs.push(...listParagraphs(block.content, align, "bullet", 1, face));
           break;
         case "orderedList":
-          paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1, carryFont));
+          paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1, face));
           break;
         default: {
           const unexpected: never = block;
@@ -723,7 +766,7 @@ function listParagraphs(
   return paragraphs;
 }
 
-function inlinesToRuns(inlines: readonly Inline[], carryFont: boolean): CompileRun[] {
+function inlinesToRuns(inlines: readonly Inline[], face: TextFace): CompileRun[] {
   const runs: CompileRun[] = [];
   for (const inline of inlines) {
     switch (inline.type) {
@@ -732,13 +775,8 @@ function inlinesToRuns(inlines: readonly Inline[], carryFont: boolean): CompileR
         break;
       case "text":
         if (inline.text) {
-          const face = carryFont ? carriedFace(inline.marks) : {};
-          runs.push({
-            kind: "text",
-            text: inline.text,
-            marks: styleMarks(inline.marks),
-            ...face,
-          });
+          const carried = face.kind === "strip" ? undefined : carriedFace(inline.marks);
+          runs.push(runFace(inline.text, styleMarks(inline.marks), face, carried));
         }
         break;
       default: {
@@ -748,6 +786,39 @@ function inlinesToRuns(inlines: readonly Inline[], carryFont: boolean): CompileR
     }
   }
   return runs;
+}
+
+function runFace(
+  text: string,
+  marks: Mark[],
+  face: TextFace,
+  carried?: { font?: string; points?: number },
+): CompileRun {
+  let font: string | undefined;
+  let points: number | undefined;
+  switch (face.kind) {
+    case "strip":
+      break;
+    case "carry":
+      font = carried?.font;
+      points = carried?.points;
+      break;
+    case "fill":
+      font = carried?.font ?? face.font;
+      points = carried?.points ?? face.points;
+      break;
+    default: {
+      const unexpected: never = face;
+      return unexpected;
+    }
+  }
+  return {
+    kind: "text",
+    text,
+    marks,
+    ...(font ? { font } : {}),
+    ...(points ? { points } : {}),
+  };
 }
 
 function carriedFace(marks: readonly Mark[] | undefined): { font?: string; points?: number } {

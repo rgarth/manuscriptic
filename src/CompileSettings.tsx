@@ -383,7 +383,23 @@ function FormattingSettings({
             checked={format.passFont}
             onChange={(event) => onChange({ passFont: event.currentTarget.checked })}
           />
-          Use the manuscript’s fonts and sizes
+          Manuscript uses the editor’s fonts and sizes
+        </label>
+        <label className="preference">
+          <input
+            type="checkbox"
+            checked={format.passFront}
+            onChange={(event) => onChange({ passFront: event.currentTarget.checked })}
+          />
+          Front matter uses the editor’s font, size, and alignment
+        </label>
+        <label className="preference">
+          <input
+            type="checkbox"
+            checked={format.passBack}
+            onChange={(event) => onChange({ passBack: event.currentTarget.checked })}
+          />
+          Back matter uses the editor’s font, size, and alignment
         </label>
         <div className="setting-grid">
           <FontMenu

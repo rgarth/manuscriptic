@@ -23,6 +23,7 @@ import {
   renameNode,
   setBookCompile,
   setDocumentContent,
+  setPageLayout,
   type ProjectFile,
 } from "./model/project.ts";
 
@@ -87,6 +88,11 @@ function novel(chapters: ReturnType<typeof folderNode>[]): ProjectFile {
   });
 }
 
+function pageNamed(project: ProjectFile, matter: "front" | "back", title: string): BinderNode | undefined {
+  const folder = project.publishing.children.find((child) => child.kind === "folder" && child.matter === matter);
+  return folder?.kind === "folder" ? folder.children.find((child) => child.title === title) : undefined;
+}
+
 function ticked(project: ProjectFile): string[] {
   const preset = project.compile.presets[0];
   if (!preset) {
@@ -143,6 +149,151 @@ test("a manuscript font keeps each run, and an override uses one font", () => {
     assert.equal(run.font, undefined);
     assert.equal(run.points, undefined);
   }
+});
+
+test("front matter keeps the editor face while the manuscript uses the override", () => {
+  const opening = documentNode("Opening", "scene", {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Hel" },
+          { type: "text", text: "lo", marks: [{ type: "textStyle", attrs: { fontFamily: "Courier", fontSize: "32pt" } }] },
+        ],
+      },
+    ],
+  });
+  let project = setPageLayout(novel([folderNode("Tide", [opening])]), { font: "Palatino", points: 18, align: "center" });
+  const titlePage = pageNamed(project, "front", "Title page");
+  const thanks = pageNamed(project, "back", "Acknowledgements");
+  assert.equal(titlePage?.kind, "document");
+  assert.equal(thanks?.kind, "document");
+  if (titlePage?.kind !== "document" || thanks?.kind !== "document") {
+    return;
+  }
+  project = setDocumentContent(project, titlePage.id, {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Bone" },
+          {
+            type: "text",
+            text: " Road",
+            marks: [{ type: "textStyle", attrs: { fontFamily: "Courier", fontSize: "28pt" } }, { type: "italic" }],
+          },
+        ],
+      },
+    ],
+  });
+  project = setDocumentContent(project, thanks.id, prose("Thanks"));
+  const compiled = compileOf(
+    project,
+    new Set([titlePage.id, thanks.id, opening.id]),
+    { ...defaultCompilePreferences(), passFont: false, passFront: true, passBack: false },
+    2026,
+  );
+  const title = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Bone Road");
+  assert.equal(title?.align, "center");
+  const bone = title?.runs.find((run) => run.kind === "text" && run.text === "Bone");
+  const road = title?.runs.find((run) => run.kind === "text" && run.text === " Road");
+  assert.equal(bone?.kind, "text");
+  assert.equal(road?.kind, "text");
+  if (bone?.kind === "text" && road?.kind === "text") {
+    assert.equal(bone.font, "Palatino");
+    assert.equal(bone.points, 18);
+    assert.equal(road.font, "Courier");
+    assert.equal(road.points, 28);
+    assert.deepEqual(road.marks, [{ type: "italic" }]);
+  }
+  const note = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Thanks");
+  assert.equal(note?.align, "left");
+  const thanked = note?.runs.find((run) => run.kind === "text");
+  assert.equal(thanked?.kind, "text");
+  if (thanked?.kind === "text") {
+    assert.equal(thanked.font, undefined);
+  }
+  const hello = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Hello");
+  assert.equal(hello?.align, "left");
+  const styled = hello?.runs.find((run) => run.kind === "text" && run.text === "lo");
+  assert.equal(styled?.kind, "text");
+  if (styled?.kind === "text") {
+    assert.equal(styled.font, undefined);
+    assert.equal(styled.points, undefined);
+  }
+  assert.equal(compiled.font, "Times New Roman");
+  assert.equal(compiled.points, 12);
+});
+
+test("a passed manuscript stays unstamped while front matter fills from the editor", () => {
+  const opening = documentNode("Opening", "scene", prose("Hello"));
+  let project = setPageLayout(novel([folderNode("Tide", [opening])]), { font: "Palatino", points: 18, align: "center" });
+  const titlePage = pageNamed(project, "front", "Title page");
+  const synopsis = project.publishing.children.find((child) => child.kind === "document" && child.title === "Synopsis");
+  assert.equal(titlePage?.kind, "document");
+  assert.equal(synopsis?.kind, "document");
+  if (titlePage?.kind !== "document" || synopsis?.kind !== "document") {
+    return;
+  }
+  project = setDocumentContent(project, titlePage.id, {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Bone Road" }] },
+      {
+        type: "bulletList",
+        content: [
+          {
+            type: "listItem",
+            content: [{ type: "paragraph", content: [{ type: "text", text: "line" }] }],
+          },
+        ],
+      },
+    ],
+  });
+  project = setDocumentContent(project, synopsis.id, prose("Plot"));
+  const compiled = compileOf(
+    project,
+    new Set([titlePage.id, synopsis.id, opening.id]),
+    { ...defaultCompilePreferences(), passFont: true, passFront: true },
+    2026,
+  );
+  const hello = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Hello");
+  const plain = hello?.runs.find((run) => run.kind === "text");
+  assert.equal(plain?.kind, "text");
+  if (plain?.kind === "text") {
+    assert.equal(plain.font, undefined);
+    assert.equal(plain.points, undefined);
+  }
+  const title = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Bone Road");
+  assert.equal(title?.align, "center");
+  const bone = title?.runs.find((run) => run.kind === "text");
+  assert.equal(bone?.kind, "text");
+  if (bone?.kind === "text") {
+    assert.equal(bone.font, "Palatino");
+    assert.equal(bone.points, 18);
+  }
+  const item = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "• line");
+  const marker = item?.runs[0];
+  const line = item?.runs[1];
+  assert.equal(marker?.kind, "text");
+  assert.equal(line?.kind, "text");
+  if (marker?.kind === "text" && line?.kind === "text") {
+    assert.equal(marker.font, "Palatino");
+    assert.equal(marker.points, 18);
+    assert.equal(line.font, "Palatino");
+    assert.equal(line.points, 18);
+  }
+  const plot = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Plot");
+  assert.equal(plot?.align, "left");
+  const summary = plot?.runs.find((run) => run.kind === "text");
+  assert.equal(summary?.kind, "text");
+  if (summary?.kind === "text") {
+    assert.equal(summary.font, undefined);
+  }
+  assert.equal(compiled.font, "Palatino");
+  assert.equal(compiled.points, 18);
 });
 
 test("a chapter heading is the folder title and scenes keep their marks", () => {
