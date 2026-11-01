@@ -103,6 +103,48 @@ function compileOf(project: ProjectFile, included: Iterable<string>, preferences
   return compileDocument(project, { ...preset, included: [...included] }, preferences, year);
 }
 
+test("a manuscript font keeps each run, and an override uses one font", () => {
+  const opening = documentNode("Opening", "scene", {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Hel" },
+          {
+            type: "text",
+            text: "lo",
+            marks: [{ type: "textStyle", attrs: { fontFamily: "Courier", fontSize: "32pt" } }, { type: "italic" }],
+          },
+        ],
+      },
+    ],
+  });
+  const chapter = folderNode("Tide", [opening]);
+  const project = novel([chapter]);
+  const passed = compileOf(project, new Set(ticked(project)), { ...defaultCompilePreferences(), passFont: true }, 2026);
+  const hello = passed.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Hello");
+  const plain = hello?.runs.find((run) => run.kind === "text" && run.text === "Hel");
+  const styled = hello?.runs.find((run) => run.kind === "text" && run.text === "lo");
+  assert.equal(plain?.kind, "text");
+  assert.equal(styled?.kind, "text");
+  if (plain?.kind === "text" && styled?.kind === "text") {
+    assert.equal(plain.font, undefined);
+    assert.equal(plain.points, undefined);
+    assert.equal(styled.font, "Courier");
+    assert.equal(styled.points, 32);
+    assert.deepEqual(styled.marks, [{ type: "italic" }]);
+  }
+  const overridden = compileOf(project, new Set(ticked(project)), defaultCompilePreferences(), 2026);
+  const replaced = overridden.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Hello");
+  const run = replaced?.runs.find((item) => item.kind === "text" && item.text === "lo");
+  assert.equal(run?.kind, "text");
+  if (run?.kind === "text") {
+    assert.equal(run.font, undefined);
+    assert.equal(run.points, undefined);
+  }
+});
+
 test("a chapter heading is the folder title and scenes keep their marks", () => {
   const opening = documentNode("Opening", "scene", marked("Hello world", "world"));
   const later = documentNode("Later", "scene", prose("After"));
@@ -196,7 +238,7 @@ test("a part heading shares the first chapter page", () => {
   const partAt = text.indexOf("Part 1");
   const chapterAt = text.indexOf("Tide");
   assert.equal(partAt > 0, true);
-  assert.equal(chapterAt, partAt + 2);
+  assert.equal(chapterAt, partAt + 3);
   assert.equal(compiled.paragraphs[partAt]?.pageBreakBefore, false);
   assert.equal(compiled.paragraphs[0]?.pageBreakBefore, true);
 });
@@ -342,8 +384,8 @@ test("divisions around a chapter share its first page", () => {
   const partAt = text.indexOf("Part 1");
   const tideAt = text.indexOf("Tide");
   const duneAt = text.indexOf("Dune");
-  assert.equal(partAt, bookAt + 2);
-  assert.equal(tideAt, partAt + 2);
+  assert.equal(partAt, bookAt + 3);
+  assert.equal(tideAt, partAt + 3);
   assert.equal(compiled.paragraphs[bookAt]?.pageBreakBefore, false);
   assert.equal(text.filter((line) => line === "Book 1").length, 1);
   assert.equal(text.filter((line) => line === "Part 1").length, 1);
@@ -374,7 +416,7 @@ test("a folder level left out does not print", () => {
   );
   const text = compiled.paragraphs.map(paragraphPlain);
   const bookAt = text.indexOf("Book 1");
-  assert.equal(text.indexOf("Tide"), bookAt + 2);
+  assert.equal(text.indexOf("Tide"), bookAt + 3);
   assert.equal(text.includes("The Sea"), false);
   assert.equal(text.includes("Part"), false);
 });
@@ -388,7 +430,7 @@ test("an included level with no heading starts a page and prints no title", () =
   let project = novel([first, second]);
   project = tune(project, (preset) => ({
     ...preset,
-    levels: [level(false, ""), level(true, "Chapter")],
+    levels: [level(false, ""), level(true, "Chapter", { linesBefore: 0 })],
   }));
   const compiled = compileOf(
     project,
@@ -548,10 +590,34 @@ test("a new page after the heading starts the prose on the next page", () => {
     levels: [level(false, ""), level(true, "", { title: true, pageAfter: true })],
   }));
   const compiled = compileOf(project, new Set(ticked(project)), defaultCompilePreferences(), 2026);
-  const tide = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Tide");
+  const text = compiled.paragraphs.map(paragraphPlain);
+  const tideAt = text.indexOf("Tide");
   const hello = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Hello");
-  assert.equal(tide?.pageBreakBefore, true);
+  assert.deepEqual(text.slice(tideAt - 8, tideAt), ["", "", "", "", "", "", "", ""]);
+  assert.equal(compiled.paragraphs[tideAt - 8]?.pageBreakBefore, true);
+  assert.equal(compiled.paragraphs[tideAt]?.pageBreakBefore, false);
   assert.equal(hello?.pageBreakBefore, true);
+});
+
+test("lines above drop a page-break heading, and lines below follow its last line", () => {
+  const chapter = folderNode("The Part Name", [documentNode("Opening", "scene", prose("Hello"))]);
+  let project = novel([chapter]);
+  project = tune(project, (preset) => ({
+    ...preset,
+    levels: [
+      level(false, ""),
+      level(true, "Part", { title: true, number: "arabic", pageBefore: true, pageAfter: true, linesBefore: 4, linesAfter: 3 }),
+    ],
+  }));
+  const compiled = compileOf(project, new Set(ticked(project)), defaultCompilePreferences(), 2026);
+  const text = compiled.paragraphs.map(paragraphPlain);
+  const partAt = text.indexOf("Part 1");
+  assert.deepEqual(text.slice(partAt - 4, partAt), ["", "", "", ""]);
+  assert.equal(text[partAt + 1], "The Part Name");
+  assert.deepEqual(text.slice(partAt + 2, partAt + 5), ["", "", ""]);
+  assert.equal(compiled.paragraphs[partAt - 4]?.pageBreakBefore, true);
+  assert.equal(compiled.paragraphs[partAt]?.pageBreakBefore, false);
+  assert.equal(compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Hello")?.pageBreakBefore, true);
 });
 
 test("an included scene title keeps its font and alignment, and a number is ignored", () => {

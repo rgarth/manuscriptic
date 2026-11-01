@@ -8,17 +8,11 @@ import type {
   OrderedList,
   TextRun,
 } from "./model/editorDoc.ts";
+import { fontSizePoints, fontSizeText, pointSize } from "./pageLayout.ts";
 
 const markOrder = ["bold", "italic", "underline", "strike", "superscript", "subscript"] as const;
 
-const markTag: Record<Mark["type"], string> = {
-  bold: "b",
-  italic: "i",
-  underline: "u",
-  strike: "s",
-  superscript: "sup",
-  subscript: "sub",
-};
+type StyleMark = Exclude<Mark, { type: "textStyle" }>;
 
 export function encodeScene(doc: EditorDoc): string {
   return `${doc.content.map((block) => encodeBlock(block)).join("\n")}\n`;
@@ -149,16 +143,100 @@ function encodeInline(inline: Inline): string {
 }
 
 function openMarks(run: TextRun): string {
-  return ordered(run.marks).map((mark) => `[[${markTag[mark.type]}]]`).join("");
+  return listed(run.marks).map((mark) => openTag(mark)).join("");
 }
 
 function closeMarks(run: TextRun): string {
-  return [...ordered(run.marks)].reverse().map((mark) => `[[/${markTag[mark.type]}]]`).join("");
+  return [...listed(run.marks)].reverse().map((mark) => closeTag(mark)).join("");
 }
 
-function ordered(marks: Mark[] | undefined): Mark[] {
+function listed(marks: readonly Mark[] | undefined): Mark[] {
+  const face = faceOf(marks ?? []);
+  return face ? [...ordered(marks), face] : ordered(marks);
+}
+
+function ordered(marks: readonly Mark[] | undefined): StyleMark[] {
   const present = new Set((marks ?? []).map((mark) => mark.type));
   return markOrder.filter((type) => present.has(type)).map((type) => ({ type }));
+}
+
+function faceOf(marks: readonly Mark[]): Extract<Mark, { type: "textStyle" }> | null {
+  let fontFamily = "";
+  let fontSize = "";
+  for (const mark of marks) {
+    if (mark.type !== "textStyle") {
+      continue;
+    }
+    if (mark.attrs.fontFamily) {
+      fontFamily = mark.attrs.fontFamily;
+    }
+    if (mark.attrs.fontSize) {
+      fontSize = mark.attrs.fontSize;
+    }
+  }
+  if (!fontFamily && !fontSize) {
+    return null;
+  }
+  return {
+    type: "textStyle",
+    attrs: {
+      ...(fontFamily ? { fontFamily } : {}),
+      ...(fontSize ? { fontSize } : {}),
+    },
+  };
+}
+
+function openTag(mark: Mark): string {
+  switch (mark.type) {
+    case "bold":
+      return "[[b]]";
+    case "italic":
+      return "[[i]]";
+    case "underline":
+      return "[[u]]";
+    case "strike":
+      return "[[s]]";
+    case "superscript":
+      return "[[sup]]";
+    case "subscript":
+      return "[[sub]]";
+    case "textStyle": {
+      const font = mark.attrs.fontFamily ? `[[font:${mark.attrs.fontFamily}]]` : "";
+      const points = mark.attrs.fontSize ? fontSizePoints(mark.attrs.fontSize) : null;
+      const size = points ? `[[size:${points}]]` : "";
+      return `${font}${size}`;
+    }
+    default: {
+      const unexpected: never = mark;
+      return unexpected;
+    }
+  }
+}
+
+function closeTag(mark: Mark): string {
+  switch (mark.type) {
+    case "bold":
+      return "[[/b]]";
+    case "italic":
+      return "[[/i]]";
+    case "underline":
+      return "[[/u]]";
+    case "strike":
+      return "[[/s]]";
+    case "superscript":
+      return "[[/sup]]";
+    case "subscript":
+      return "[[/sub]]";
+    case "textStyle": {
+      const size = mark.attrs.fontSize ? "[[/size]]" : "";
+      const font = mark.attrs.fontFamily ? "[[/font]]" : "";
+      return `${size}${font}`;
+    }
+    default: {
+      const unexpected: never = mark;
+      return unexpected;
+    }
+  }
 }
 
 function escapeText(text: string): string {
@@ -177,13 +255,14 @@ function decodeParagraph(line: string): EditorBlock | null {
 function decodeInlines(raw: string): Inline[] | null {
   const content: Inline[] = [];
   let text = "";
-  const open: Mark["type"][] = [];
+  const open: Mark[] = [];
   let index = 0;
   function flush() {
     if (text.length === 0) {
       return;
     }
-    const run: TextRun = open.length > 0 ? { type: "text", text, marks: open.map((type) => ({ type })) } : { type: "text", text };
+    const marks = listed(open);
+    const run: TextRun = marks.length > 0 ? { type: "text", text, marks } : { type: "text", text };
     content.push(run);
     text = "";
   }
@@ -200,10 +279,39 @@ function decodeInlines(raw: string): Inline[] | null {
     }
     const close = /^\[\[\/([a-z]+)\]\]/.exec(raw.slice(index));
     const start = /^\[\[([a-z]+)\]\]/.exec(raw.slice(index));
+    const fontOpen = /^\[\[font:([^\]]+)\]\]/.exec(raw.slice(index));
+    const sizeOpen = /^\[\[size:(\d+)\]\]/.exec(raw.slice(index));
+    if (raw.startsWith("[[/font]]", index) || raw.startsWith("[[/size]]", index)) {
+      flush();
+      const kind = raw.startsWith("[[/font]]", index) ? "font" : "size";
+      const last = open[open.length - 1];
+      if (!last || last.type !== "textStyle" || (kind === "font" ? !last.attrs.fontFamily : !last.attrs.fontSize)) {
+        return null;
+      }
+      open.pop();
+      index += kind === "font" ? "[[/font]]".length : "[[/size]]".length;
+      continue;
+    }
+    if (fontOpen?.[1]) {
+      flush();
+      const fontFamily = fontOpen[1].trim();
+      if (!fontFamily) {
+        return null;
+      }
+      open.push({ type: "textStyle", attrs: { fontFamily } });
+      index += fontOpen[0].length;
+      continue;
+    }
+    if (sizeOpen?.[1]) {
+      flush();
+      open.push({ type: "textStyle", attrs: { fontSize: fontSizeText(pointSize(Number(sizeOpen[1]))) } });
+      index += sizeOpen[0].length;
+      continue;
+    }
     if (close) {
       flush();
       const type = markType(close[1] ?? "");
-      if (!type || open[open.length - 1] !== type) {
+      if (!type || open[open.length - 1]?.type !== type) {
         return null;
       }
       open.pop();
@@ -222,7 +330,7 @@ function decodeInlines(raw: string): Inline[] | null {
       if (!type) {
         return null;
       }
-      open.push(type);
+      open.push({ type });
       index += start[0].length;
       continue;
     }
@@ -235,7 +343,7 @@ function decodeInlines(raw: string): Inline[] | null {
   return content;
 }
 
-function markType(tag: string): Mark["type"] | null {
+function markType(tag: string): StyleMark["type"] | null {
   switch (tag) {
     case "b":
       return "bold";

@@ -10,6 +10,9 @@ import {
   displayPixels,
   fontFamily,
   fontName,
+  fontSizePoints,
+  fontSizeText,
+  pointScale,
   pointSize,
   type Alignment,
   type PageLayout,
@@ -174,6 +177,7 @@ export default function SceneEditor({
   const pageStyle = {
     "--editor-font": fontFamily(layout.font),
     "--editor-size": String(displayPixels(layout.points, zoom)),
+    "--editor-pt": String(pointScale(zoom)),
     "--editor-align": layout.align,
     "--editor-indent": indentEm(shape),
     "--editor-spacing": spacingLine(spacing),
@@ -233,26 +237,7 @@ export default function SceneEditor({
         />
         {hint ? <p className="page-hint">{hint}</p> : null}
         <div className="marks">
-          <Hint label="Typeface">
-            <FontChoice
-              className="font-choice"
-              ariaLabel="Typeface"
-              value={layout.font}
-              onChange={(font) => onLayout({ ...layout, font: fontName(font) })}
-            />
-          </Hint>
-          <Hint label="Point size">
-            <input
-              className="size-choice"
-              aria-label="Point size"
-              type="number"
-              min={8}
-              max={72}
-              value={layout.points}
-              onChange={(event) => onLayout({ ...layout, points: pointSize(event.currentTarget.value) })}
-            />
-          </Hint>
-          <span className="size-unit">pt</span>
+          <CharacterFace editor={editor} layout={layout} />
           <span className="mark-gap" />
           {alignments.map((item) => (
             <Hint key={item.id} label={item.label}>
@@ -419,6 +404,94 @@ function WordMenuPop({
       </div>
     </>
   );
+}
+
+function CharacterFace({ editor, layout }: { editor: Editor | null; layout: PageLayout }) {
+  const range = useRef<{ from: number; to: number } | null>(null);
+  const face = useCharacterFace(editor);
+  const font = face.font ?? layout.font;
+  const points = face.points ?? layout.points;
+  function remember() {
+    if (!editor) {
+      return;
+    }
+    range.current = { from: editor.state.selection.from, to: editor.state.selection.to };
+  }
+  function chain() {
+    if (!editor) {
+      return null;
+    }
+    const saved = range.current;
+    const next = editor.chain().focus();
+    return saved ? next.setTextSelection(saved) : next;
+  }
+  return (
+    <span className="character-face" onMouseDownCapture={remember}>
+      <Hint label="Typeface">
+        <FontChoice
+          className="font-choice"
+          ariaLabel="Typeface"
+          value={font}
+          onChange={(next) => {
+            const commands = chain();
+            if (!commands) {
+              return;
+            }
+            const name = fontName(next);
+            if (name === layout.font) {
+              commands.unsetFontFamily().run();
+              return;
+            }
+            commands.setFontFamily(name).run();
+          }}
+        />
+      </Hint>
+      <Hint label="Point size">
+        <input
+          className="size-choice"
+          aria-label="Point size"
+          type="number"
+          min={8}
+          max={72}
+          value={points}
+          onChange={(event) => {
+            const commands = chain();
+            if (!commands) {
+              return;
+            }
+            const size = pointSize(event.currentTarget.value);
+            if (size === layout.points) {
+              commands.unsetFontSize().run();
+              return;
+            }
+            commands.setFontSize(fontSizeText(size)).run();
+          }}
+        />
+      </Hint>
+      <span className="size-unit">pt</span>
+    </span>
+  );
+}
+
+function useCharacterFace(editor: Editor | null): { font: string | null; points: number | null } {
+  const [face, setFace] = useState<{ font: string | null; points: number | null }>({ font: null, points: null });
+  useEffect(() => {
+    if (!editor) {
+      return;
+    }
+    const read = () => {
+      const attrs = editor.getAttributes("textStyle");
+      const font = typeof attrs.fontFamily === "string" ? attrs.fontFamily : null;
+      const size = fontSizePoints(typeof attrs.fontSize === "string" ? attrs.fontSize : null);
+      setFace((current) => (current.font === font && current.points === size ? current : { font, points: size }));
+    };
+    read();
+    editor.on("transaction", read);
+    return () => {
+      editor.off("transaction", read);
+    };
+  }, [editor]);
+  return face;
 }
 
 function formatMarks(editor: Editor | null, group: "character" | "list") {

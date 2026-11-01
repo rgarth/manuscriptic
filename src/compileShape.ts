@@ -12,7 +12,7 @@ import {
   type SceneBreak,
 } from "./bookCompile.ts";
 import { fillDocument, fillText, type CompileValues, type FillPart } from "./compileVars.ts";
-import type { Alignment } from "./pageLayout.ts";
+import { fontSizePoints, type Alignment } from "./pageLayout.ts";
 import {
   wordCount,
   type EditorBlock,
@@ -52,9 +52,6 @@ export type CompileDocument = {
   hasDocument: boolean;
 };
 
-const dropLines = 8;
-const linesAfterHeading = 2;
-
 export function buildCompile(
   project: ProjectFile,
   preset: CompilePreset,
@@ -75,10 +72,10 @@ export function buildCompile(
     year: String(year),
   };
   const paragraphs = [
-    ...matterParagraphs(project, included, "front", values, missing, chosen),
-    ...manuscriptParagraphs(project, included, values, missing, preferences.align, chosen, preset),
-    ...matterParagraphs(project, included, "back", values, missing, chosen),
-    ...matterParagraphs(project, included, "other", values, missing, chosen),
+    ...matterParagraphs(project, included, "front", values, missing, chosen, preferences.passFont),
+    ...manuscriptParagraphs(project, included, values, missing, preferences.align, chosen, preset, preferences.passFont),
+    ...matterParagraphs(project, included, "back", values, missing, chosen, preferences.passFont),
+    ...matterParagraphs(project, included, "other", values, missing, chosen, preferences.passFont),
   ];
   return {
     paragraphs,
@@ -146,6 +143,7 @@ function manuscriptParagraphs(
   align: Alignment,
   chosen: { hasDocument: boolean },
   preset: CompilePreset,
+  carryFont: boolean,
 ): CompileParagraph[] {
   const structure: Structure = {
     included,
@@ -164,6 +162,7 @@ function manuscriptParagraphs(
     sceneBreak: preset.sceneBreak,
     chosen,
     values,
+    carryFont,
   };
   emitRuns(walk(project.manuscript, structure).runs, [], state);
   return state.paragraphs;
@@ -274,6 +273,7 @@ type EmitState = {
   sceneBreak: SceneBreak;
   chosen: { hasDocument: boolean };
   values: CompileValues;
+  carryFont: boolean;
 };
 
 function emitRuns(runs: ManuscriptRun[], pending: SectionHeading[], state: EmitState) {
@@ -322,7 +322,7 @@ function hasSection(runs: ManuscriptRun[]): boolean {
 
 function openPage(headings: SectionHeading[], state: EmitState) {
   let continueOnPage = false;
-  headings.forEach((heading, index) => {
+  headings.forEach((heading) => {
     const style = heading.heading;
     const lines = headingPieces(
       style,
@@ -332,15 +332,10 @@ function openPage(headings: SectionHeading[], state: EmitState) {
     );
     const startsPage = !continueOnPage || style.pageBefore;
     if (startsPage) {
-      const classic = !style.pageBefore && !style.pageAfter && (lines.length > 0 || style.blankOpening);
-      if (classic) {
-        dropSpace(state);
-      } else {
-        state.pageOpen = false;
-      }
+      dropLines(state, style.linesBefore);
       continueOnPage = true;
     }
-    emitHeading(lines, state, trailingBlanks(headings, index), style.align);
+    emitHeading(lines, state, style.linesAfter, style.align);
     if (style.pageAfter) {
       state.pageOpen = false;
       continueOnPage = false;
@@ -349,23 +344,15 @@ function openPage(headings: SectionHeading[], state: EmitState) {
   state.sceneOnPage = false;
 }
 
-function trailingBlanks(headings: SectionHeading[], index: number): number {
-  const heading = headings[index];
-  if (!heading || heading.heading.pageAfter) {
-    return 0;
+function dropLines(state: EmitState, count: number) {
+  if (count <= 0) {
+    state.pageOpen = false;
+    return;
   }
-  const next = headings[index + 1];
-  if (next && !next.heading.pageBefore) {
-    return 1;
-  }
-  return linesAfterHeading;
-}
-
-function dropSpace(state: EmitState) {
-  for (let line = 0; line < dropLines; line += 1) {
+  for (let line = 0; line < count; line += 1) {
     state.paragraphs.push(blankParagraph());
   }
-  const first = state.paragraphs[state.paragraphs.length - dropLines];
+  const first = state.paragraphs[state.paragraphs.length - count];
   if (first) {
     first.pageBreakBefore = true;
   }
@@ -402,9 +389,9 @@ function writeScenes(run: Extract<ManuscriptRun, { kind: "text" }>, state: EmitS
     const blocks: CompileParagraph[] = [];
     if (lines.length > 0) {
       if (state.scenes.pageBefore) {
-        state.pageOpen = false;
+        dropLines(state, state.scenes.linesBefore);
       }
-      emitHeading(lines, state, 0, state.scenes.align);
+      emitHeading(lines, state, state.scenes.linesAfter, state.scenes.align);
       if (state.scenes.pageAfter) {
         state.pageOpen = false;
       }
@@ -413,7 +400,7 @@ function writeScenes(run: Extract<ManuscriptRun, { kind: "text" }>, state: EmitS
     }
     const filled = fillDocument(scene.content, state.values);
     rememberMissing(state.missing, filled.missing);
-    blocks.push(...blocksToParagraphs(filled.doc.content, state.align, true));
+    blocks.push(...blocksToParagraphs(filled.doc.content, state.align, true, state.carryFont));
     if (!state.pageOpen && blocks[0]) {
       blocks[0].pageBreakBefore = true;
       state.pageOpen = true;
@@ -583,6 +570,7 @@ function matterParagraphs(
   values: CompileValues,
   missing: string[],
   chosen: { hasDocument: boolean },
+  carryFont: boolean,
 ): CompileParagraph[] {
   const pages = publishingDocs(project.publishing, included, place);
   if (pages.length > 0) {
@@ -592,7 +580,7 @@ function matterParagraphs(
   for (const page of pages) {
     const filled = fillDocument(page, values);
     rememberMissing(missing, filled.missing);
-    const body = blocksToParagraphs(filled.doc.content, "left", false);
+    const body = blocksToParagraphs(filled.doc.content, "left", false, carryFont);
     const start = body.length > 0 ? body : [blankParagraph()];
     const opening = start[0];
     if (opening) {
@@ -664,23 +652,28 @@ function docsIn(folder: FolderNode, included: ReadonlySet<string>): EditorDoc[] 
   return docs;
 }
 
-function blocksToParagraphs(blocks: readonly EditorBlock[], align: Alignment, indent: boolean): CompileParagraph[] {
+function blocksToParagraphs(
+  blocks: readonly EditorBlock[],
+  align: Alignment,
+  indent: boolean,
+  carryFont: boolean,
+): CompileParagraph[] {
   const paragraphs: CompileParagraph[] = [];
   for (const block of blocks) {
     switch (block.type) {
       case "paragraph":
         paragraphs.push({
-          runs: inlinesToRuns(block.content ?? []),
+          runs: inlinesToRuns(block.content ?? [], carryFont),
           align,
           indent,
           pageBreakBefore: false,
         });
         break;
       case "bulletList":
-        paragraphs.push(...listParagraphs(block.content, align, "bullet", 1));
+        paragraphs.push(...listParagraphs(block.content, align, "bullet", 1, carryFont));
         break;
       case "orderedList":
-        paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1));
+        paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1, carryFont));
         break;
       default: {
         const unexpected: never = block;
@@ -696,6 +689,7 @@ function listParagraphs(
   align: Alignment,
   kind: "bullet" | "number",
   start: number,
+  carryFont: boolean,
 ): CompileParagraph[] {
   const paragraphs: CompileParagraph[] = [];
   items.forEach((item, itemIndex) => {
@@ -706,7 +700,7 @@ function listParagraphs(
           const marker = marked ? "" : kind === "bullet" ? "• " : `${start + itemIndex}. `;
           marked = true;
           paragraphs.push({
-            runs: [...(marker ? [{ kind: "text" as const, text: marker, marks: [] }] : []), ...inlinesToRuns(block.content ?? [])],
+            runs: [...(marker ? [{ kind: "text" as const, text: marker, marks: [] }] : []), ...inlinesToRuns(block.content ?? [], carryFont)],
             align,
             indent: false,
             pageBreakBefore: false,
@@ -714,10 +708,10 @@ function listParagraphs(
           break;
         }
         case "bulletList":
-          paragraphs.push(...listParagraphs(block.content, align, "bullet", 1));
+          paragraphs.push(...listParagraphs(block.content, align, "bullet", 1, carryFont));
           break;
         case "orderedList":
-          paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1));
+          paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1, carryFont));
           break;
         default: {
           const unexpected: never = block;
@@ -729,7 +723,7 @@ function listParagraphs(
   return paragraphs;
 }
 
-function inlinesToRuns(inlines: readonly Inline[]): CompileRun[] {
+function inlinesToRuns(inlines: readonly Inline[], carryFont: boolean): CompileRun[] {
   const runs: CompileRun[] = [];
   for (const inline of inlines) {
     switch (inline.type) {
@@ -738,7 +732,13 @@ function inlinesToRuns(inlines: readonly Inline[]): CompileRun[] {
         break;
       case "text":
         if (inline.text) {
-          runs.push({ kind: "text", text: inline.text, marks: inline.marks ?? [] });
+          const face = carryFont ? carriedFace(inline.marks) : {};
+          runs.push({
+            kind: "text",
+            text: inline.text,
+            marks: styleMarks(inline.marks),
+            ...face,
+          });
         }
         break;
       default: {
@@ -748,6 +748,24 @@ function inlinesToRuns(inlines: readonly Inline[]): CompileRun[] {
     }
   }
   return runs;
+}
+
+function carriedFace(marks: readonly Mark[] | undefined): { font?: string; points?: number } {
+  for (const mark of marks ?? []) {
+    if (mark.type !== "textStyle") {
+      continue;
+    }
+    const points = fontSizePoints(mark.attrs.fontSize ?? null);
+    return {
+      ...(mark.attrs.fontFamily ? { font: mark.attrs.fontFamily } : {}),
+      ...(points ? { points } : {}),
+    };
+  }
+  return {};
+}
+
+function styleMarks(marks: readonly Mark[] | undefined): Mark[] {
+  return (marks ?? []).filter((mark) => mark.type !== "textStyle");
 }
 
 function blankParagraph(): CompileParagraph {

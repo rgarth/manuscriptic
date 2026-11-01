@@ -63,6 +63,29 @@ test("a scene keeps its marks, lists, and a literal bracket", () => {
   assert.deepEqual(decodeScene(encodeScene(marked)), marked);
 });
 
+test("half a word keeps its own font and size", () => {
+  const scene: EditorDoc = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Hel" },
+          {
+            type: "text",
+            text: "lo",
+            marks: [
+              { type: "bold" },
+              { type: "textStyle", attrs: { fontFamily: "Courier", fontSize: "32pt" } },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(decodeScene(encodeScene(scene)), scene);
+});
+
 test("a snapshot can put one scene back and leave the other alone", () => {
   const project = withScenes("Castus");
   const history = emptyHistory(filesForBook(project));

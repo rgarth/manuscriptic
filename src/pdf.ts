@@ -195,6 +195,8 @@ function lookOf(marks: readonly Mark[]): Look {
       case "subscript":
         script = "sub";
         break;
+      case "textStyle":
+        break;
       default: {
         const unexpected: never = mark;
         return unexpected;

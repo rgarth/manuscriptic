@@ -383,7 +383,7 @@ function FormattingSettings({
             checked={format.passFont}
             onChange={(event) => onChange({ passFont: event.currentTarget.checked })}
           />
-          Use the book’s font and size
+          Use the manuscript’s fonts and sizes
         </label>
         <div className="setting-grid">
           <FontMenu
@@ -588,6 +588,12 @@ function SceneCard({
           onChange={(align) => onChange({ ...preset, scenes: { ...scenes, align } })}
         />
       </div>
+      <LineFields
+        scope="Scene title"
+        heading={scenes}
+        disabled={!titled}
+        onChange={(patch) => onChange({ ...preset, scenes: { ...scenes, ...patch } })}
+      />
       <div className="structure-span structure-ticks">
         <label className="preference">
           <input
@@ -739,6 +745,7 @@ function HeadingFields({
           onChange={(align) => onChange({ align })}
         />
       </div>
+      <LineFields scope={scope} heading={heading} disabled={disabled} onChange={onChange} />
       <div className="structure-span structure-ticks">
         <label className="preference">
           <input
@@ -763,6 +770,48 @@ function HeadingFields({
       </div>
     </>
   );
+}
+
+function LineFields({
+  scope,
+  heading,
+  disabled,
+  onChange,
+}: {
+  scope: string;
+  heading: CompileHeading;
+  disabled: boolean;
+  onChange: (patch: Partial<CompileHeading>) => void;
+}) {
+  return (
+    <>
+      <Field
+        label="Lines above"
+        ariaLabel={`${scope} lines above`}
+        value={String(heading.linesBefore)}
+        disabled={disabled}
+        onChange={(value) => onChange({ linesBefore: lineCount(value) })}
+      />
+      <Field
+        label="Lines below"
+        ariaLabel={`${scope} lines below`}
+        value={String(heading.linesAfter)}
+        disabled={disabled}
+        onChange={(value) => onChange({ linesAfter: lineCount(value) })}
+      />
+    </>
+  );
+}
+
+function lineCount(value: string): number {
+  if (value.trim() === "") {
+    return 0;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  return Math.min(80, Math.max(0, Math.floor(parsed)));
 }
 
 function pointSize(value: string): number {

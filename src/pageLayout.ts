@@ -45,8 +45,33 @@ export function pointSize(value: string | number | null): number {
   return Math.min(72, Math.max(8, Math.round(parsed)));
 }
 
+export function pointScale(zoom: number): number {
+  return (96 / 72) * (zoom / 100);
+}
+
 export function displayPixels(points: number, zoom: number): number {
-  return ((points * 96) / 72) * (zoom / 100);
+  return points * pointScale(zoom);
+}
+
+export function fontSizePoints(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+  const match = /^(\d+(?:\.\d+)?)(pt|px)$/.exec(value.trim());
+  const amount = match?.[1];
+  const unit = match?.[2];
+  if (!amount || (unit !== "pt" && unit !== "px")) {
+    return null;
+  }
+  const parsed = Number(amount);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return pointSize(unit === "px" ? (parsed * 72) / 96 : parsed);
+}
+
+export function fontSizeText(points: number): string {
+  return `${pointSize(points)}pt`;
 }
 
 export function alignmentById(id: string | null): Alignment {
