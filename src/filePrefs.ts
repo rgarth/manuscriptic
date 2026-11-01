@@ -15,6 +15,7 @@ const openLastKey = "manuscriptic-open-last";
 const lastProjectKey = "manuscriptic-last-project";
 const openBooksKey = "manuscriptic-open-books";
 const recentBooksKey = "manuscriptic-recent-books";
+const lastCompileKey = "manuscriptic-last-compile";
 const snapshotMinutesKey = "manuscriptic-snapshot-minutes";
 const recentLimit = 10;
 
@@ -134,6 +135,33 @@ export function recentMenuBooks(books: readonly string[], openPath: string | nul
   return books.filter((path) => path !== openPath);
 }
 
+export type CompileTarget = {
+  presetId: string;
+  kind: "docx" | "pdf";
+};
+
+export function readLastCompile(storage: PrefStorage, path: string | null): CompileTarget | null {
+  const book = path?.trim() ?? "";
+  if (!book) {
+    return null;
+  }
+  const entry = compileTargets(storage)[book];
+  if (!entry || entry.presetId.trim() === "") {
+    return null;
+  }
+  return entry;
+}
+
+export function writeLastCompile(storage: PrefStorage, path: string | null, target: CompileTarget): void {
+  const book = path?.trim() ?? "";
+  if (!book || target.presetId.trim() === "") {
+    return;
+  }
+  const targets = compileTargets(storage);
+  targets[book] = { presetId: target.presetId, kind: target.kind };
+  storage.setItem(lastCompileKey, JSON.stringify(targets));
+}
+
 export function rememberBook(storage: PrefStorage, path: string): void {
   const cleanPath = path.trim();
   if (!cleanPath) {
@@ -195,6 +223,42 @@ export function joinNovelPath(directory: string, fileName: string): string {
   const separator = directory.includes("\\") ? "\\" : "/";
   const base = directory.endsWith("/") || directory.endsWith("\\") ? directory.slice(0, -1) : directory;
   return `${base}${separator}${fileName}`;
+}
+
+function compileTarget(value: unknown): CompileTarget | null {
+  if (typeof value !== "object" || value === null || !("presetId" in value) || !("kind" in value)) {
+    return null;
+  }
+  const presetId = value.presetId;
+  const kind = value.kind;
+  if (typeof presetId !== "string" || (kind !== "docx" && kind !== "pdf")) {
+    return null;
+  }
+  return { presetId, kind };
+}
+
+function compileTargets(storage: PrefStorage): Record<string, CompileTarget> {
+  const raw = storage.getItem(lastCompileKey);
+  if (!raw) {
+    return {};
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return {};
+  }
+  const targets: Record<string, CompileTarget> = {};
+  for (const [path, entry] of Object.entries(parsed)) {
+    const target = compileTarget(entry);
+    if (target) {
+      targets[path] = target;
+    }
+  }
+  return targets;
 }
 
 function clean(value: string | null): string | null {

@@ -11,7 +11,22 @@ type Face = {
   bold: boolean;
 };
 
-type Piece = { text: string; face: Face; size: number };
+type Script = "base" | "super" | "sub";
+
+type Look = {
+  script: Script;
+  underline: boolean;
+  strike: boolean;
+};
+
+type Piece = {
+  text: string;
+  face: Face;
+  size: number;
+  rise: number;
+  underline: boolean;
+  strike: boolean;
+};
 type DrawnLine = { pieces: Piece[]; width: number; align: Alignment; indent: number };
 type Page = { lines: DrawnLine[]; y: number[] };
 
@@ -21,7 +36,7 @@ export function compilePdf(doc: CompileDocument): Uint8Array {
 
 function paginate(doc: CompileDocument): { pages: Page[]; faces: Face[] } {
   const faces: Face[] = [];
-  const leading = lineHeight(doc);
+  const leading = lineHeight(doc, doc.points);
   const left = doc.margins.left * 72;
   const right = pageWidth - doc.margins.right * 72;
   const contentWidth = Math.max(72, right - left);
@@ -45,12 +60,13 @@ function paginate(doc: CompileDocument): { pages: Page[]; faces: Face[] } {
     y -= doc.spaceBefore;
     const lines = wrapParagraph(paragraph, doc, contentWidth, faces);
     for (const line of lines) {
-      if (y - leading < bottom && page.lines.length > 0) {
+      const advance = lineHeight(doc, lineSize(line, doc.points));
+      if (y - advance < bottom && page.lines.length > 0) {
         nextPage();
       }
       page.lines.push(line);
       page.y.push(y);
-      y -= leading;
+      y -= advance;
     }
     y -= doc.spaceAfter;
   }
@@ -61,9 +77,8 @@ function paginate(doc: CompileDocument): { pages: Page[]; faces: Face[] } {
 }
 
 function wrapParagraph(paragraph: CompileParagraph, doc: CompileDocument, contentWidth: number, faces: Face[]): DrawnLine[] {
-  const size = doc.points;
   const indent = paragraph.indent ? doc.indentInches * 72 : 0;
-  const words = wordsOf(paragraph.runs, doc, size, faces);
+  const words = wordsOf(paragraph.runs, doc, faces);
   if (words.length === 0) {
     return [{ pieces: [], width: 0, align: paragraph.align, indent: 0 }];
   }
@@ -99,30 +114,44 @@ function wrapParagraph(paragraph: CompileParagraph, doc: CompileDocument, conten
   return lines;
 }
 
-function wordsOf(runs: readonly CompileRun[], doc: CompileDocument, size: number, faces: Face[]): Piece[] {
+function wordsOf(runs: readonly CompileRun[], doc: CompileDocument, faces: Face[]): Piece[] {
   const words: Piece[] = [];
   let current = "";
   let face = faceFor(doc.font, [], faces);
+  let nominal = doc.points;
+  let look = lookOf([]);
   function flush() {
     if (!current) {
       return;
     }
-    words.push({ text: current, face, size });
+    const drawn = scriptSize(nominal, look.script);
+    words.push({
+      text: current,
+      face,
+      size: drawn.size,
+      rise: drawn.rise,
+      underline: look.underline,
+      strike: look.strike,
+    });
     current = "";
   }
   for (const run of runs) {
     switch (run.kind) {
       case "break":
         flush();
-        words.push({ text: "\n", face, size });
+        words.push({ text: "\n", face, size: nominal, rise: 0, underline: false, strike: false });
         break;
       case "page":
         break;
       case "text": {
         const next = faceFor(run.font || doc.font, run.marks, faces);
-        if (next.name !== face.name || next.bold !== face.bold) {
+        const nextNominal = run.points && run.points > 0 ? run.points : doc.points;
+        const nextLook = lookOf(run.marks);
+        if (next.name !== face.name || nextNominal !== nominal || !sameLook(nextLook, look)) {
           flush();
           face = next;
+          nominal = nextNominal;
+          look = nextLook;
         }
         current += run.text;
         break;
@@ -143,6 +172,59 @@ function splitWords(piece: Piece): Piece[] {
   }
   const parts = piece.text.split(/(\s+)/);
   return parts.filter((part) => part.length > 0).map((text) => ({ ...piece, text }));
+}
+
+function lookOf(marks: readonly Mark[]): Look {
+  let script: Script = "base";
+  let underline = false;
+  let strike = false;
+  for (const mark of marks) {
+    switch (mark.type) {
+      case "bold":
+      case "italic":
+        break;
+      case "underline":
+        underline = true;
+        break;
+      case "strike":
+        strike = true;
+        break;
+      case "superscript":
+        script = "super";
+        break;
+      case "subscript":
+        script = "sub";
+        break;
+      default: {
+        const unexpected: never = mark;
+        return unexpected;
+      }
+    }
+  }
+  return { script, underline, strike };
+}
+
+function sameLook(left: Look, right: Look): boolean {
+  return left.script === right.script && left.underline === right.underline && left.strike === right.strike;
+}
+
+function scriptSize(nominal: number, script: Script): { size: number; rise: number } {
+  switch (script) {
+    case "base":
+      return { size: nominal, rise: 0 };
+    case "super":
+      return { size: scale(nominal, 0.6), rise: scale(nominal, 0.33) };
+    case "sub":
+      return { size: scale(nominal, 0.6), rise: scale(nominal, -0.2) };
+    default: {
+      const unexpected: never = script;
+      return unexpected;
+    }
+  }
+}
+
+function scale(nominal: number, factor: number): number {
+  return Math.round(nominal * factor * 100) / 100;
 }
 
 function faceFor(font: string, marks: readonly Mark[], faces: Face[]): Face {
@@ -194,14 +276,24 @@ function fontName(family: Face["family"], bold: boolean, italic: boolean): strin
   }
 }
 
-function lineHeight(doc: CompileDocument): number {
+function lineSize(line: DrawnLine, fallback: number): number {
+  let size = 0;
+  for (const piece of line.pieces) {
+    if (piece.text !== "\n" && piece.size > size) {
+      size = piece.size;
+    }
+  }
+  return size > 0 ? size : fallback;
+}
+
+function lineHeight(doc: CompileDocument, size: number): number {
   switch (doc.spacing) {
     case "single":
-      return doc.points * 1.15;
+      return size * 1.15;
     case "onehalf":
-      return doc.points * 1.5;
+      return size * 1.5;
     case "double":
-      return doc.points * 2;
+      return size * 2;
     default: {
       const unexpected: never = doc.spacing;
       return unexpected;
@@ -314,7 +406,13 @@ function furniture(runs: readonly CompileRun[], faces: Face[], doc: CompileDocum
     return "";
   }
   const width = measure(text, face, doc.points);
-  return drawLine({ pieces: [{ text, face, size: doc.points }], width, align: "left", indent: 0 }, faces, left, y, right - left);
+  return drawLine(
+    { pieces: [{ text, face, size: doc.points, rise: 0, underline: false, strike: false }], width, align: "left", indent: 0 },
+    faces,
+    left,
+    y,
+    right - left,
+  );
 }
 
 function drawLine(line: DrawnLine, faces: Face[], left: number, y: number, contentWidth: number): string {
@@ -327,15 +425,15 @@ function drawLine(line: DrawnLine, faces: Face[], left: number, y: number, conte
   } else if (line.align === "right") {
     x += Math.max(0, contentWidth - line.indent - line.width);
   }
+  const extra = wordSpacing(line, contentWidth);
   const parts: string[] = ["BT"];
-  if (line.align === "justify") {
-    const spaces = line.pieces.reduce((count, piece) => count + (piece.text.split(" ").length - 1), 0);
-    const extra = spaces > 0 ? (contentWidth - line.indent - line.width) / spaces : 0;
-    if (extra > 0.2) {
-      parts.push(`${extra.toFixed(2)} Tw`);
-    }
+  if (extra > 0) {
+    parts.push(`${extra.toFixed(2)} Tw`);
   }
   let placed = false;
+  let rise = 0;
+  let cursor = x;
+  const strokes: string[] = [];
   for (const piece of line.pieces) {
     if (piece.text === "\n") {
       continue;
@@ -345,11 +443,63 @@ function drawLine(line: DrawnLine, faces: Face[], left: number, y: number, conte
       parts.push(`${x.toFixed(2)} ${y.toFixed(2)} Td`);
       placed = true;
     }
-    parts.push(`/F${faceIndex} ${piece.size} Tf`);
+    if (piece.rise !== rise) {
+      parts.push(`${pdfNumber(piece.rise)} Ts`);
+      rise = piece.rise;
+    }
+    parts.push(`/F${faceIndex} ${pdfNumber(piece.size)} Tf`);
     parts.push(`(${escapePdf(piece.text)}) Tj`);
+    const visual = measure(piece.text, piece.face, piece.size) + spaceCount(piece.text) * extra;
+    strokes.push(...decoration(piece, cursor, visual, y));
+    cursor += visual;
   }
   parts.push("ET");
-  return parts.join("\n");
+  return [...parts, ...strokes].join("\n");
+}
+
+function wordSpacing(line: DrawnLine, contentWidth: number): number {
+  if (line.align !== "justify") {
+    return 0;
+  }
+  const spaces = line.pieces.reduce((count, piece) => count + spaceCount(piece.text), 0);
+  if (spaces === 0) {
+    return 0;
+  }
+  const extra = (contentWidth - line.indent - line.width) / spaces;
+  return extra > 0.2 ? extra : 0;
+}
+
+function spaceCount(text: string): number {
+  let count = 0;
+  for (const char of text) {
+    if (char === " ") {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function decoration(piece: Piece, x: number, width: number, baseline: number): string[] {
+  if ((!piece.underline && !piece.strike) || width <= 0) {
+    return [];
+  }
+  const weight = pdfNumber(Math.max(0.4, piece.size * 0.05));
+  const commands = [`${weight} w`];
+  if (piece.underline) {
+    commands.push(...rule(x, baseline + piece.rise - piece.size * 0.15, width));
+  }
+  if (piece.strike) {
+    commands.push(...rule(x, baseline + piece.rise + piece.size * 0.3, width));
+  }
+  return commands;
+}
+
+function rule(x: number, y: number, width: number): string[] {
+  return [`${pdfNumber(x)} ${pdfNumber(y)} m`, `${pdfNumber(x + width)} ${pdfNumber(y)} l`, "S"];
+}
+
+function pdfNumber(value: number): string {
+  return String(Math.round(value * 100) / 100);
 }
 
 function escapePdf(text: string): string {

@@ -217,7 +217,7 @@ export default function Desk({
         </span>
       </footer>
       {dialog === "compile" ? (
-        <ExportDialog project={project} onClose={() => onDialog(null)} />
+        <ExportDialog project={project} filePath={filePath} onClose={() => onDialog(null)} />
       ) : null}
       {dialog === "book-settings" ? (
         <CompileSettings project={project} onProject={onProject} onClose={() => onDialog(null)} />

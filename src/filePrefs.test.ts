@@ -13,11 +13,13 @@ import {
   presentRecentBooks,
   readRecentBooks,
   recentMenuBooks,
+  readLastCompile,
   rememberBook,
   rememberOpenBook,
   rememberRecentBook,
   writeLastProject,
   writeOpenLast,
+  writeLastCompile,
   writeSaveDirectory,
 } from "./filePrefs.ts";
 import { loadRecentBooks } from "./windows.ts";
@@ -174,4 +176,18 @@ test("recent books keep the last ten paths, and a missing file is dropped", asyn
   );
   assert.deepEqual(readRecentBooks(storage), shown);
   assert.deepEqual(await loadRecentBooks(storage), shown);
+});
+
+test("the last compile is remembered for that book", () => {
+  const storage = memory();
+  const bone = "/Users/me/Novels/Bone Eaters.manuscriptic";
+  const castus = "/Users/me/Novels/Castus.manuscriptic";
+  assert.equal(readLastCompile(storage, bone), null);
+  writeLastCompile(storage, bone, { presetId: "pdf-compile", kind: "pdf" });
+  writeLastCompile(storage, castus, { presetId: "manuscript", kind: "docx" });
+  assert.deepEqual(readLastCompile(storage, bone), { presetId: "pdf-compile", kind: "pdf" });
+  assert.deepEqual(readLastCompile(storage, castus), { presetId: "manuscript", kind: "docx" });
+  assert.equal(readLastCompile(storage, null), null);
+  storage.setItem("manuscriptic-last-compile", "{");
+  assert.equal(readLastCompile(storage, bone), null);
 });
