@@ -37,7 +37,6 @@ import {
   renameNode,
   renameProject,
   setDocumentContent,
-  setPageLayout,
   setView,
   type ProjectFile,
 } from "./model/project";
@@ -144,7 +143,6 @@ export default function Desk({
                 }}
                 hint={publishingHint(selected.node.role, selected.node.title, selected.node.content)}
                 layout={project.layout}
-                onLayout={(layout) => onProject((current) => setPageLayout(current, layout))}
                 dictionary={project.dictionary}
                 manuscript={selected.root === "manuscript"}
                 onAddWord={addWord}

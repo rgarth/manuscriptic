@@ -6,9 +6,10 @@ import type {
   ListItem,
   Mark,
   OrderedList,
+  Paragraph,
   TextRun,
 } from "./model/editorDoc.ts";
-import { fontSizePoints, fontSizeText, pointSize } from "./pageLayout.ts";
+import { alignmentOrNull, fontSizePoints, fontSizeText, pointSize } from "./pageLayout.ts";
 
 const markOrder = ["bold", "italic", "underline", "strike", "superscript", "subscript"] as const;
 
@@ -105,7 +106,7 @@ function decodeList(line: string): BulletList | OrderedList | null {
 function encodeBlock(block: EditorBlock): string {
   switch (block.type) {
     case "paragraph":
-      return encodeParagraph(block.content);
+      return encodeParagraph(block);
     case "bulletList":
       return ["ul", ...block.content.map((item) => encodeItem(item)), "end"].join("\n");
     case "orderedList": {
@@ -124,9 +125,11 @@ function encodeItem(item: ListItem): string {
   return ["li", ...item.content.map((block) => encodeBlock(block)), "end"].join("\n");
 }
 
-function encodeParagraph(content: Inline[] | undefined): string {
-  const text = (content ?? []).map((inline) => encodeInline(inline)).join("");
-  return text.length > 0 ? `p ${text}` : "p";
+function encodeParagraph(paragraph: Paragraph): string {
+  const text = (paragraph.content ?? []).map((inline) => encodeInline(inline)).join("");
+  const align = paragraph.attrs?.align;
+  const body = `${align ? `[[align:${align}]]` : ""}${text}`;
+  return body.length > 0 ? `p ${body}` : "p";
 }
 
 function encodeInline(inline: Inline): string {
@@ -243,13 +246,20 @@ function escapeText(text: string): string {
   return text.replace(/\[\[/g, "[[[[");
 }
 
-function decodeParagraph(line: string): EditorBlock | null {
+function decodeParagraph(line: string): Paragraph | null {
   const raw = line === "p" ? "" : line.slice(2);
-  const content = decodeInlines(raw);
+  const tagged = /^\[\[align:(left|center|right|justify)\]\]/.exec(raw);
+  const align = alignmentOrNull(tagged?.[1]);
+  const body = tagged && align ? raw.slice(tagged[0].length) : raw;
+  const content = decodeInlines(body);
   if (!content) {
     return null;
   }
-  return content.length > 0 ? { type: "paragraph", content } : { type: "paragraph" };
+  const attrs = align ? { align } : undefined;
+  if (content.length === 0) {
+    return attrs ? { type: "paragraph", attrs } : { type: "paragraph" };
+  }
+  return attrs ? { type: "paragraph", attrs, content } : { type: "paragraph", content };
 }
 
 function decodeInlines(raw: string): Inline[] | null {

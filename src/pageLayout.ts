@@ -78,6 +78,13 @@ export function alignmentById(id: string | null): Alignment {
   return alignments.find((item) => item.id === id)?.id ?? "justify";
 }
 
+export function alignmentOrNull(id: unknown): Alignment | null {
+  if (typeof id !== "string") {
+    return null;
+  }
+  return alignments.find((item) => item.id === id)?.id ?? null;
+}
+
 export function defaultPageLayout(): PageLayout {
   return { font: defaultFont, points: defaultPoints, align: "justify" };
 }

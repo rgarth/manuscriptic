@@ -1,6 +1,6 @@
 import { TextSelection } from "@tiptap/pm/state";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
-import { documentExtensions } from "./editorExtensions";
+import { applyParagraphAlign, documentExtensions, shownParagraphAlign } from "./editorExtensions";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { findMarks, findMarksKey, type FindEditorState } from "./findView.ts";
 import { getEditorPrefs, indentEm, paragraphGap, spacingLine, subscribeEditorPrefs } from "./editorPrefs";
@@ -34,7 +34,6 @@ type SceneEditorProps = {
   content: EditorDoc;
   dictionary: string[];
   layout: PageLayout;
-  onLayout: (layout: PageLayout) => void;
   onTitle: (title: string) => void;
   onContent: (content: EditorDoc) => void;
   onAddWord: (word: string) => void;
@@ -60,7 +59,6 @@ export default function SceneEditor({
   content,
   dictionary,
   layout,
-  onLayout,
   onTitle,
   onContent,
   onAddWord,
@@ -209,6 +207,7 @@ export default function SceneEditor({
     };
   }, [editor, typewriter]);
 
+  const paragraphAlign = useParagraphAlign(editor, layout.align);
   useEffect(() => {
     if (!editor) {
       return;
@@ -223,8 +222,12 @@ export default function SceneEditor({
       redo: () => {
         editor.chain().focus().redo().run();
       },
+      align: paragraphAlign,
+      applyAlign: (align) => {
+        applyParagraphAlign(editor, align, layout.align);
+      },
     });
-  }, [editor]);
+  }, [editor, paragraphAlign, layout.align]);
 
   return (
     <div className={typewriter ? "page typewriter" : "page"} style={pageStyle}>
@@ -245,8 +248,13 @@ export default function SceneEditor({
                 type="button"
                 className="mark"
                 aria-label={item.label}
-                aria-pressed={layout.align === item.id}
-                onClick={() => onLayout({ ...layout, align: item.id })}
+                aria-pressed={paragraphAlign === item.id}
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  if (editor) {
+                    applyParagraphAlign(editor, item.id, layout.align);
+                  }
+                }}
               >
                 <Icon name={alignmentIcon(item.id)} />
               </button>
@@ -471,6 +479,26 @@ function CharacterFace({ editor, layout }: { editor: Editor | null; layout: Page
       <span className="size-unit">pt</span>
     </span>
   );
+}
+
+function useParagraphAlign(editor: Editor | null, inherited: Alignment): Alignment {
+  const [align, setAlign] = useState(inherited);
+  useEffect(() => {
+    if (!editor) {
+      setAlign(inherited);
+      return;
+    }
+    const read = () => {
+      const next = shownParagraphAlign(editor, inherited);
+      setAlign((current) => (current === next ? current : next));
+    };
+    read();
+    editor.on("transaction", read);
+    return () => {
+      editor.off("transaction", read);
+    };
+  }, [editor, inherited]);
+  return align;
 }
 
 function useCharacterFace(editor: Editor | null): { font: string | null; points: number | null } {

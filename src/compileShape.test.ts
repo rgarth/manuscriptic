@@ -286,7 +286,7 @@ test("a passed manuscript stays unstamped while front matter fills from the edit
     assert.equal(line.points, 18);
   }
   const plot = compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === "Plot");
-  assert.equal(plot?.align, "left");
+  assert.equal(plot?.align, "center");
   const summary = plot?.runs.find((run) => run.kind === "text");
   assert.equal(summary?.kind, "text");
   if (summary?.kind === "text") {
@@ -295,6 +295,54 @@ test("a passed manuscript stays unstamped while front matter fills from the edit
   assert.equal(compiled.font, "Palatino");
   assert.equal(compiled.points, 18);
 });
+
+test("a paragraph keeps its alignment when the editor face is kept", () => {
+  const opening = documentNode("Opening", "scene", {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { align: "right" }, content: [{ type: "text", text: "Kept" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Inherited" }] },
+    ],
+  });
+  let project = setPageLayout(novel([folderNode("Tide", [opening])]), { font: "Palatino", points: 18, align: "center" });
+  const titlePage = pageNamed(project, "front", "Title page");
+  assert.equal(titlePage?.kind, "document");
+  if (titlePage?.kind !== "document") {
+    return;
+  }
+  project = setDocumentContent(project, titlePage.id, {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { align: "left" }, content: [{ type: "text", text: "Title" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Rest" }] },
+    ],
+  });
+  const included = new Set([titlePage.id, opening.id]);
+  const passed = compileOf(
+    project,
+    included,
+    { ...defaultCompilePreferences(), passFont: true, passFront: true, align: "justify" },
+    2026,
+  );
+  assert.equal(compiledAlign(passed, "Kept"), "right");
+  assert.equal(compiledAlign(passed, "Inherited"), "center");
+  assert.equal(compiledAlign(passed, "Title"), "left");
+  assert.equal(compiledAlign(passed, "Rest"), "center");
+  const overridden = compileOf(
+    project,
+    included,
+    { ...defaultCompilePreferences(), passFont: false, passFront: false, align: "justify" },
+    2026,
+  );
+  assert.equal(compiledAlign(overridden, "Kept"), "justify");
+  assert.equal(compiledAlign(overridden, "Inherited"), "justify");
+  assert.equal(compiledAlign(overridden, "Title"), "justify");
+  assert.equal(compiledAlign(overridden, "Rest"), "justify");
+});
+
+function compiledAlign(compiled: { paragraphs: CompileParagraph[] }, text: string): string | undefined {
+  return compiled.paragraphs.find((paragraph) => paragraphPlain(paragraph) === text)?.align;
+}
 
 test("a chapter heading is the folder title and scenes keep their marks", () => {
   const opening = documentNode("Opening", "scene", marked("Hello world", "world"));

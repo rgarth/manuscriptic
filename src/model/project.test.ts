@@ -465,6 +465,26 @@ test("scene text keeps bold and italic and drops unknown marks", () => {
   );
 });
 
+test("a paragraph stores alignment and drops an unknown one", () => {
+  assert.deepEqual(
+    parseEditorDoc({
+      type: "doc",
+      content: [{ type: "paragraph", attrs: { align: "right" }, content: [{ type: "text", text: "Hi" }] }],
+    }),
+    {
+      type: "doc",
+      content: [{ type: "paragraph", attrs: { align: "right" }, content: [{ type: "text", text: "Hi" }] }],
+    },
+  );
+  assert.deepEqual(
+    parseEditorDoc({
+      type: "doc",
+      content: [{ type: "paragraph", attrs: { align: "sideways" }, content: [{ type: "text", text: "Hi" }] }],
+    }),
+    { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hi" }] }] },
+  );
+});
+
 test("a bullet list is part of the scene", () => {
   const parsed = parseEditorDoc({
     type: "doc",

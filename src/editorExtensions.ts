@@ -1,8 +1,9 @@
+import { Extension, type Editor } from "@tiptap/core";
 import { FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import StarterKit from "@tiptap/starter-kit";
-import { fontFamily, fontSizePoints } from "./pageLayout.ts";
+import { alignmentOrNull, fontFamily, fontSizePoints, type Alignment } from "./pageLayout.ts";
 
 const characterFont = FontFamily.extend({
   addGlobalAttributes() {
@@ -54,6 +55,39 @@ function firstFamily(value: string): string | null {
   return first || null;
 }
 
+const paragraphAlign = Extension.create({
+  name: "paragraphAlign",
+  addGlobalAttributes() {
+    return [
+      {
+        types: ["paragraph"],
+        attributes: {
+          align: {
+            default: null,
+            parseHTML: (element: HTMLElement) => alignmentOrNull(element.style.textAlign),
+            renderHTML: (attributes: { align?: string | null }) => {
+              const align = alignmentOrNull(attributes.align);
+              if (!align) {
+                return {};
+              }
+              return { style: `text-align: ${align}` };
+            },
+          },
+        },
+      },
+    ];
+  },
+});
+
+export function shownParagraphAlign(editor: Editor, inherited: Alignment): Alignment {
+  return alignmentOrNull(editor.getAttributes("paragraph").align) ?? inherited;
+}
+
+export function applyParagraphAlign(editor: Editor, align: Alignment, inherited: Alignment): void {
+  const stored = align === inherited ? null : align;
+  editor.chain().focus().updateAttributes("paragraph", { align: stored }).run();
+}
+
 export const documentExtensions = [
   StarterKit.configure({
     heading: false,
@@ -63,6 +97,7 @@ export const documentExtensions = [
     horizontalRule: false,
     link: false,
   }),
+  paragraphAlign,
   TextStyle,
   characterFont,
   characterSize,

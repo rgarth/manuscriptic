@@ -73,7 +73,16 @@ export function buildCompile(
   };
   const paragraphs = [
     ...matterParagraphs(project, included, "front", values, missing, chosen, matterPolicy("front", preferences, project)),
-    ...manuscriptParagraphs(project, included, values, missing, preferences.align, chosen, preset, manuscriptFace(preferences.passFont)),
+    ...manuscriptParagraphs(
+      project,
+      included,
+      values,
+      missing,
+      alignChoice(preferences, project),
+      chosen,
+      preset,
+      manuscriptFace(preferences.passFont),
+    ),
     ...matterParagraphs(project, included, "back", values, missing, chosen, matterPolicy("back", preferences, project)),
     ...matterParagraphs(project, included, "other", values, missing, chosen, matterPolicy("other", preferences, project)),
   ];
@@ -140,7 +149,7 @@ function manuscriptParagraphs(
   included: ReadonlySet<string>,
   values: CompileValues,
   missing: string[],
-  align: Alignment,
+  choice: AlignChoice,
   chosen: { hasDocument: boolean },
   preset: CompilePreset,
   face: TextFace,
@@ -158,7 +167,7 @@ function manuscriptParagraphs(
     numbers: [],
     scenes: structure.scenes,
     missing,
-    align,
+    choice,
     sceneBreak: preset.sceneBreak,
     chosen,
     values,
@@ -269,7 +278,7 @@ type EmitState = {
   numbers: number[];
   scenes: CompileHeading;
   missing: string[];
-  align: Alignment;
+  choice: AlignChoice;
   sceneBreak: SceneBreak;
   chosen: { hasDocument: boolean };
   values: CompileValues;
@@ -400,7 +409,7 @@ function writeScenes(run: Extract<ManuscriptRun, { kind: "text" }>, state: EmitS
     }
     const filled = fillDocument(scene.content, state.values);
     rememberMissing(state.missing, filled.missing);
-    blocks.push(...blocksToParagraphs(filled.doc.content, state.align, true, state.face));
+    blocks.push(...blocksToParagraphs(filled.doc.content, state.choice, true, state.face));
     if (!state.pageOpen && blocks[0]) {
       blocks[0].pageBreakBefore = true;
       state.pageOpen = true;
@@ -568,10 +577,33 @@ type TextFace =
   | { kind: "carry" }
   | { kind: "fill"; font: string; points: number };
 
+type AlignChoice = {
+  inherited: Alignment;
+  template: Alignment;
+};
+
 type MatterPolicy = {
-  align: Alignment;
+  choice: AlignChoice;
   face: TextFace;
 };
+
+function alignChoice(preferences: CompilePreferences, project: ProjectFile): AlignChoice {
+  return { inherited: project.layout.align, template: preferences.align };
+}
+
+function chosenAlign(stored: Alignment | undefined, face: TextFace, choice: AlignChoice): Alignment {
+  switch (face.kind) {
+    case "strip":
+      return choice.template;
+    case "carry":
+    case "fill":
+      return stored ?? choice.inherited;
+    default: {
+      const unexpected: never = face;
+      return unexpected;
+    }
+  }
+}
 
 function manuscriptFace(passFont: boolean): TextFace {
   return passFont ? { kind: "carry" } : { kind: "strip" };
@@ -584,11 +616,14 @@ function matterPolicy(
 ): MatterPolicy {
   switch (place) {
     case "front":
-      return passedMatter(preferences.passFront, project);
+      return passedMatter(preferences.passFront, preferences, project);
     case "back":
-      return passedMatter(preferences.passBack, project);
+      return passedMatter(preferences.passBack, preferences, project);
     case "other":
-      return { align: "left", face: manuscriptFace(preferences.passFont) };
+      return {
+        choice: alignChoice(preferences, project),
+        face: manuscriptFace(preferences.passFont),
+      };
     default: {
       const unexpected: never = place;
       return unexpected;
@@ -596,12 +631,13 @@ function matterPolicy(
   }
 }
 
-function passedMatter(pass: boolean, project: ProjectFile): MatterPolicy {
+function passedMatter(pass: boolean, preferences: CompilePreferences, project: ProjectFile): MatterPolicy {
+  const choice = alignChoice(preferences, project);
   if (!pass) {
-    return { align: "left", face: { kind: "strip" } };
+    return { choice, face: { kind: "strip" } };
   }
   return {
-    align: project.layout.align,
+    choice,
     face: { kind: "fill", font: project.layout.font, points: project.layout.points },
   };
 }
@@ -623,7 +659,7 @@ function matterParagraphs(
   for (const page of pages) {
     const filled = fillDocument(page, values);
     rememberMissing(missing, filled.missing);
-    const body = blocksToParagraphs(filled.doc.content, policy.align, false, policy.face);
+    const body = blocksToParagraphs(filled.doc.content, policy.choice, false, policy.face);
     const start = body.length > 0 ? body : [blankParagraph()];
     const opening = start[0];
     if (opening) {
@@ -697,7 +733,7 @@ function docsIn(folder: FolderNode, included: ReadonlySet<string>): EditorDoc[] 
 
 function blocksToParagraphs(
   blocks: readonly EditorBlock[],
-  align: Alignment,
+  choice: AlignChoice,
   indent: boolean,
   face: TextFace,
 ): CompileParagraph[] {
@@ -707,16 +743,16 @@ function blocksToParagraphs(
       case "paragraph":
         paragraphs.push({
           runs: inlinesToRuns(block.content ?? [], face),
-          align,
+          align: chosenAlign(block.attrs?.align, face, choice),
           indent,
           pageBreakBefore: false,
         });
         break;
       case "bulletList":
-        paragraphs.push(...listParagraphs(block.content, align, "bullet", 1, face));
+        paragraphs.push(...listParagraphs(block.content, choice, "bullet", 1, face));
         break;
       case "orderedList":
-        paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1, face));
+        paragraphs.push(...listParagraphs(block.content, choice, "number", block.attrs?.start ?? 1, face));
         break;
       default: {
         const unexpected: never = block;
@@ -729,7 +765,7 @@ function blocksToParagraphs(
 
 function listParagraphs(
   items: { content: EditorBlock[] }[],
-  align: Alignment,
+  choice: AlignChoice,
   kind: "bullet" | "number",
   start: number,
   face: TextFace,
@@ -744,17 +780,17 @@ function listParagraphs(
           marked = true;
           paragraphs.push({
             runs: [...(marker ? [runFace(marker, [], face)] : []), ...inlinesToRuns(block.content ?? [], face)],
-            align,
+            align: chosenAlign(block.attrs?.align, face, choice),
             indent: false,
             pageBreakBefore: false,
           });
           break;
         }
         case "bulletList":
-          paragraphs.push(...listParagraphs(block.content, align, "bullet", 1, face));
+          paragraphs.push(...listParagraphs(block.content, choice, "bullet", 1, face));
           break;
         case "orderedList":
-          paragraphs.push(...listParagraphs(block.content, align, "number", block.attrs?.start ?? 1, face));
+          paragraphs.push(...listParagraphs(block.content, choice, "number", block.attrs?.start ?? 1, face));
           break;
         default: {
           const unexpected: never = block;

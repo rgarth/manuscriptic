@@ -10,7 +10,7 @@ import { booksOnStartup, markBookClosed, readSnapshotMinutes, type SnapshotMinut
 import { menuCommand, type MenuCommand } from "./menuCommand";
 import { pageKey } from "./menuPlan";
 import { removal } from "./model/binder";
-import { leafAction, setPageLayout } from "./model/project";
+import { leafAction } from "./model/project";
 import { launchBooks } from "./storage";
 import { useBookFile } from "./useBookFile";
 import { useNotice } from "./useNotice";
@@ -253,9 +253,7 @@ export default function App() {
         commands().format?.(command.command);
         return;
       case "align":
-        file.setProject((current) =>
-          current ? setPageLayout(current, { ...current.layout, align: command.align }) : current,
-        );
+        commands().applyAlign?.(command.align);
         return;
       default: {
         const unexpected: never = command;
@@ -278,7 +276,6 @@ export default function App() {
       newSection: project ? () => runMenu.current({ name: "new-section" }) : null,
       trash: project ? () => runMenu.current({ name: "trash" }) : null,
       removal: project && selectedId ? removal(project, selectedId) : null,
-      align: project?.layout.align ?? "justify",
       leafLabel: project ? leafAction(project, selectedId).menuLabel : "New Scene",
     });
   }, [project, selectedId]);

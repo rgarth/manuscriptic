@@ -63,6 +63,17 @@ test("a scene keeps its marks, lists, and a literal bracket", () => {
   assert.deepEqual(decodeScene(encodeScene(marked)), marked);
 });
 
+test("a paragraph keeps an alignment and inherits when it has none", () => {
+  const scene: EditorDoc = {
+    type: "doc",
+    content: [
+      { type: "paragraph", attrs: { align: "center" }, content: [{ type: "text", text: "Title" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Body" }] },
+    ],
+  };
+  assert.deepEqual(decodeScene(encodeScene(scene)), scene);
+});
+
 test("half a word keeps its own font and size", () => {
   const scene: EditorDoc = {
     type: "doc",

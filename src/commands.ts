@@ -19,6 +19,7 @@ export type CommandState = {
   undo: (() => void) | null;
   redo: (() => void) | null;
   format: ((command: SceneCommand) => void) | null;
+  applyAlign: ((align: Alignment) => void) | null;
   removal: Removal | null;
   align: Alignment;
   leafLabel: string;
@@ -42,6 +43,7 @@ const initial: CommandState = {
   undo: null,
   redo: null,
   format: null,
+  applyAlign: null,
   removal: null,
   align: "justify",
   leafLabel: "New Scene",

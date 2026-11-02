@@ -1,4 +1,4 @@
-import { fontName, fontSizePoints, fontSizeText } from "../pageLayout.ts";
+import { alignmentOrNull, fontName, fontSizePoints, fontSizeText, type Alignment } from "../pageLayout.ts";
 
 export type Mark =
   | { type: "bold" }
@@ -23,6 +23,7 @@ export type Inline = TextRun | HardBreak;
 
 export type Paragraph = {
   type: "paragraph";
+  attrs?: { align: Alignment };
   content?: Inline[];
 };
 
@@ -181,8 +182,10 @@ function parseParagraph(value: unknown): Paragraph | null {
   if (!isRecord(value) || value.type !== "paragraph") {
     return null;
   }
+  const align = isRecord(value.attrs) ? alignmentOrNull(value.attrs.align) : null;
+  const attrs = align ? { align } : undefined;
   if (value.content === undefined) {
-    return { type: "paragraph" };
+    return attrs ? { type: "paragraph", attrs } : { type: "paragraph" };
   }
   if (!Array.isArray(value.content)) {
     return null;
@@ -195,7 +198,7 @@ function parseParagraph(value: unknown): Paragraph | null {
     }
     content.push(inline);
   }
-  return { type: "paragraph", content };
+  return attrs ? { type: "paragraph", attrs, content } : { type: "paragraph", content };
 }
 
 function parseInline(value: unknown): Inline | null {
