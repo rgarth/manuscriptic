@@ -6,6 +6,7 @@
   --faded: #8a7b68;
   --rule: #e3d6c2;
   --nib: #7c3b2e;
+  --serif: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
 }
 
 html,
@@ -34,7 +35,13 @@ aside {
 .brand {
   display: flex;
   justify-content: center;
-  margin: 4px 0 16px;
+  margin: 4px 0 0;
+}
+
+aside hr {
+  margin: 12px 10px;
+  border: none;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 16%, var(--rule));
 }
 
 .brand img {
@@ -72,10 +79,21 @@ nav a[aria-current="page"] {
 }
 
 main {
+  display: flex;
   flex: 1;
+  flex-direction: column;
   min-width: 0;
   overflow: auto;
-  padding: 36px 48px 72px;
+  padding: 36px 48px 28px;
+}
+
+main > footer {
+  margin-top: auto;
+  padding-top: 28px;
+  color: var(--faded);
+  font-family: var(--serif);
+  font-size: 13px;
+  text-align: center;
 }
 
 article {
@@ -99,7 +117,7 @@ body:has(main article:target) main article#home:not(:target) {
 
 h1 {
   margin: 0 0 8px;
-  font-family: "Iowan Old Style", Palatino, "Palatino Linotype", Georgia, serif;
+  font-family: var(--serif);
   font-size: 2rem;
   font-weight: 500;
 }
