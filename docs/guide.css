@@ -33,16 +33,14 @@ aside {
 
 .brand {
   display: flex;
-  align-items: center;
-  height: 36px;
-  margin: 0 0 12px;
-  padding: 0 10px;
+  justify-content: center;
+  margin: 4px 0 16px;
 }
 
 .brand img {
   display: block;
-  width: 28px;
-  height: 28px;
+  width: 48px;
+  height: 48px;
 }
 
 nav a {
@@ -82,6 +80,8 @@ main {
 
 article {
   max-width: 40rem;
+  margin-right: auto;
+  margin-left: auto;
 }
 
 main article {
@@ -145,6 +145,10 @@ code {
 
 .home p {
   color: var(--faded);
+}
+
+.home .blurb {
+  text-align: justify;
 }
 
 .home .download {
