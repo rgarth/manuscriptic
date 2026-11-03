@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manuscriptic</title>
+    <link rel="icon" href="icon.png" />
+    <link rel="stylesheet" href="guide.css" />
+  </head>
+  <body>
+    <aside>
+      <a class="brand" href="#home"><img src="icon.png" alt="Manuscriptic" width="28" height="28" /></a>
+      <nav>
+        <a href="#binder">Binder</a>
+        <a href="#matter">Front and back matter</a>
+        <a href="#snapshots">Snapshots</a>
+        <p class="group">Book settings</p>
+        <a href="#compiles">Compiles</a>
+        <a href="#author">Author</a>
+        <a href="#contents">Contents</a>
+        <a href="#structure">Structure</a>
+        <a href="#formatting">Formatting</a>
+        <a href="#dictionary">Dictionary</a>
+        <a href="#compile">Compile</a>
+      </nav>
+    </aside>
+    <main>
+      <article id="home" class="home">
+        <img class="crest" src="icon.png" alt="" width="72" height="72" />
+        <h1>Manuscriptic</h1>
+        <p>A writing app for a book. The book is one file, and it saves itself while you work.</p>
+        <p class="download"><a href="https://github.com/rgarth/manuscriptic/releases">Download</a> the latest Windows and Mac builds.</p>
+        <ul class="features">
+          <li>A <a href="#binder">binder</a> of sections and scenes. Drag them into place.</li>
+          <li>Notes for characters, places, and research. Notes never compile.</li>
+          <li><a href="#matter">Publishing pages</a> for the title, copyright, dedication, epigraph, synopsis, query, acknowledgements, about the author, and a back page.</li>
+          <li><a href="#snapshots">Snapshots</a> kept inside the book file.</li>
+          <li><a href="#compiles">Compiles</a> for different outputs, each with its own contents, structure, and formatting.</li>
+          <li>Word or PDF from <a href="#compile">Compile</a>. The book itself is left as it is.</li>
+          <li>Rich text. A word can keep its own font and size. A paragraph can keep its own alignment.</li>
+          <li>Typewriter mode, statistics, and an inline spellchecker.</li>
+          <li>A <a href="#dictionary">dictionary</a> for words this book spells on purpose.</li>
+          <li>Themes for the desk.</li>
+          <li>Import a project from Scrivener.</li>
+        </ul>
+      </article>
+
+      <article id="binder">
+        <h1>Binder</h1>
+        <p>The binder is the book. It has three roots.</p>
+        <img class="shot" src="binder.png" alt="The binder, with a chapter open in the manuscript." />
+        <ul>
+          <li>Manuscript is the story. The order here is the compile order.</li>
+          <li>Notes are for you: Characters, Places, Misc., and Research. Notes never compile.</li>
+          <li>Publishing holds the pages around the book.</li>
+          <li>A folder can hold other folders. Structure decides which levels print.</li>
+          <li>Select Manuscript, then New Scene or New Section.</li>
+          <li>Drag a row to move it.</li>
+          <li>Move to Trash takes a row out. Restore puts it back. Delete Permanently removes it.</li>
+        </ul>
+      </article>
+
+      <article id="matter">
+        <h1>Front and back matter</h1>
+        <p>These are the pages around the story. They are not chapters. Compile keeps the type you set in the editor, unless Formatting says otherwise.</p>
+        <img class="shot" src="publishing.png" alt="The title page open under Front Matter, with tokens in the text." />
+        <ul>
+          <li>A new book puts Title page, Copyright, Dedication, and Epigraph in Front Matter.</li>
+          <li>Acknowledgements and About the Author start in Back Matter.</li>
+          <li>Synopsis, Query, and Back page sit beside those folders. A query is usually pasted into an email. It is not bound into the book.</li>
+          <li>Select the folder, then New Page.</li>
+          <li>The name in the binder is not printed on the page.</li>
+          <li>A word can keep its own font and size.</li>
+          <li>A paragraph can keep its own alignment. With none of its own, it uses the book's. Choosing the book's alignment again clears the paragraph's.</li>
+          <li>A new book is EB Garamond, 12 point, justified.</li>
+          <li><code>{$author}</code>, <code>{$title}</code>, and the other tokens are filled when you compile. An empty one is named in the result.</li>
+          <li>Compile writes ticked front matter, then the manuscript, then ticked back matter, then the other ticked publishing pages. Each front or back page starts on a new page.</li>
+        </ul>
+      </article>
+
+      <article id="snapshots">
+        <h1>Snapshots</h1>
+        <p>A snapshot is a copy of the book, stored inside the book file.</p>
+        <img class="shot" src="snapshots.png" alt="The snapshot shelf open under the scene, with one snapshot selected." />
+        <ul>
+          <li>File → Take Snapshot records one and opens the shelf.</li>
+          <li>Snapshots in the footer only opens the shelf.</li>
+          <li>Take snapshot on the shelf records another. A manual snapshot stays until you delete it.</li>
+          <li>Automatic snapshots can be Off, 5 min, 15 min, or Hour. That choice belongs to this computer.</li>
+          <li>Automatic copies thin out. The last hour is kept, then one an hour for a day, then one a day for 30 days. Older automatic snapshots are dropped.</li>
+          <li>Restore this scene needs the open scene to exist in the snapshot you selected.</li>
+          <li>Restore the book replaces the book.</li>
+          <li>Import Scrivener… replaces the book, snapshots included.</li>
+        </ul>
+      </article>
+
+      <article id="compiles">
+        <h1>Compiles</h1>
+        <p>A compile is a named setup for one kind of output. Open it from File → Book Settings.</p>
+        <img class="shot" src="contents.png" alt="Book settings, with the Manuscript compile selected above the contents list." />
+        <ul>
+          <li>A new book has one compile, named Manuscript. New copies the one you are looking at.</li>
+          <li>You cannot delete the last compile.</li>
+          <li>The menu at the top of Contents, Structure, and Formatting chooses the compile.</li>
+          <li>Contents, Structure, and Formatting belong to that compile.</li>
+          <li>Author and Dictionary belong to the book. Every compile uses them.</li>
+        </ul>
+      </article>
+
+      <article id="author">
+        <h1>Author</h1>
+        <p>The name and address filled into tokens such as <code>{$author}</code>.</p>
+        <img class="shot" src="author.png" alt="The Author page, using the author from Settings." />
+        <ul>
+          <li>Use the author in Settings copies File → Settings. That author is for this computer.</li>
+          <li>Untick it to write an author for this book only.</li>
+          <li>Title, word count, year, and page number come from the book at compile.</li>
+          <li>The tokens are <code>{$author}</code>, <code>{$pen}</code>, <code>{$address}</code>, <code>{$phone}</code>, <code>{$email}</code>, <code>{$title}</code>, <code>{$words}</code>, <code>{$year}</code>, and <code>{$page}</code>.</li>
+        </ul>
+      </article>
+
+      <article id="contents">
+        <h1>Contents</h1>
+        <p>Ticked rows are compiled. Notes are not in this list.</p>
+        <img class="shot" src="contents.png" alt="Contents, with The Gate unticked under The Tide." />
+        <ul>
+          <li>Untick a folder and its pages stay out.</li>
+          <li>A ticked scene under an unticked folder is still written.</li>
+          <li>In the picture, The Gate is unticked, so that scene is left out.</li>
+          <li>Numbered folders are counted. Unnumbered keeps its title and stays out of the count.</li>
+        </ul>
+      </article>
+
+      <article id="structure">
+        <h1>Structure</h1>
+        <p>The binder does not call a folder a chapter. Structure does, by how deep the folder sits.</p>
+        <img class="shot" src="structure.png" alt="Structure, with Folder Level 1 set to be included." />
+        <ul>
+          <li>Folder Level 1 is the outermost folder.</li>
+          <li>Chapters with scenes inside: Folder Level 1 is the chapter. It is included, and its title is printed.</li>
+          <li>Put a part around the chapters and Folder Level 1 becomes the part. It stays out until Include is ticked. The chapters are then Folder Level 2.</li>
+          <li>Number can be None, the folder name, 1, One, or i.</li>
+          <li>The number and the title can share a line, or take a line each.</li>
+          <li>Scene titles are off. Scenes break with #, or with * * *, or with a blank line.</li>
+        </ul>
+      </article>
+
+      <article id="formatting">
+        <h1>Formatting</h1>
+        <p>The ticks decide whether compile keeps the type from the editor. A word's font and a paragraph's alignment follow the same rule.</p>
+        <img class="shot" src="formatting.png" alt="Formatting, with the manuscript tick off and the front and back matter ticks on." />
+        <ul>
+          <li>Manuscript uses the editor's fonts and sizes. Off, the manuscript uses this page: Times New Roman, 12 point, aligned left, double spaced, first line 0.5 in.</li>
+          <li>Front matter uses the editor's font, size, and alignment. On, so a front page keeps what you set while writing.</li>
+          <li>Back matter uses the editor's font, size, and alignment. On, for the same reason.</li>
+          <li>Turn a tick off and this page's font, size, and alignment replace that part. A word's own font, and a paragraph's own alignment, are kept only while the tick is on.</li>
+          <li>Margins start at 1 in. The header is <code>{$author} / {$title} / {$page}</code>. Page numbers sit in the header. The first page has neither header nor footer.</li>
+        </ul>
+      </article>
+
+      <article id="dictionary">
+        <h1>Dictionary</h1>
+        <p>Words this book spells on purpose. They belong to the book, so every compile uses the same list.</p>
+        <img class="shot" src="dictionary.png" alt="The dictionary, with two words added for this book." />
+        <ul>
+          <li>Add a word here when the book spells it on purpose.</li>
+          <li>Remove takes it off the list.</li>
+        </ul>
+      </article>
+
+      <article id="compile">
+        <h1>Compile</h1>
+        <p>File → Compile… writes a Word or PDF file. The book itself is left as it is.</p>
+        <img class="shot" src="compile.png" alt="The compile window, set to the Manuscript compile and Word." />
+        <ul>
+          <li>Choose a compile, then Word or PDF.</li>
+          <li>The suggested file name is the book title.</li>
+          <li>The last choice is remembered for this book, on this computer.</li>
+          <li>Nothing ticked writes nothing.</li>
+          <li>An empty token is reported, as in 'Left blank: …'.</li>
+          <li>The file runs: ticked front matter, the manuscript, ticked back matter, then the other ticked publishing pages.</li>
+        </ul>
+      </article>
+    </main>
+    <script>
+      const links = [...document.querySelectorAll("nav a")];
+
+      function show() {
+        const id = location.hash.replace("#", "") || "home";
+        document.querySelector("main").scrollTo(0, 0);
+        for (const link of links) {
+          if (link.getAttribute("href") === `#${id}`) {
+            link.setAttribute("aria-current", "page");
+          } else {
+            link.removeAttribute("aria-current");
+          }
+        }
+      }
+
+      addEventListener("hashchange", show);
+      show();
+    </script>
+  </body>
+</html>

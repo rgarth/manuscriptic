@@ -6,6 +6,8 @@ Manuscriptic is a writing app for authors. Rich text lets you control headings, 
 
 I use it for my own books. I run it on a Mac. Windows builds are on the releases page. Linux is untested.
 
+The [guide](https://rgarth.github.io/manuscriptic/) explains the binder, the pages around the book, snapshots, and compile.
+
 ![A book open in Manuscriptic](docs/screenshot.png)
 
 ## Download
