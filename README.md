@@ -2,7 +2,7 @@
 
 # Manuscriptic
 
-Manuscriptic is a writing app for authors. Rich text lets you control headings, fonts, and style. Compile can override those editor settings to match a publisher's guide.
+Manuscriptic is a writing app for authors. Notes and your manuscript live side by side in a binder. Rich text lets you control headings, fonts, and style. The manuscript can be compiled into a single document for reading, or for submitting for publication.
 
 I use it for my own books. I run it on a Mac. Windows builds are on the releases page. Linux is untested.
 
