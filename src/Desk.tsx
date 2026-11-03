@@ -4,6 +4,7 @@ import CompileSettings from "./CompileSettings";
 import ExportDialog from "./ExportDialog";
 import {
   applyTrash,
+  duplicateOpened,
   insertScene,
   insertSection,
   placeOpened,
@@ -118,6 +119,7 @@ export default function Desk({
           onRenameProject={(title) => onProject((current) => renameProject(current, title))}
           onAddScene={(id) => onProject((current) => insertScene(current, id ?? current.view.selectedId))}
           onAddSection={(id) => onProject((current) => insertSection(current, id ?? current.view.selectedId))}
+          onDuplicate={(id) => onProject((current) => duplicateOpened(current, id))}
           onAskTrash={onAskTrash}
           onRestore={(id) => onProject((current) => restoreNode(current, id))}
           onPlace={(id, targetId, place) => onProject((current) => placeOpened(current, id, targetId, place))}

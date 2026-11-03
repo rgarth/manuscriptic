@@ -109,9 +109,21 @@ export function seedCompileTicks(project: ProjectFile): ProjectFile {
 }
 
 export function includeNewBinderNode(project: ProjectFile, parentId: string, id: string): ProjectFile {
+  return includeWhen(project, id, (included) => included.includes(parentId));
+}
+
+export function includeCopiedBinderNode(project: ProjectFile, sourceId: string, id: string): ProjectFile {
+  return includeWhen(project, id, (included) => included.includes(sourceId));
+}
+
+function includeWhen(
+  project: ProjectFile,
+  id: string,
+  when: (included: string[]) => boolean,
+): ProjectFile {
   let changed = false;
   const presets = project.compile.presets.map((preset) => {
-    if (!preset.included.includes(parentId) || preset.included.includes(id)) {
+    if (!when(preset.included) || preset.included.includes(id)) {
       return preset;
     }
     changed = true;

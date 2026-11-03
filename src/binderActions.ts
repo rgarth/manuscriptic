@@ -1,6 +1,7 @@
 import {
   addLeaf,
   addSection,
+  duplicateDocument,
   deleteForever,
   emptyTrash,
   moveToTrash,
@@ -29,6 +30,14 @@ export function insertScene(project: ProjectFile, targetId: string | null): Proj
 
 export function insertSection(project: ProjectFile, targetId: string | null): ProjectFile {
   const inserted = addSection(project, targetId);
+  return selectInserted(inserted.project, inserted.id);
+}
+
+export function duplicateOpened(project: ProjectFile, id: string): ProjectFile {
+  const inserted = duplicateDocument(project, id);
+  if (!inserted) {
+    return project;
+  }
   return selectInserted(inserted.project, inserted.id);
 }
 

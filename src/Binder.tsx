@@ -3,6 +3,7 @@ import Hint from "./Hint.tsx";
 import Icon, { type IconName } from "./icons";
 import { dropAllowed, removal, type DropPlace } from "./model/binder";
 import {
+  findNode,
   isStoredInTrash,
   leafAction,
   ROOT_KEYS,
@@ -29,6 +30,7 @@ type BinderProps = {
   onRenameProject: (title: string) => void;
   onAddScene: (targetId?: string) => void;
   onAddSection: (targetId?: string) => void;
+  onDuplicate: (id: string) => void;
   onAskTrash: (id: string) => void;
   onRestore: (id: string) => void;
   onPlace: (id: string, targetId: string, place: DropPlace) => void;
@@ -45,6 +47,7 @@ export default function Binder({
   onRenameProject,
   onAddScene,
   onAddSection,
+  onDuplicate,
   onAskTrash,
   onRestore,
   onPlace,
@@ -108,6 +111,7 @@ export default function Binder({
           onClose={() => setContext(null)}
           onAddScene={onAddScene}
           onAddSection={onAddSection}
+          onDuplicate={onDuplicate}
           onAskTrash={onAskTrash}
           onRestore={onRestore}
         />
@@ -219,7 +223,7 @@ function openContext(
   onContext({
     id,
     x: Math.min(event.clientX, window.innerWidth - 196),
-    y: Math.min(event.clientY, window.innerHeight - 132),
+    y: Math.min(event.clientY, window.innerHeight - 168),
   });
 }
 
@@ -384,6 +388,7 @@ function contextItems(
   id: string,
   onAddScene: (targetId?: string) => void,
   onAddSection: (targetId?: string) => void,
+  onDuplicate: (id: string) => void,
   onAskTrash: (id: string) => void,
   onRestore: (id: string) => void,
 ): MenuItem[] {
@@ -405,15 +410,19 @@ function contextItems(
   }
   const choice = removal(project, id);
   const leaf = leafAction(project, id);
-  return [
+  const items: MenuItem[] = [
     { label: leaf.menuLabel, run: () => onAddScene(id) },
     { label: "New Section", run: () => onAddSection(id) },
-    {
-      label: choice?.label ?? "Move to Trash",
-      disabled: choice === null,
-      run: () => onAskTrash(id),
-    },
   ];
+  if (findNode(project, id)?.node.kind === "document") {
+    items.push({ label: "Duplicate", run: () => onDuplicate(id) });
+  }
+  items.push({
+    label: choice?.label ?? "Move to Trash",
+    disabled: choice === null,
+    run: () => onAskTrash(id),
+  });
+  return items;
 }
 
 function BinderContextMenu({
@@ -422,6 +431,7 @@ function BinderContextMenu({
   onClose,
   onAddScene,
   onAddSection,
+  onDuplicate,
   onAskTrash,
   onRestore,
 }: {
@@ -430,10 +440,11 @@ function BinderContextMenu({
   onClose: () => void;
   onAddScene: (targetId?: string) => void;
   onAddSection: (targetId?: string) => void;
+  onDuplicate: (id: string) => void;
   onAskTrash: (id: string) => void;
   onRestore: (id: string) => void;
 }) {
-  const items = contextItems(project, context.id, onAddScene, onAddSection, onAskTrash, onRestore);
+  const items = contextItems(project, context.id, onAddScene, onAddSection, onDuplicate, onAskTrash, onRestore);
   return (
     <>
       <button type="button" className="menu-dismiss" aria-label="Close menu" onClick={onClose} />

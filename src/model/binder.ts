@@ -3,6 +3,7 @@ import {
   documentNode,
   editNode,
   findNode,
+  includeCopiedBinderNode,
   includeNewBinderNode,
   folderNode,
   isRoot,
@@ -12,6 +13,7 @@ import {
   roleForRoot,
   ROOT_KEYS,
   type BinderNode,
+  type DocumentNode,
   type FolderNode,
   type InsertedNode,
   type LocatedNode,
@@ -37,6 +39,22 @@ export function addLeaf(project: ProjectFile, selectedId: string | null): Insert
 
 export function addSection(project: ProjectFile, selectedId: string | null): InsertedNode {
   return addNode(project, selectedId, folderNode("New section"));
+}
+
+export function duplicateDocument(project: ProjectFile, id: string): InsertedNode | null {
+  if (isStoredInTrash(project, id)) {
+    return null;
+  }
+  const located = findNode(project, id);
+  if (!located || located.node.kind !== "document" || !located.parent) {
+    return null;
+  }
+  const source = located.node;
+  const copy: DocumentNode = {
+    ...documentNode(`Copy of ${source.title}`, source.role, structuredClone(source.content)),
+    includeInCompile: source.includeInCompile,
+  };
+  return addNode(project, id, copy, (next, copyId) => includeCopiedBinderNode(next, id, copyId));
 }
 
 export function removal(project: ProjectFile, id: string): Removal | null {
@@ -156,7 +174,12 @@ export function deleteForever(project: ProjectFile, id: string): ProjectFile {
   return removeFromProject(project, id).project;
 }
 
-function addNode(project: ProjectFile, selectedId: string | null, child: BinderNode): InsertedNode {
+function addNode(
+  project: ProjectFile,
+  selectedId: string | null,
+  child: BinderNode,
+  include?: (next: ProjectFile, id: string) => ProjectFile,
+): InsertedNode {
   const located = selectedId ? findNode(project, selectedId) : null;
   const afterId =
     child.kind === "document" && located?.node.kind === "document" ? located.node.id : undefined;
@@ -174,7 +197,8 @@ function addNode(project: ProjectFile, selectedId: string | null, child: BinderN
   if (!next) {
     throw new Error("Could not insert into the binder.");
   }
-  return { project: includeNewBinderNode(next, parentId, child.id), id: child.id };
+  const ticked = include ? include(next, child.id) : includeNewBinderNode(next, parentId, child.id);
+  return { project: ticked, id: child.id };
 }
 
 function destinationId(project: ProjectFile, selectedId: string | null): string {
