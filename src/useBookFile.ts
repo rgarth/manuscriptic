@@ -28,8 +28,7 @@ import { failureMessage } from "./failures";
 import { createBookLock, heldElsewhere } from "./bookLock";
 import {
   bookFileName,
-  markBookClosed,
-  rememberBook,
+  rememberRecentBook,
   titleFromBookPath,
   readFilePreferences,
 } from "./filePrefs";
@@ -185,11 +184,6 @@ export function useBookFile(showNotice: Notice) {
     } catch (error: unknown) {
       noticeRef.current(error, "Could not release the book lock.");
     }
-    try {
-      markBookClosed(localStorage, path);
-    } catch (error: unknown) {
-      noticeRef.current(error, "Could not update the list of open books.");
-    }
     clearBookQuery();
     dropBook();
   }
@@ -210,7 +204,7 @@ export function useBookFile(showNotice: Notice) {
 
   function rememberThisBook(path: string) {
     try {
-      rememberBook(localStorage, path);
+      rememberRecentBook(localStorage, path);
     } catch (error: unknown) {
       noticeRef.current(error, "Could not remember this open book.");
     }

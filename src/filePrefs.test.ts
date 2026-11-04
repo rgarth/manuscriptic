@@ -7,17 +7,13 @@ import {
   booksOnStartup,
   joinNovelPath,
   folderFromBookPath,
-  markBookClosed,
   preferenceDirectoryLabel,
   readFilePreferences,
   presentRecentBooks,
   readRecentBooks,
   recentMenuBooks,
   readLastCompile,
-  rememberBook,
-  rememberOpenBook,
   rememberRecentBook,
-  writeLastProject,
   writeOpenLast,
   writeLastCompile,
   writeSaveDirectory,
@@ -50,9 +46,8 @@ test("an unset preference means Documents, and startup opens nothing until a boo
   const prefs = readFilePreferences(storage);
   assert.equal(prefs.directory, null);
   assert.equal(prefs.openLast, true);
-  assert.equal(prefs.lastProject, null);
   assert.equal(preferenceDirectoryLabel(prefs.directory), "Documents");
-  assert.deepEqual(booksOnStartup(storage, null), { paths: [], openRest: true });
+  assert.equal(booksOnStartup(storage, null), null);
 });
 
 test("a blank or missing folder is Documents, and only an explicit false skips the last books", () => {
@@ -60,15 +55,13 @@ test("a blank or missing folder is Documents, and only an explicit false skips t
     memory({
       "manuscriptic-save-directory": "   ",
       "manuscriptic-open-last": "true",
-      "manuscriptic-last-project": "  ",
     }),
   );
   assert.equal(blank.directory, null);
   assert.equal(blank.openLast, true);
-  assert.equal(blank.lastProject, null);
   const storage = memory({ "manuscriptic-open-last": "false" });
   assert.equal(readFilePreferences(storage).openLast, false);
-  assert.deepEqual(booksOnStartup(storage, null), { paths: [], openRest: false });
+  assert.equal(booksOnStartup(storage, null), null);
 });
 
 test("the chosen folder is where open and save as start", () => {
@@ -97,46 +90,20 @@ test("a file name keeps the title and drops characters a folder cannot hold", ()
   assert.equal(titleFromBookPath("C:\\Users\\me\\Documents\\Castus.manuscriptic"), "Castus");
 });
 
-test("startup opens the requested book alone, or every remembered book", () => {
+test("startup opens the requested book, or the most recent one", () => {
   const storage = memory();
-  writeLastProject(storage, "/Users/me/Novels/Castus.manuscriptic");
-  assert.deepEqual(booksOnStartup(storage, null), {
-    paths: ["/Users/me/Novels/Castus.manuscriptic"],
-    openRest: true,
-  });
-  assert.deepEqual(booksOnStartup(storage, "/Volumes/Stick/Other.manuscriptic"), {
-    paths: ["/Volumes/Stick/Other.manuscriptic"],
-    openRest: false,
-  });
+  rememberRecentBook(storage, "/Users/me/Novels/Harbor.manuscriptic");
+  rememberRecentBook(storage, "/Users/me/Novels/Castus.manuscriptic");
+  assert.equal(booksOnStartup(storage, null), "/Users/me/Novels/Castus.manuscriptic");
+  assert.equal(booksOnStartup(storage, "/Volumes/Stick/Other.manuscriptic"), "/Volumes/Stick/Other.manuscriptic");
   writeOpenLast(storage, false);
-  assert.deepEqual(booksOnStartup(storage, null), { paths: [], openRest: false });
+  assert.equal(booksOnStartup(storage, null), null);
 });
 
-test("closing one book leaves the others for the next launch", () => {
+test("the most recent book is what startup opens", () => {
   const storage = memory();
-  rememberOpenBook(storage, "/Users/me/Novels/Castus.manuscriptic");
-  rememberOpenBook(storage, "/Users/me/Novels/Harbor.manuscriptic");
-  markBookClosed(storage, "/Users/me/Novels/Harbor.manuscriptic");
-  assert.deepEqual(booksOnStartup(storage, null), {
-    paths: ["/Users/me/Novels/Castus.manuscriptic"],
-    openRest: true,
-  });
-});
-
-test("closing the last book leaves the landing page for the next launch", () => {
-  const storage = memory();
-  rememberOpenBook(storage, "/Users/me/Novels/Castus.manuscriptic");
-  markBookClosed(storage, "/Users/me/Novels/Castus.manuscriptic");
-  assert.deepEqual(booksOnStartup(storage, null), { paths: [], openRest: true });
-});
-
-test("remembering a book records it as open and recent, and closing leaves it recent", () => {
-  const storage = memory();
-  rememberBook(storage, "/Users/me/Novels/Castus.manuscriptic");
-  assert.deepEqual(booksOnStartup(storage, null).paths, ["/Users/me/Novels/Castus.manuscriptic"]);
-  assert.deepEqual(readRecentBooks(storage), ["/Users/me/Novels/Castus.manuscriptic"]);
-  markBookClosed(storage, "/Users/me/Novels/Castus.manuscriptic");
-  assert.deepEqual(booksOnStartup(storage, null).paths, []);
+  rememberRecentBook(storage, "/Users/me/Novels/Castus.manuscriptic");
+  assert.equal(booksOnStartup(storage, null), "/Users/me/Novels/Castus.manuscriptic");
   assert.deepEqual(readRecentBooks(storage), ["/Users/me/Novels/Castus.manuscriptic"]);
 });
 
@@ -166,8 +133,6 @@ test("recent books keep the last ten paths, and a missing file is dropped", asyn
   rememberRecentBook(storage, "/Users/me/Novels/Book 2.manuscriptic");
   assert.equal(readRecentBooks(storage)[0], "/Users/me/Novels/Book 2.manuscriptic");
   assert.equal(readRecentBooks(storage).length, 10);
-  markBookClosed(storage, "/Users/me/Novels/Book 2.manuscriptic");
-  assert.equal(readRecentBooks(storage)[0], "/Users/me/Novels/Book 2.manuscriptic");
   assert.equal(folderFromBookPath("/Users/me/Novels/Book 2.manuscriptic"), "/Users/me/Novels");
   const shown = await presentRecentBooks(storage, async (path) => path !== "/Users/me/Novels/Book 2.manuscriptic");
   assert.deepEqual(

@@ -1,7 +1,6 @@
 export type FilePreferences = {
   directory: string | null;
   openLast: boolean;
-  lastProject: string | null;
 };
 
 export type PrefStorage = {
@@ -12,8 +11,6 @@ export type PrefStorage = {
 
 const directoryKey = "manuscriptic-save-directory";
 const openLastKey = "manuscriptic-open-last";
-const lastProjectKey = "manuscriptic-last-project";
-const openBooksKey = "manuscriptic-open-books";
 const recentBooksKey = "manuscriptic-recent-books";
 const lastCompileKey = "manuscriptic-last-compile";
 const snapshotMinutesKey = "manuscriptic-snapshot-minutes";
@@ -23,7 +20,6 @@ export function readFilePreferences(storage: PrefStorage): FilePreferences {
   return {
     directory: clean(storage.getItem(directoryKey)),
     openLast: storage.getItem(openLastKey) !== "false",
-    lastProject: clean(storage.getItem(lastProjectKey)),
   };
 }
 
@@ -35,51 +31,18 @@ export function writeOpenLast(storage: PrefStorage, openLast: boolean): void {
   storage.setItem(openLastKey, openLast ? "true" : "false");
 }
 
-export function writeLastProject(storage: PrefStorage, path: string | null): void {
-  store(storage, lastProjectKey, clean(path));
-}
-
 export function preferenceDirectoryLabel(directory: string | null): string {
   return clean(directory) ?? "Documents";
 }
 
-export function readOpenBooks(storage: PrefStorage): string[] {
-  const raw = storage.getItem(openBooksKey);
-  if (!raw) {
-    const last = clean(storage.getItem(lastProjectKey));
-    return last ? [last] : [];
-  }
-  const parsed: unknown = JSON.parse(raw);
-  if (!Array.isArray(parsed)) {
-    throw new Error("The list of open books could not be read.");
-  }
-  return parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-}
-
-export function rememberOpenBook(storage: PrefStorage, path: string): void {
-  const books = readOpenBooks(storage).filter((item) => item !== path);
-  books.push(path);
-  storage.setItem(openBooksKey, JSON.stringify(books));
-}
-
-export type StartupBooks = {
-  paths: string[];
-  openRest: boolean;
-};
-
-export function booksOnStartup(storage: PrefStorage, requested: string | null): StartupBooks {
+export function booksOnStartup(storage: PrefStorage, requested: string | null): string | null {
   if (requested) {
-    return { paths: [requested], openRest: false };
+    return requested;
   }
   if (!readFilePreferences(storage).openLast) {
-    return { paths: [], openRest: false };
+    return null;
   }
-  return { paths: readOpenBooks(storage), openRest: true };
-}
-
-export function markBookClosed(storage: PrefStorage, path: string): void {
-  const remaining = readOpenBooks(storage).filter((item) => item !== path);
-  storage.setItem(openBooksKey, JSON.stringify(remaining));
+  return readRecentBooks(storage)[0] ?? null;
 }
 
 export function readRecentBooks(storage: PrefStorage): string[] {
@@ -160,15 +123,6 @@ export function writeLastCompile(storage: PrefStorage, path: string | null, targ
   const targets = compileTargets(storage);
   targets[book] = { presetId: target.presetId, kind: target.kind };
   storage.setItem(lastCompileKey, JSON.stringify(targets));
-}
-
-export function rememberBook(storage: PrefStorage, path: string): void {
-  const cleanPath = path.trim();
-  if (!cleanPath) {
-    return;
-  }
-  rememberOpenBook(storage, cleanPath);
-  rememberRecentBook(storage, cleanPath);
 }
 
 export const snapshotMinuteChoices = [0, 5, 15, 60] as const;

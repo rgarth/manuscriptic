@@ -6,7 +6,7 @@ import { insertScene, insertSection } from "./binderActions";
 import { commands, registerCommands } from "./commands";
 import Desk, { Gate, preloadSceneEditor, type DeskDialog } from "./Desk";
 import Settings from "./Settings";
-import { booksOnStartup, markBookClosed, readSnapshotMinutes, type SnapshotMinutes } from "./filePrefs";
+import { booksOnStartup, readSnapshotMinutes, type SnapshotMinutes } from "./filePrefs";
 import { menuCommand, type MenuCommand } from "./menuCommand";
 import { pageKey } from "./menuPlan";
 import { removal } from "./model/binder";
@@ -14,7 +14,7 @@ import { leafAction } from "./model/project";
 import { launchBooks } from "./storage";
 import { useBookFile } from "./useBookFile";
 import { useNotice } from "./useNotice";
-import { bookQuery, openBookWindow, tauriAvailable, windowClose } from "./windows";
+import { bookQuery, tauriAvailable, windowClose } from "./windows";
 import "./App.css";
 import "./editor.css";
 
@@ -68,8 +68,7 @@ export default function App() {
         if (cancelled) {
           return;
         }
-        const paths = launched.length > 0 ? launched : booksOnStartup(localStorage, query).paths;
-        const first = paths[0];
+        const first = launched[0] ?? booksOnStartup(localStorage, query);
         if (!first) {
           file.markReady();
           return;
@@ -80,17 +79,6 @@ export default function App() {
         } catch {
           if (!cancelled) {
             file.markReady();
-          }
-          return;
-        }
-        if (cancelled) {
-          return;
-        }
-        for (const path of paths.slice(1)) {
-          try {
-            await openBookWindow(path, path);
-          } catch {
-            // A remembered book can be moved or not yet on disk.
           }
         }
       } catch {
@@ -346,24 +334,6 @@ export default function App() {
       window.clearInterval(timer);
     };
   }, [snapshotMinutes, project]);
-
-  useEffect(() => {
-    if (!file.filePath) {
-      return;
-    }
-    const path = file.filePath;
-    function onHide() {
-      try {
-        markBookClosed(localStorage, path);
-      } catch (error: unknown) {
-        showNotice(error, "Could not update the list of open books.");
-      }
-    }
-    window.addEventListener("pagehide", onHide);
-    return () => {
-      window.removeEventListener("pagehide", onHide);
-    };
-  }, [file.filePath]);
 
   const gateSettings = dialog === "settings" ? (
     <Settings onClose={() => setDialog(null)} />
