@@ -75,16 +75,26 @@ export default function App() {
           return;
         }
         preloadSceneEditor();
-        await file.loadBook(first);
+        try {
+          await file.loadBook(first);
+        } catch {
+          if (!cancelled) {
+            file.markReady();
+          }
+          return;
+        }
         if (cancelled) {
           return;
         }
         for (const path of paths.slice(1)) {
-          await openBookWindow(path, path);
+          try {
+            await openBookWindow(path, path);
+          } catch {
+            // A remembered book can be moved or not yet on disk.
+          }
         }
-      } catch (error: unknown) {
+      } catch {
         if (!cancelled) {
-          showNotice(error, "Could not open the project.");
           file.markReady();
         }
       }
