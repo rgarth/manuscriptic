@@ -292,6 +292,11 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
+.compile-blank {
+  margin: 0;
+  color: var(--ink);
+}
+
 .gate-actions {
   display: flex;
   gap: 8px;

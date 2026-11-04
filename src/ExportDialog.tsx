@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { firstPreset, resolvedCompilePreferences } from "./bookCompile.ts";
+import { useMemo, useState } from "react";
+import { firstPreset, resolvedCompilePreferences, type CompilePreset } from "./bookCompile.ts";
 import { buildCompile, type CompileDocument } from "./compileShape.ts";
 import { readCompileIdentity } from "./compilePrefs.ts";
 import { compileDocx } from "./docx.ts";
@@ -51,16 +51,19 @@ export default function ExportDialog({
   const [kind, setKind] = useState<ExportKind>(() => readLastCompile(localStorage, filePath)?.kind ?? "docx");
   const preset = project.compile.presets.find((item) => item.id === presetId) ?? firstPreset(project.compile);
   const format = formats[kind];
+  const compiled = useMemo(() => {
+    try {
+      return compileDocument(project, preset);
+    } catch {
+      return null;
+    }
+  }, [project, preset]);
 
   async function compile() {
-    let preferences;
-    try {
-      preferences = resolvedCompilePreferences(project.compile, readCompileIdentity(localStorage), preset);
-    } catch (error: unknown) {
-      reportFailure(error, "Author information could not be read.");
+    if (!compiled) {
+      reportFailure("Author information could not be read.", "Author information could not be read.");
       return;
     }
-    const compiled = buildCompile(project, preset, preferences, new Date().getFullYear());
     if (!compiled.hasDocument) {
       reportFailure("Nothing is selected, so nothing was written.", "Nothing is selected, so nothing was written.");
       return;
@@ -76,10 +79,6 @@ export default function ExportDialog({
         return;
       }
       await writeExport(exportPath(picked, format.extension), bytes);
-      if (compiled.missing.length > 0) {
-        const names = compiled.missing.join(", ");
-        reportFailure(`Left blank: ${names}.`, `Left blank: ${names}.`);
-      }
       onClose();
     } catch (error: unknown) {
       reportFailure(error, "Could not write the compiled file.");
@@ -128,6 +127,9 @@ export default function ExportDialog({
               </select>
             </label>
           </div>
+          {compiled && compiled.missing.length > 0 ? (
+            <p className="compile-blank">{emptyTokens(compiled.missing)}</p>
+          ) : null}
           <div className="dialog-actions">
             <button type="button" onClick={() => void compile()} disabled={busy}>
               Compile
@@ -137,4 +139,21 @@ export default function ExportDialog({
       </div>
     </div>
   );
+}
+
+function emptyTokens(names: readonly string[]): string {
+  const tokens = names.map((name) => `{$${name}}`);
+  if (tokens.length === 1) {
+    return `The manuscript contains ${tokens[0]}, which is empty.`;
+  }
+  const list =
+    tokens.length === 2
+      ? `${tokens[0]} and ${tokens[1]}`
+      : `${tokens.slice(0, -1).join(", ")}, and ${tokens[tokens.length - 1]}`;
+  return `The manuscript contains ${list}, which are empty.`;
+}
+
+function compileDocument(project: ProjectFile, preset: CompilePreset): CompileDocument {
+  const preferences = resolvedCompilePreferences(project.compile, readCompileIdentity(localStorage), preset);
+  return buildCompile(project, preset, preferences, new Date().getFullYear());
 }
