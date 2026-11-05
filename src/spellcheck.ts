@@ -6,9 +6,12 @@ import type { EditorView } from "@tiptap/pm/view";
 import { wordAt, wordsIn } from "./dictionary.ts";
 import { reportFailure } from "./failures.ts";
 
-export const dictionarySpellcheckKey = new PluginKey<Set<string>>("project-dictionary");
+type DictionaryState = { known: Set<string>; marks: DecorationSet };
+
+export const dictionarySpellcheckKey = new PluginKey<DictionaryState>("project-dictionary");
 
 const spellingMarksKey = new PluginKey<DecorationSet>("spelling-marks");
+const rebuildDictionaryMarks = "rebuild-dictionary-marks";
 
 export type SpellingRange = { from: number; to: number };
 
@@ -60,49 +63,59 @@ export const projectDictionary = Extension.create({
   },
 });
 
-export function projectDictionaryPlugin(): Plugin<Set<string>> {
-  return new Plugin<Set<string>>({
+export function projectDictionaryPlugin(): Plugin<DictionaryState> {
+  return new Plugin<DictionaryState>({
     key: dictionarySpellcheckKey,
     state: {
       init() {
-        return new Set<string>();
+        return { known: new Set<string>(), marks: DecorationSet.empty };
       },
-      apply(tr, value) {
-        const next: unknown = tr.getMeta(dictionarySpellcheckKey);
-        if (!Array.isArray(next)) {
+      apply(tr, value, _old, state) {
+        const incoming = knownWords(tr.getMeta(dictionarySpellcheckKey));
+        const known = incoming ?? value.known;
+        if (incoming || tr.getMeta(rebuildDictionaryMarks)) {
+          return { known, marks: dictionaryMarks(state.doc, known) };
+        }
+        if (!tr.docChanged || known.size === 0) {
           return value;
         }
-        return new Set(
-          next
-            .filter((word): word is string => typeof word === "string")
-            .map((word) => word.toLocaleLowerCase()),
-        );
+        return { known, marks: value.marks.map(tr.mapping, state.doc) };
       },
     },
     props: {
       decorations(state) {
-        const known = dictionarySpellcheckKey.getState(state);
-        if (!known || known.size === 0) {
-          return DecorationSet.empty;
-        }
-        const decorations: Decoration[] = [];
-        state.doc.descendants((node, pos) => {
-          if (!node.isText || !node.text) {
-            return;
-          }
-          for (const found of wordsIn(node.text)) {
-            if (!known.has(found.word.toLocaleLowerCase())) {
-              continue;
-            }
-            decorations.push(
-              Decoration.inline(pos + found.from, pos + found.to, { spellcheck: "false" }),
-            );
-          }
-        });
-        return DecorationSet.create(state.doc, decorations);
+        return dictionarySpellcheckKey.getState(state)?.marks ?? DecorationSet.empty;
       },
     },
   });
+}
+
+function knownWords(value: unknown): Set<string> | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  return new Set(
+    value.filter((word): word is string => typeof word === "string").map((word) => word.toLocaleLowerCase()),
+  );
+}
+
+function dictionaryMarks(doc: ProseNode, known: ReadonlySet<string>): DecorationSet {
+  if (known.size === 0) {
+    return DecorationSet.empty;
+  }
+  const decorations: Decoration[] = [];
+  doc.descendants((node, pos) => {
+    if (!node.isText || !node.text) {
+      return;
+    }
+    for (const found of wordsIn(node.text)) {
+      if (!known.has(found.word.toLocaleLowerCase())) {
+        continue;
+      }
+      decorations.push(Decoration.inline(pos + found.from, pos + found.to, { spellcheck: "false" }));
+    }
+  });
+  return decorations.length > 0 ? DecorationSet.create(doc, decorations) : DecorationSet.empty;
 }
 
 function spellingMarksPlugin(): Plugin<DecorationSet> {
@@ -126,7 +139,7 @@ function spellingMarksPlugin(): Plugin<DecorationSet> {
     props: {
       decorations(state) {
         const marks = spellingMarksKey.getState(state) ?? DecorationSet.empty;
-        const known = dictionarySpellcheckKey.getState(state);
+        const known = dictionarySpellcheckKey.getState(state)?.known;
         if (!known || known.size === 0) {
           return marks;
         }
@@ -140,23 +153,30 @@ function spellingMarksPlugin(): Plugin<DecorationSet> {
     view() {
       let timer = 0;
       let generation = 0;
-      let pending = "";
+      let retry = false;
       let reported = false;
       return {
-        update(view) {
-          const collected = spellingText(view.state.doc);
-          if (collected.joined === pending) {
+        update(view, previous) {
+          const changed = !view.state.doc.eq(previous.doc);
+          if (!changed && !retry) {
             return;
           }
-          pending = collected.joined;
+          if (changed) {
+            retry = false;
+          }
           window.clearTimeout(timer);
           const gen = ++generation;
-          const joined = collected.joined;
           timer = window.setTimeout(() => {
+            if (view.isDestroyed) {
+              return;
+            }
+            const collected = spellingText(view.state.doc);
+            const joined = collected.joined;
             void requestMisspellings(joined)
               .then((ranges) => {
                 reported = false;
-                if (gen !== generation) {
+                retry = false;
+                if (gen !== generation || view.isDestroyed) {
                   return;
                 }
                 const current = spellingText(view.state.doc);
@@ -167,14 +187,16 @@ function spellingMarksPlugin(): Plugin<DecorationSet> {
                   Decoration.inline(range.from, range.to, { class: "misspelled" }),
                 );
                 view.dispatch(
-                  view.state.tr.setMeta(spellingMarksKey, DecorationSet.create(view.state.doc, decorations)),
+                  view.state.tr
+                    .setMeta(spellingMarksKey, DecorationSet.create(view.state.doc, decorations))
+                    .setMeta(rebuildDictionaryMarks, true),
                 );
               })
               .catch((error: unknown) => {
                 if (gen !== generation) {
                   return;
                 }
-                pending = "";
+                retry = true;
                 if (reported) {
                   return;
                 }
@@ -223,7 +245,7 @@ export function isMisspelled(view: EditorView, from: number, to: number): boolea
   if (!marks || !marks.find(from, to).some((range) => range.from < to && range.to > from)) {
     return false;
   }
-  const known = dictionarySpellcheckKey.getState(view.state);
+  const known = dictionarySpellcheckKey.getState(view.state)?.known;
   if (!known) {
     return true;
   }

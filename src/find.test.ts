@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { EditorState } from "@tiptap/pm/state";
 import { addLeaf, addSection } from "./model/binder.ts";
 import type { EditorDoc, TextRun } from "./model/editorDoc.ts";
 import { createNovelProject, documentNode, findNode, setDocumentContent, setView } from "./model/project.ts";
@@ -13,7 +14,10 @@ import {
   replaceAllInProject,
   replaceHit,
   selectDocument,
+  spliceDocumentHits,
+  stepAfterReplace,
 } from "./find.ts";
+import { findMarksKey, findMarksPlugin } from "./findView.ts";
 
 function paragraph(text: string, marks?: TextRun["marks"]): EditorDoc {
   return {
@@ -180,6 +184,105 @@ test("all documents skips the trash, and this document stays on the open one", (
   }
   const order = documentsIn(project, "book", scene.id).map((doc) => doc.id);
   assert.equal(hitIndexAfter(book, order, scene.id, book[0] ? book[0].to : 0), 1);
+});
+
+test("refreshing the open scene leaves the other results where they were", () => {
+  const scene = documentNode("Opening", "scene", paragraph("qxcat in the scene"));
+  const note = documentNode("Villain", "note", paragraph("qxcat in the note"));
+  const stored = hitsInProject(
+    {
+      ...createNovelProject(),
+      manuscript: { ...createNovelProject().manuscript, children: [scene] },
+      notes: { ...createNovelProject().notes, children: [note] },
+    },
+    "book",
+    scene.id,
+    "qxcat",
+    false,
+  );
+  const noteHit = stored.find((hit) => hit.documentId === note.id);
+  const order = [scene.id, note.id];
+  const edited = spliceDocumentHits(
+    stored,
+    scene.id,
+    [
+      { documentId: scene.id, title: scene.title, from: 1, to: 6 },
+      { documentId: scene.id, title: scene.title, from: 13, to: 18 },
+    ],
+    "book",
+    order,
+  );
+  assert.equal(
+    edited.find((hit) => hit.documentId === note.id),
+    noteHit,
+  );
+  assert.equal(edited.filter((hit) => hit.documentId === scene.id).length, 2);
+  assert.deepEqual(
+    edited.map((hit) => hit.documentId),
+    [scene.id, scene.id, note.id],
+  );
+});
+
+test("replace rewrites that scene and leaves the other results", () => {
+  let project = createNovelProject();
+  const scene = documentNode("Opening", "scene", paragraph("qxcat in the scene"));
+  const note = documentNode("Villain", "note", paragraph("qxcat in the note"));
+  project = {
+    ...project,
+    manuscript: { ...project.manuscript, children: [scene] },
+    notes: { ...project.notes, children: [...project.notes.children, note] },
+    view: { ...project.view, selectedId: scene.id },
+  };
+  const hits = hitsInProject(project, "book", scene.id, "qxcat", false);
+  const sceneHit = hits.find((hit) => hit.documentId === scene.id);
+  const noteHit = hits.find((hit) => hit.documentId === note.id);
+  assert.ok(sceneHit);
+  const step = stepAfterReplace(project, hits, sceneHit, "dog", "qxcat", false, "book");
+  assert.ok(step);
+  assert.equal(
+    step.hits.find((hit) => hit.documentId === note.id),
+    noteHit,
+  );
+  assert.equal(step.hits.some((hit) => hit.documentId === scene.id), false);
+  const updated = findNode(step.project, scene.id);
+  assert.equal(updated?.node.kind, "document");
+  if (updated?.node.kind === "document") {
+    assert.equal(hitsInDoc(updated.node.content, "dog", false).length, 1);
+  }
+});
+
+test("a keystroke moves the open find instead of searching the scene again", () => {
+  const plugin = findMarksPlugin();
+  let state = EditorState.create({
+    schema: editorSchema,
+    doc: editorSchema.nodeFromJSON(paragraph("say cat")),
+    plugins: [plugin],
+  });
+  state = state.apply(
+    state.tr.setMeta(findMarksKey, {
+      query: "cat",
+      matchCase: false,
+      from: null,
+      to: null,
+      hits: [{ from: 5, to: 8 }],
+    }),
+  );
+  assert.equal(findMarksKey.getState(state)?.decorations.find().length, 1);
+  state = state.apply(state.tr.insertText("cat ", 1));
+  assert.equal(findMarksKey.getState(state)?.decorations.find().length, 1);
+  state = state.apply(
+    state.tr.setMeta(findMarksKey, {
+      query: "cat",
+      matchCase: false,
+      from: null,
+      to: null,
+      hits: [
+        { from: 1, to: 4 },
+        { from: 9, to: 12 },
+      ],
+    }),
+  );
+  assert.equal(findMarksKey.getState(state)?.decorations.find().length, 2);
 });
 
 test("opening a match expands the section that holds it", () => {

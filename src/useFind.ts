@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { registerCommands } from "./commands.ts";
 import {
+  documentHits,
   documentsIn,
   hitsInProject,
+  keptFindIndex,
   preferOpen,
   replaceAllInProject,
+  sameFindHits,
   selectDocument,
+  spliceDocumentHits,
   stepAfterReplace,
   type BookHit,
   type FindScope,
@@ -13,7 +17,10 @@ import {
 import type { FindBarProps } from "./FindBar.tsx";
 import type { FindEditorState } from "./findView.ts";
 import { findKey } from "./menuPlan.ts";
-import type { ProjectFile } from "./model/project.ts";
+import type { EditorDoc } from "./model/editorDoc.ts";
+import { findNode, type ProjectFile } from "./model/project.ts";
+
+const noHits: { from: number; to: number }[] = [];
 
 type FindSession = {
   open: boolean;
@@ -36,10 +43,10 @@ export function useFind(
   const [reveal, setReveal] = useState(0);
   const [focusToken, setFocusToken] = useState(0);
   const selectedId = project.view.selectedId;
-  const hits = useMemo(
-    () => hitsInProject(project, scope, selectedId, query, matchCase),
-    [project, scope, selectedId, query, matchCase],
-  );
+  const located = selectedId ? findNode(project, selectedId) : null;
+  const openContent = located?.node.kind === "document" ? located.node.content : null;
+  const openTitle = located?.node.kind === "document" ? located.node.title : "";
+  const [hits, setHits] = useState<BookHit[]>([]);
   const safeActive = hits.length === 0 ? 0 : Math.min(Math.max(active, 0), hits.length - 1);
   const activeHit = hits[safeActive] ?? null;
   const latest = useRef({
@@ -68,12 +75,40 @@ export function useFind(
     project,
     onProject,
   };
+  const seenScene = useRef<{ id: string | null; content: EditorDoc | null }>({ id: null, content: null });
+  useEffect(() => {
+    const previous = seenScene.current;
+    seenScene.current = { id: selectedId, content: openContent };
+    if (!selectedId || !openContent || previous.id !== selectedId || previous.content === openContent) {
+      return;
+    }
+    const id = selectedId;
+    const content = openContent;
+    const title = openTitle;
+    const frame = requestAnimationFrame(() => {
+      const current = latest.current;
+      if (!current.open || current.query.length === 0 || current.selectedId !== id) {
+        return;
+      }
+      const found = documentHits(id, title, content, current.query, current.matchCase);
+      const order =
+        current.scope === "document" ? [id] : documentsIn(current.project, "book", id).map((doc) => doc.id);
+      const merged = spliceDocumentHits(current.hits, id, found, current.scope, order);
+      if (sameFindHits(current.hits, merged)) {
+        return;
+      }
+      setHits(merged);
+      setActive(keptFindIndex(current.hits, merged, current.safeActive));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedId, openContent]);
 
   function bump() {
     setReveal((value) => value + 1);
   }
 
   function place(nextHits: BookHit[]) {
+    setHits(nextHits);
     setActive(preferOpen(nextHits, latest.current.selectedId));
     bump();
   }
@@ -97,17 +132,9 @@ export function useFind(
     if (expand) {
       setReplace(true);
     }
-    const nextHits = hitsInProject(
-      current.project,
-      current.scope,
-      current.selectedId,
-      nextQuery,
-      current.matchCase,
-    );
-    setActive(preferOpen(nextHits, current.selectedId));
+    place(hitsInProject(current.project, current.scope, current.selectedId, nextQuery, current.matchCase));
     setOpen(true);
     setFocusToken((value) => value + 1);
-    bump();
   }
 
   function move(delta: number) {
@@ -150,7 +177,15 @@ export function useFind(
     }
     const moved: { step: NonNullable<ReturnType<typeof stepAfterReplace>> | null } = { step: null };
     current.onProject((book) => {
-      const next = stepAfterReplace(book, hit, current.replacement, current.query, current.matchCase, current.scope);
+      const next = stepAfterReplace(
+        book,
+        current.hits,
+        hit,
+        current.replacement,
+        current.query,
+        current.matchCase,
+        current.scope,
+      );
       moved.step = next;
       return next?.project ?? book;
     });
@@ -158,6 +193,7 @@ export function useFind(
     if (!step) {
       return;
     }
+    setHits(step.hits);
     if (step.index < 0) {
       setActive(0);
       return;
@@ -172,8 +208,9 @@ export function useFind(
     if (!current.query || current.hits.length === 0) {
       return;
     }
+    const replaced: { project: ProjectFile } = { project: current.project };
     current.onProject((book) => {
-      const replaced = replaceAllInProject(
+      const next = replaceAllInProject(
         book,
         current.scope,
         book.view.selectedId,
@@ -181,8 +218,10 @@ export function useFind(
         current.replacement,
         current.matchCase,
       );
-      return replaced.project;
+      replaced.project = next.project;
+      return next.project;
     });
+    setHits(hitsInProject(replaced.project, current.scope, current.selectedId, current.query, current.matchCase));
     setActive(0);
   }
 
@@ -246,6 +285,18 @@ export function useFind(
   }, []);
 
   const shown = open && activeHit?.documentId === selectedId ? activeHit : null;
+  const sceneHits = useMemo(() => {
+    if (!open) {
+      return noHits;
+    }
+    const ranges: { from: number; to: number }[] = [];
+    for (const hit of hits) {
+      if (hit.documentId === selectedId) {
+        ranges.push({ from: hit.from, to: hit.to });
+      }
+    }
+    return ranges;
+  }, [open, hits, selectedId]);
   const documentOpen = documentsIn(project, "document", selectedId).length > 0;
   return {
     open,
@@ -283,6 +334,7 @@ export function useFind(
       matchCase,
       from: shown ? shown.from : null,
       to: shown ? shown.to : null,
+      hits: sceneHits,
       reveal: open ? reveal : 0,
     },
   };

@@ -54,12 +54,17 @@ export function emptyDoc(): EditorDoc {
   return { type: "doc", content: [{ type: "paragraph" }] };
 }
 
+const wordCounts = new WeakMap<EditorDoc, number>();
+
 export function wordCount(doc: EditorDoc): number {
-  const text = docText(doc).trim();
-  if (!text) {
-    return 0;
+  const counted = wordCounts.get(doc);
+  if (counted !== undefined) {
+    return counted;
   }
-  return text.split(/\s+/).length;
+  const text = docText(doc).trim();
+  const count = text ? text.split(/\s+/).length : 0;
+  wordCounts.set(doc, count);
+  return count;
 }
 
 export function parseEditorDoc(value: unknown): EditorDoc | null {

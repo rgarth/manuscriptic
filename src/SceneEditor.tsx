@@ -68,6 +68,7 @@ export default function SceneEditor({
   find,
 }: SceneEditorProps) {
   const [wordMenu, setWordMenu] = useState<WordMenu | null>(null);
+  const published = useRef<EditorDoc | null>(null);
   const editor = useEditor({
     extensions,
     content,
@@ -117,18 +118,17 @@ export default function SceneEditor({
         reportFailure("This scene could not be recorded.", "This scene could not be recorded.");
         return;
       }
+      published.current = parsed;
       onContent(parsed);
     },
   });
   useLayoutEffect(() => {
-    if (!editor || editor.isDestroyed) {
+    if (!editor || editor.isDestroyed || content === published.current) {
       return;
     }
+    published.current = content;
     const current = parseEditorDoc(editor.getJSON());
-    if (!current) {
-      return;
-    }
-    if (JSON.stringify(current) === JSON.stringify(content)) {
+    if (current && JSON.stringify(current) === JSON.stringify(content)) {
       return;
     }
     editor.commands.setContent(content, { emitUpdate: false });
@@ -144,10 +144,11 @@ export default function SceneEditor({
           matchCase: find.matchCase,
           from: find.from,
           to: find.to,
+          hits: find.hits,
         })
         .setMeta("addToHistory", false),
     );
-  }, [editor, find.query, find.matchCase, find.from, find.to]);
+  }, [editor, find.query, find.matchCase, find.from, find.to, find.hits]);
   const revealed = useRef(0);
   useLayoutEffect(() => {
     if (!editor || editor.isDestroyed || find.reveal === 0 || find.reveal === revealed.current) {

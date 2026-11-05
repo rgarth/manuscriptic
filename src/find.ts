@@ -120,11 +120,99 @@ export function hitsInProject(
 ): BookHit[] {
   const hits: BookHit[] = [];
   for (const doc of documentsIn(project, scope, selectedId)) {
-    for (const hit of hitsInDoc(doc.content, query, matchCase)) {
-      hits.push({ documentId: doc.id, title: doc.title, ...hit });
-    }
+    hits.push(...documentHits(doc.id, doc.title, doc.content, query, matchCase));
   }
   return hits;
+}
+
+export function documentHits(
+  documentId: string,
+  title: string,
+  content: EditorDoc,
+  query: string,
+  matchCase: boolean,
+): BookHit[] {
+  return hitsInDoc(content, query, matchCase).map((hit) => ({ documentId, title, ...hit }));
+}
+
+export function spliceDocumentHits(
+  hits: readonly BookHit[],
+  documentId: string,
+  next: readonly BookHit[],
+  scope: FindScope,
+  order: readonly string[],
+): BookHit[] {
+  if (scope === "document") {
+    return [...next];
+  }
+  const grouped = new Map<string, BookHit[]>();
+  for (const hit of hits) {
+    if (hit.documentId === documentId) {
+      continue;
+    }
+    const list = grouped.get(hit.documentId);
+    if (list) {
+      list.push(hit);
+    } else {
+      grouped.set(hit.documentId, [hit]);
+    }
+  }
+  if (next.length > 0) {
+    grouped.set(documentId, [...next]);
+  }
+  const merged: BookHit[] = [];
+  const seen = new Set<string>();
+  for (const id of order) {
+    seen.add(id);
+    const list = grouped.get(id);
+    if (list) {
+      merged.push(...list);
+    }
+  }
+  for (const [id, list] of grouped) {
+    if (!seen.has(id)) {
+      merged.push(...list);
+    }
+  }
+  return merged;
+}
+
+export function sameFindHits(left: readonly BookHit[], right: readonly BookHit[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index];
+    const b = right[index];
+    if (a.documentId !== b.documentId || a.from !== b.from || a.to !== b.to) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function keptFindIndex(before: readonly BookHit[], after: readonly BookHit[], index: number): number {
+  const hit = before[index];
+  if (!hit || after.length === 0) {
+    return 0;
+  }
+  let nth = 0;
+  for (let cursor = 0; cursor < index; cursor += 1) {
+    if (before[cursor].documentId === hit.documentId) {
+      nth += 1;
+    }
+  }
+  let seen = 0;
+  for (let cursor = 0; cursor < after.length; cursor += 1) {
+    if (after[cursor].documentId !== hit.documentId) {
+      continue;
+    }
+    if (seen === nth) {
+      return cursor;
+    }
+    seen += 1;
+  }
+  return Math.min(index, after.length - 1);
 }
 
 export function replaceHitInProject(
@@ -167,21 +255,27 @@ export function replaceAllInProject(
 
 export function stepAfterReplace(
   project: ProjectFile,
+  hits: readonly BookHit[],
   hit: BookHit,
   replacement: string,
   query: string,
   matchCase: boolean,
   scope: FindScope,
-): { project: ProjectFile; index: number; hit: BookHit | null } | null {
+): { project: ProjectFile; hits: BookHit[]; index: number; hit: BookHit | null } | null {
   const replaced = replaceHitInProject(project, hit, replacement, query, matchCase);
   if (!replaced) {
     return null;
   }
-  const nextHits = hitsInProject(replaced, scope, replaced.view.selectedId, query, matchCase);
+  const located = findNode(replaced, hit.documentId);
+  if (!located || located.node.kind !== "document") {
+    return null;
+  }
+  const next = documentHits(hit.documentId, located.node.title, located.node.content, query, matchCase);
   const order = documentsIn(replaced, scope, replaced.view.selectedId).map((doc) => doc.id);
-  const index = hitIndexAfter(nextHits, order, hit.documentId, hit.from + replacement.length);
-  const safe = nextHits.length === 0 || index < 0 ? 0 : Math.min(index, nextHits.length - 1);
-  return { project: replaced, index, hit: index < 0 ? null : (nextHits[safe] ?? null) };
+  const merged = spliceDocumentHits(hits, hit.documentId, next, scope, order);
+  const index = hitIndexAfter(merged, order, hit.documentId, hit.from + replacement.length);
+  const safe = merged.length === 0 || index < 0 ? 0 : Math.min(index, merged.length - 1);
+  return { project: replaced, hits: merged, index, hit: index < 0 ? null : (merged[safe] ?? null) };
 }
 
 export function hitIndexAfter(

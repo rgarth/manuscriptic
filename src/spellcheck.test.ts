@@ -39,6 +39,23 @@ test("a project word is left alone by the spellcheck, including a different casi
   assert.deepEqual(marked(["Lyra"], "Hello Castus"), []);
 });
 
+test("typing in another paragraph keeps the project word marked", () => {
+  const plugin = projectDictionaryPlugin();
+  const doc = schema.node("doc", null, [
+    schema.node("paragraph", null, [schema.text("Hello Castus")]),
+    schema.node("paragraph", null, [schema.text("Second")]),
+  ]);
+  let state = EditorState.create({ schema, doc, plugins: [plugin] });
+  state = state.apply(state.tr.setMeta(dictionarySpellcheckKey, ["castus"]));
+  const second = doc.child(0).nodeSize + 1;
+  state = state.apply(state.tr.insertText("x", second));
+  const words = dictionarySpellcheckKey
+    .getState(state)
+    ?.marks.find()
+    .map((decoration) => state.doc.textBetween(decoration.from, decoration.to));
+  assert.deepEqual(words, ["Castus"]);
+});
+
 test("replacing a word keeps the marks on that word", () => {
   const strong = schema.marks.strong.create();
   const doc = schema.node("doc", null, [
