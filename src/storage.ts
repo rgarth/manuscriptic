@@ -34,6 +34,10 @@ export function writeExport(path: string, bytes: Uint8Array): Promise<void> {
   return invoke("write_export", { path, bytes: Array.from(bytes) });
 }
 
+export function openCompiled(path: string): Promise<void> {
+  return invoke("open_compiled", { path });
+}
+
 export function writeBook(
   path: string,
   files: Record<string, string>,

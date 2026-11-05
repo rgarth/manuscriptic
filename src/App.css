@@ -502,6 +502,21 @@ input:focus-visible {
   gap: 8px;
 }
 
+.dialog.compile .compile-open {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: auto;
+  color: var(--ink);
+  font-size: 0.84rem;
+}
+
+.dialog.compile .compile-open input {
+  flex: none;
+  width: auto;
+  margin: 0;
+}
+
 .dialog.compile .dialog-actions button {
   flex: none;
   width: auto;

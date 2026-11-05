@@ -148,10 +148,15 @@ test("the last compile is remembered for that book", () => {
   const bone = "/Users/me/Novels/Bone Eaters.manuscriptic";
   const castus = "/Users/me/Novels/Castus.manuscriptic";
   assert.equal(readLastCompile(storage, bone), null);
-  writeLastCompile(storage, bone, { presetId: "pdf-compile", kind: "pdf" });
-  writeLastCompile(storage, castus, { presetId: "manuscript", kind: "docx" });
-  assert.deepEqual(readLastCompile(storage, bone), { presetId: "pdf-compile", kind: "pdf" });
-  assert.deepEqual(readLastCompile(storage, castus), { presetId: "manuscript", kind: "docx" });
+  writeLastCompile(storage, bone, { presetId: "pdf-compile", kind: "pdf", open: true });
+  writeLastCompile(storage, castus, { presetId: "manuscript", kind: "docx", open: false });
+  assert.deepEqual(readLastCompile(storage, bone), { presetId: "pdf-compile", kind: "pdf", open: true });
+  assert.deepEqual(readLastCompile(storage, castus), { presetId: "manuscript", kind: "docx", open: false });
+  storage.setItem(
+    "manuscriptic-last-compile",
+    JSON.stringify({ [bone]: { presetId: "pdf-compile", kind: "pdf" } }),
+  );
+  assert.equal(readLastCompile(storage, bone)?.open, false);
   assert.equal(readLastCompile(storage, null), null);
   storage.setItem("manuscriptic-last-compile", "{");
   assert.equal(readLastCompile(storage, bone), null);

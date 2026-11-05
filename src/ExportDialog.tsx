@@ -8,7 +8,7 @@ import { bookFileName, exportPath, readFilePreferences, readLastCompile, writeLa
 import type { ProjectFile } from "./model/project.ts";
 import { pickExportSave, resolveDirectory } from "./novelFile.ts";
 import { compilePdf } from "./pdf.ts";
-import { writeExport } from "./storage.ts";
+import { openCompiled, writeExport } from "./storage.ts";
 
 type ExportKind = "docx" | "pdf";
 
@@ -49,6 +49,7 @@ export default function ExportDialog({
   const [busy, setBusy] = useState(false);
   const [presetId, setPresetId] = useState(() => chosenPreset(project, filePath));
   const [kind, setKind] = useState<ExportKind>(() => readLastCompile(localStorage, filePath)?.kind ?? "docx");
+  const [openAfter, setOpenAfter] = useState(() => readLastCompile(localStorage, filePath)?.open ?? false);
   const preset = project.compile.presets.find((item) => item.id === presetId) ?? firstPreset(project.compile);
   const format = formats[kind];
   const compiled = useMemo(() => {
@@ -69,7 +70,7 @@ export default function ExportDialog({
       return;
     }
     const bytes = format.write(compiled);
-    writeLastCompile(localStorage, filePath, { presetId: preset.id, kind });
+    writeLastCompile(localStorage, filePath, { presetId: preset.id, kind, open: openAfter });
     setBusy(true);
     try {
       const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
@@ -78,7 +79,15 @@ export default function ExportDialog({
       if (!picked) {
         return;
       }
-      await writeExport(exportPath(picked, format.extension), bytes);
+      const written = exportPath(picked, format.extension);
+      await writeExport(written, bytes);
+      if (openAfter) {
+        try {
+          await openCompiled(written);
+        } catch (error: unknown) {
+          reportFailure(error, "The file was written, but it could not be opened.");
+        }
+      }
       onClose();
     } catch (error: unknown) {
       reportFailure(error, "Could not write the compiled file.");
@@ -131,6 +140,14 @@ export default function ExportDialog({
             <p className="compile-blank">{emptyTokens(compiled.missing)}</p>
           ) : null}
           <div className="dialog-actions">
+            <label className="compile-open">
+              <input
+                type="checkbox"
+                checked={openAfter}
+                onChange={(event) => setOpenAfter(event.currentTarget.checked)}
+              />
+              Open when compiled
+            </label>
             <button type="button" onClick={() => void compile()} disabled={busy}>
               Compile
             </button>

@@ -101,6 +101,7 @@ export function recentMenuBooks(books: readonly string[], openPath: string | nul
 export type CompileTarget = {
   presetId: string;
   kind: "docx" | "pdf";
+  open: boolean;
 };
 
 export function readLastCompile(storage: PrefStorage, path: string | null): CompileTarget | null {
@@ -121,7 +122,7 @@ export function writeLastCompile(storage: PrefStorage, path: string | null, targ
     return;
   }
   const targets = compileTargets(storage);
-  targets[book] = { presetId: target.presetId, kind: target.kind };
+  targets[book] = { presetId: target.presetId, kind: target.kind, open: target.open };
   storage.setItem(lastCompileKey, JSON.stringify(targets));
 }
 
@@ -188,7 +189,7 @@ function compileTarget(value: unknown): CompileTarget | null {
   if (typeof presetId !== "string" || (kind !== "docx" && kind !== "pdf")) {
     return null;
   }
-  return { presetId, kind };
+  return { presetId, kind, open: "open" in value && value.open === true };
 }
 
 function compileTargets(storage: PrefStorage): Record<string, CompileTarget> {

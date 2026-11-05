@@ -2,6 +2,7 @@ mod book_file;
 mod book_lock;
 mod documents;
 mod fonts;
+mod open_file;
 mod scrivener;
 mod spellcheck;
 
@@ -9,6 +10,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex};
 
 use book_file::{file_exists, read_book, read_history, write_book, write_export};
+use open_file::open_compiled;
 use scrivener::read_scrivener;
 use book_lock::{
     book_is_open, claim_book_lock, holds_book, raise_book_window, refresh_book_lock, release_book_lock,
@@ -44,6 +46,7 @@ pub fn run() {
             read_history,
             write_book,
             write_export,
+            open_compiled,
             file_exists,
             read_scrivener,
             claim_book_lock,
