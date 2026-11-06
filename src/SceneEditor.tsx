@@ -2,7 +2,7 @@ import { TextSelection } from "@tiptap/pm/state";
 import { useEditor, EditorContent, type Editor } from "@tiptap/react";
 import { applyParagraphAlign, documentExtensions, shownParagraphAlign } from "./editorExtensions";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { findMarks, findMarksKey, type FindEditorState } from "./findView.ts";
+import { clearFindHighlights, paintFindHighlights, type FindEditorState } from "./findView.ts";
 import { getEditorPrefs, indentEm, paragraphGap, spacingLine, subscribeEditorPrefs } from "./editorPrefs";
 import { scrollTopForCaret } from "./typewriter";
 import {
@@ -52,7 +52,7 @@ type WordMenu = {
   suggestions: string[];
 };
 
-const extensions = [...documentExtensions, projectDictionary, findMarks];
+const extensions = [...documentExtensions, projectDictionary];
 
 export default function SceneEditor({
   title,
@@ -113,6 +113,7 @@ export default function SceneEditor({
       },
     },
     onUpdate: ({ editor: current }) => {
+      clearFindHighlights();
       const parsed = parseEditorDoc(current.getJSON());
       if (!parsed) {
         reportFailure("This scene could not be recorded.", "This scene could not be recorded.");
@@ -137,18 +138,9 @@ export default function SceneEditor({
     if (!editor || editor.isDestroyed) {
       return;
     }
-    editor.view.dispatch(
-      editor.state.tr
-        .setMeta(findMarksKey, {
-          query: find.query,
-          matchCase: find.matchCase,
-          from: find.from,
-          to: find.to,
-          hits: find.hits,
-        })
-        .setMeta("addToHistory", false),
-    );
-  }, [editor, find.query, find.matchCase, find.from, find.to, find.hits]);
+    paintFindHighlights(editor.view, find.hits, find.from, find.to);
+    return () => clearFindHighlights();
+  }, [editor, find.from, find.to, find.hits]);
   const revealed = useRef(0);
   useLayoutEffect(() => {
     if (!editor || editor.isDestroyed || find.reveal === 0 || find.reveal === revealed.current) {

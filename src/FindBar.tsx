@@ -138,10 +138,10 @@ export default function FindBar({
       ) : null}
       <div className="segmented" role="group" aria-label="Find in">
         <button type="button" aria-pressed={scope === "document"} onClick={() => onScope("document")}>
-          This document
+          This Page
         </button>
         <button type="button" aria-pressed={scope === "book"} onClick={() => onScope("book")}>
-          All documents
+          Whole Document
         </button>
       </div>
     </div>

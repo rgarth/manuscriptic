@@ -15,6 +15,12 @@ import {
 
 export type FindScope = "document" | "book";
 
+/** Wait until a find query has stopped changing before walking the book. */
+export const findPauseMs = 400;
+
+/** One letter matches too much of a book to search on its own. */
+export const findMinChars = 2;
+
 export type FindHit = {
   from: number;
   to: number;
@@ -305,6 +311,25 @@ export function selectDocument(project: ProjectFile, id: string): ProjectFile {
   return setView(project, { selectedId: id, expanded: [...open] });
 }
 
+const noPageHits: { from: number; to: number }[] = [];
+
+/** Matches on the open page. Other pages stay in the result list and off this page. */
+export function pageFindHits(
+  hits: readonly BookHit[],
+  selectedId: string | null,
+): { from: number; to: number }[] {
+  if (!selectedId) {
+    return noPageHits;
+  }
+  const ranges: { from: number; to: number }[] = [];
+  for (const hit of hits) {
+    if (hit.documentId === selectedId) {
+      ranges.push({ from: hit.from, to: hit.to });
+    }
+  }
+  return ranges.length === 0 ? noPageHits : ranges;
+}
+
 export function preferOpen(hits: readonly BookHit[], selectedId: string | null): number {
   if (!selectedId) {
     return 0;
@@ -331,10 +356,34 @@ function collectDocuments(node: BinderNode, docs: DocumentNode[]): void {
 }
 
 function pushMatches(hits: FindHit[], text: string, origin: number, query: string, matchCase: boolean) {
-  if (!text) {
+  if (!text || !query) {
     return;
   }
   const needle = matchCase ? query : query.toLocaleLowerCase();
+  const haystack = matchCase ? text : text.toLocaleLowerCase();
+  if (haystack.length !== text.length || needle.length !== query.length) {
+    pushMatchesBySlice(hits, text, origin, query, needle, matchCase);
+    return;
+  }
+  let index = 0;
+  while (index + needle.length <= haystack.length) {
+    const found = haystack.indexOf(needle, index);
+    if (found < 0) {
+      return;
+    }
+    hits.push({ from: origin + found, to: origin + found + query.length });
+    index = found + needle.length;
+  }
+}
+
+function pushMatchesBySlice(
+  hits: FindHit[],
+  text: string,
+  origin: number,
+  query: string,
+  needle: string,
+  matchCase: boolean,
+) {
   let index = 0;
   while (index + query.length <= text.length) {
     const slice = text.slice(index, index + query.length);

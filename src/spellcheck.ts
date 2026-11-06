@@ -536,31 +536,6 @@ export function wordFromPoint(
   return { word: word.word, from: resolved.start() + word.from, to: resolved.start() + word.to };
 }
 
-const spellcheckReset = new WeakMap<EditorView, number>();
-
-// Find highlights split the scene into spans. After those spans are gone the
-// browser keeps checking that split text, so reset spellcheck once.
-export function releaseBrowserSpellcheck(view: EditorView): void {
-  const dom = view.dom;
-  if (!dom.isContentEditable || !dom.spellcheck) {
-    return;
-  }
-  dom.spellcheck = false;
-  const previous = spellcheckReset.get(view);
-  if (previous !== undefined) {
-    cancelAnimationFrame(previous);
-  }
-  spellcheckReset.set(
-    view,
-    requestAnimationFrame(() => {
-      spellcheckReset.delete(view);
-      if (!view.isDestroyed) {
-        dom.spellcheck = true;
-      }
-    }),
-  );
-}
-
 export function isMisspelled(view: EditorView, from: number, to: number): boolean {
   const marks = spellingMarksKey.getState(view.state)?.marks;
   if (!marks?.find(from, to).some((range) => range.from < to && range.to > from)) {

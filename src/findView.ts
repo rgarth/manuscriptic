@@ -1,8 +1,4 @@
-import { Extension } from "@tiptap/core";
-import type { Node as ProseNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { releaseBrowserSpellcheck } from "./spellcheck.ts";
+import type { EditorView } from "@tiptap/pm/view";
 
 export type FindQuery = {
   query: string;
@@ -16,110 +12,78 @@ export type FindEditorState = FindQuery & {
   reveal: number;
 };
 
-type FindPluginState = FindQuery & {
-  decorations: DecorationSet;
-};
+const matchesName = "find-match";
+const currentName = "find-current";
 
-export const findMarksKey = new PluginKey<FindPluginState>("find-marks");
-
-export const findMarks = Extension.create({
-  name: "findMarks",
-  addProseMirrorPlugins() {
-    return [findMarksPlugin()];
-  },
-});
-
-export function findMarksPlugin(): Plugin<FindPluginState> {
-  return new Plugin<FindPluginState>({
-    key: findMarksKey,
-    state: {
-      init() {
-        return {
-          query: "",
-          matchCase: false,
-          from: null,
-          to: null,
-          hits: [],
-          decorations: DecorationSet.empty,
-        };
-      },
-      apply(tr, value, _old, state) {
-        const incoming = findQuery(tr.getMeta(findMarksKey));
-        if (incoming) {
-          return { ...incoming, decorations: highlight(state.doc, incoming) };
-        }
-        if (!tr.docChanged || !value.query || value.decorations === DecorationSet.empty) {
-          return value;
-        }
-        return { ...value, from: null, to: null, hits: [], decorations: DecorationSet.empty };
-      },
-    },
-    props: {
-      decorations(state) {
-        return findMarksKey.getState(state)?.decorations ?? DecorationSet.empty;
-      },
-    },
-    view() {
-      return {
-        update(view, previous) {
-          const before = findMarksKey.getState(previous)?.decorations;
-          const after = findMarksKey.getState(view.state)?.decorations;
-          if (!before || before === DecorationSet.empty || after !== DecorationSet.empty || before === after) {
-            return;
-          }
-          releaseBrowserSpellcheck(view);
-        },
-      };
-    },
-  });
+export function clearFindHighlights(): void {
+  const registry = highlightRegistry();
+  if (!registry) {
+    return;
+  }
+  registry.delete(matchesName);
+  registry.delete(currentName);
 }
 
-function highlight(doc: ProseNode, query: FindQuery): DecorationSet {
-  if (!query.query || query.hits.length === 0) {
-    return DecorationSet.empty;
+/** Paint matches the way the browser paints a selection: no extra elements in the text. */
+export function paintFindHighlights(
+  view: EditorView,
+  hits: readonly { from: number; to: number }[],
+  from: number | null,
+  to: number | null,
+): void {
+  const registry = highlightRegistry();
+  if (!registry) {
+    return;
   }
-  const max = doc.content.size;
-  const decorations: Decoration[] = [];
-  for (const hit of query.hits) {
+  registry.delete(matchesName);
+  registry.delete(currentName);
+  if (view.isDestroyed || hits.length === 0) {
+    return;
+  }
+  const matches = new Highlight();
+  const current = new Highlight();
+  const max = view.state.doc.content.size;
+  for (const hit of hits) {
     if (hit.from < 0 || hit.to > max || hit.from >= hit.to) {
       continue;
     }
-    decorations.push(
-      Decoration.inline(hit.from, hit.to, {
-        class: hit.from === query.from && hit.to === query.to ? "find-hit current" : "find-hit",
-      }),
-    );
+    const range = textRange(view, hit.from, hit.to);
+    if (!range) {
+      continue;
+    }
+    if (hit.from === from && hit.to === to) {
+      current.add(range);
+    } else {
+      matches.add(range);
+    }
   }
-  return decorations.length > 0 ? DecorationSet.create(doc, decorations) : DecorationSet.empty;
+  if (matches.size > 0) {
+    registry.set(matchesName, matches);
+  }
+  if (current.size > 0) {
+    registry.set(currentName, current);
+  }
 }
 
-function findQuery(value: unknown): FindQuery | null {
-  if (!isRecord(value) || typeof value.query !== "string" || typeof value.matchCase !== "boolean") {
+function highlightRegistry(): HighlightRegistry | null {
+  if (typeof CSS === "undefined" || !("highlights" in CSS)) {
     return null;
   }
-  if (!isPosition(value.from) || !isPosition(value.to) || !Array.isArray(value.hits)) {
-    return null;
-  }
-  const hits: { from: number; to: number }[] = [];
-  for (const hit of value.hits) {
-    if (!isRecord(hit) || typeof hit.from !== "number" || typeof hit.to !== "number") {
+  return CSS.highlights;
+}
+
+function textRange(view: EditorView, from: number, to: number): Range | null {
+  try {
+    const start = view.domAtPos(from);
+    const end = view.domAtPos(to);
+    if (!start.node.isConnected || !end.node.isConnected) {
       return null;
     }
-    hits.push({ from: hit.from, to: hit.to });
+    const range = document.createRange();
+    range.setStart(start.node, start.offset);
+    range.setEnd(end.node, end.offset);
+    return range;
+  } catch {
+    return null;
   }
-  return {
-    query: value.query,
-    matchCase: value.matchCase,
-    from: value.from,
-    to: value.to,
-    hits,
-  };
-}
-
-function isPosition(value: unknown): value is number | null {
-  return value === null || typeof value === "number";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

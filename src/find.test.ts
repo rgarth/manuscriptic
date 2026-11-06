@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir, homedir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { EditorState } from "@tiptap/pm/state";
+import { bookFromFiles, type BookFiles } from "./bookArchive.ts";
 import { addLeaf, addSection } from "./model/binder.ts";
-import type { EditorDoc, TextRun } from "./model/editorDoc.ts";
+import { wordCount, type EditorDoc, type TextRun } from "./model/editorDoc.ts";
 import { createNovelProject, documentNode, findNode, setDocumentContent, setView } from "./model/project.ts";
 import {
   documentsIn,
@@ -16,8 +21,10 @@ import {
   selectDocument,
   spliceDocumentHits,
   stepAfterReplace,
+  findMinChars,
+  findPauseMs,
+  pageFindHits,
 } from "./find.ts";
-import { findMarksKey, findMarksPlugin } from "./findView.ts";
 
 function paragraph(text: string, marks?: TextRun["marks"]): EditorDoc {
   return {
@@ -251,38 +258,39 @@ test("replace rewrites that scene and leaves the other results", () => {
   }
 });
 
-test("a keystroke drops the open find instead of repainting it", () => {
-  const plugin = findMarksPlugin();
+test("a find query waits out a pause, and only the open page is marked", () => {
+  assert.equal(findPauseMs, 400);
+  assert.equal(findMinChars, 2);
+  const scene = { documentId: "scene", title: "Opening", from: 1, to: 4 };
+  const note = { documentId: "note", title: "Villain", from: 2, to: 5 };
+  assert.deepEqual(pageFindHits([scene, note], "scene"), [{ from: 1, to: 4 }]);
+  assert.deepEqual(pageFindHits([scene, note], "note"), [{ from: 2, to: 5 }]);
+  assert.equal(pageFindHits([scene], "missing"), pageFindHits([], null));
+
+  const words = Array.from({ length: 30000 }, (_, index) => (index % 11 === 0 ? "qxcat" : "stone"));
+  let project = createNovelProject();
+  const added = addLeaf(project, project.manuscript.id);
+  project = setDocumentContent(added.project, added.id, paragraph(words.join(" ")));
+  project = setView(project, { selectedId: added.id });
+  const started = performance.now();
+  const hits = hitsInProject(project, "document", added.id, "qxcat", false);
+  const elapsed = performance.now() - started;
+  assert.ok(hits.length > 1000, `expected many matches, got ${hits.length}`);
+  assert.ok(elapsed < 300, `a 30000 word page took ${elapsed.toFixed(0)}ms`);
+  assert.equal(pageFindHits(hits, added.id).length, hits.length);
+  assert.equal(pageFindHits(hits, "other").length, 0);
+
   let state = EditorState.create({
     schema: editorSchema,
-    doc: editorSchema.nodeFromJSON(paragraph("say cat")),
-    plugins: [plugin],
+    doc: editorSchema.nodeFromJSON(paragraph(words.join(" "))),
   });
-  state = state.apply(
-    state.tr.setMeta(findMarksKey, {
-      query: "cat",
-      matchCase: false,
-      from: null,
-      to: null,
-      hits: [{ from: 5, to: 8 }],
-    }),
-  );
-  assert.equal(findMarksKey.getState(state)?.decorations.find().length, 1);
-  state = state.apply(state.tr.insertText("cat ", 1));
-  assert.equal(findMarksKey.getState(state)?.decorations.find().length, 0);
-  state = state.apply(
-    state.tr.setMeta(findMarksKey, {
-      query: "cat",
-      matchCase: false,
-      from: null,
-      to: null,
-      hits: [
-        { from: 1, to: 4 },
-        { from: 9, to: 12 },
-      ],
-    }),
-  );
-  assert.equal(findMarksKey.getState(state)?.decorations.find().length, 2);
+  const typing = performance.now();
+  for (let index = 0; index < 40; index += 1) {
+    state = state.apply(state.tr.insertText("a", 1));
+  }
+  const typed = performance.now() - typing;
+  assert.equal(state.doc.textContent.startsWith("a"), true);
+  assert.ok(typed < 500, `typing took ${typed.toFixed(0)}ms`);
 });
 
 test("opening a match expands the section that holds it", () => {
@@ -295,4 +303,51 @@ test("opening a match expands the section that holds it", () => {
   const opened = selectDocument(project, scene.id);
   assert.equal(opened.view.selectedId, scene.id);
   assert.equal(opened.view.expanded?.includes(section.id), true);
+});
+
+const boneEaters = join(homedir(), "Desktop", "Bone Eaters.manuscriptic");
+
+test("Bone Eaters can be searched without walking it on each letter", { skip: existsSync(boneEaters) ? false : "Desktop copy is not on this machine" }, () => {
+  const dir = mkdtempSync(join(tmpdir(), "bone-eaters-"));
+  try {
+    execFileSync("unzip", ["-o", "-q", boneEaters, "-d", dir]);
+    const files: BookFiles = { "binder.json": readFileSync(join(dir, "binder.json"), "utf8") };
+    for (const name of readdirSync(join(dir, "scenes"))) {
+      files[`scenes/${name}`] = readFileSync(join(dir, "scenes", name), "utf8");
+    }
+    const project = bookFromFiles(files);
+    assert.ok(project);
+    if (!project) {
+      return;
+    }
+    const pages = documentsIn(project, "book", project.view.selectedId);
+    const words = pages.reduce((sum, page) => sum + wordCount(page.content), 0);
+    assert.ok(words >= 30000, `expected a long book, counted ${words}`);
+    const largest = pages.reduce((best, page) => (wordCount(page.content) > wordCount(best.content) ? page : best));
+    const pageStarted = performance.now();
+    const pageHits = hitsInProject(project, "document", largest.id, "the", false);
+    const pageElapsed = performance.now() - pageStarted;
+    assert.ok(pageHits.length > 10, `expected matches on the page, got ${pageHits.length}`);
+    assert.ok(pageElapsed < 200, `this page took ${pageElapsed.toFixed(0)}ms`);
+    const bookStarted = performance.now();
+    const bookHits = hitsInProject(project, "book", largest.id, "the", false);
+    const bookElapsed = performance.now() - bookStarted;
+    assert.ok(bookHits.length > pageHits.length, `expected the book to hold more matches than one page`);
+    assert.ok(bookElapsed < 400, `the whole book took ${bookElapsed.toFixed(0)}ms`);
+    assert.equal(pageFindHits(bookHits, largest.id).length, pageHits.length);
+    assert.equal(pageFindHits(bookHits, "missing-page").length, 0);
+    let state = EditorState.create({
+      schema: editorSchema,
+      doc: editorSchema.nodeFromJSON(largest.content),
+    });
+    const typing = performance.now();
+    for (let index = 0; index < 40; index += 1) {
+      state = state.apply(state.tr.insertText("a", 1));
+    }
+    const typed = performance.now() - typing;
+    assert.equal(state.doc.textContent.startsWith("a"), true);
+    assert.ok(typed < 500, `typing in ${largest.title} took ${typed.toFixed(0)}ms`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

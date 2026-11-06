@@ -178,13 +178,12 @@
   text-underline-offset: 0.18em;
 }
 
-.ProseMirror .find-hit {
-  background: color-mix(in srgb, var(--nib) 28%, transparent);
-  border-radius: 2px;
+::highlight(find-match) {
+  background-color: color-mix(in srgb, var(--nib) 28%, transparent);
 }
 
-.ProseMirror .find-hit.current {
-  background: color-mix(in srgb, var(--nib) 55%, transparent);
+::highlight(find-current) {
+  background-color: color-mix(in srgb, var(--nib) 55%, transparent);
 }
 
 .find-bar {
