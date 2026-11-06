@@ -251,7 +251,7 @@ test("replace rewrites that scene and leaves the other results", () => {
   }
 });
 
-test("a keystroke moves the open find instead of searching the scene again", () => {
+test("a keystroke drops the open find instead of repainting it", () => {
   const plugin = findMarksPlugin();
   let state = EditorState.create({
     schema: editorSchema,
@@ -269,7 +269,7 @@ test("a keystroke moves the open find instead of searching the scene again", () 
   );
   assert.equal(findMarksKey.getState(state)?.decorations.find().length, 1);
   state = state.apply(state.tr.insertText("cat ", 1));
-  assert.equal(findMarksKey.getState(state)?.decorations.find().length, 1);
+  assert.equal(findMarksKey.getState(state)?.decorations.find().length, 0);
   state = state.apply(
     state.tr.setMeta(findMarksKey, {
       query: "cat",

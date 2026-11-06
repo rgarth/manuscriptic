@@ -17,7 +17,6 @@ import {
 import type { FindBarProps } from "./FindBar.tsx";
 import type { FindEditorState } from "./findView.ts";
 import { findKey } from "./menuPlan.ts";
-import type { EditorDoc } from "./model/editorDoc.ts";
 import { findNode, type ProjectFile } from "./model/project.ts";
 
 const noHits: { from: number; to: number }[] = [];
@@ -43,9 +42,6 @@ export function useFind(
   const [reveal, setReveal] = useState(0);
   const [focusToken, setFocusToken] = useState(0);
   const selectedId = project.view.selectedId;
-  const located = selectedId ? findNode(project, selectedId) : null;
-  const openContent = located?.node.kind === "document" ? located.node.content : null;
-  const openTitle = located?.node.kind === "document" ? located.node.title : "";
   const [hits, setHits] = useState<BookHit[]>([]);
   const safeActive = hits.length === 0 ? 0 : Math.min(Math.max(active, 0), hits.length - 1);
   const activeHit = hits[safeActive] ?? null;
@@ -75,34 +71,6 @@ export function useFind(
     project,
     onProject,
   };
-  const seenScene = useRef<{ id: string | null; content: EditorDoc | null }>({ id: null, content: null });
-  useEffect(() => {
-    const previous = seenScene.current;
-    seenScene.current = { id: selectedId, content: openContent };
-    if (!selectedId || !openContent || previous.id !== selectedId || previous.content === openContent) {
-      return;
-    }
-    const id = selectedId;
-    const content = openContent;
-    const title = openTitle;
-    const frame = requestAnimationFrame(() => {
-      const current = latest.current;
-      if (!current.open || current.query.length === 0 || current.selectedId !== id) {
-        return;
-      }
-      const found = documentHits(id, title, content, current.query, current.matchCase);
-      const order =
-        current.scope === "document" ? [id] : documentsIn(current.project, "book", id).map((doc) => doc.id);
-      const merged = spliceDocumentHits(current.hits, id, found, current.scope, order);
-      if (sameFindHits(current.hits, merged)) {
-        return;
-      }
-      setHits(merged);
-      setActive(keptFindIndex(current.hits, merged, current.safeActive));
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [selectedId, openContent]);
-
   function bump() {
     setReveal((value) => value + 1);
   }
@@ -137,33 +105,67 @@ export function useFind(
     setFocusToken((value) => value + 1);
   }
 
+  function freshHits(): BookHit[] {
+    const current = latest.current;
+    if (!current.query || !current.selectedId) {
+      return current.hits;
+    }
+    const located = findNode(current.project, current.selectedId);
+    if (!located || located.node.kind !== "document") {
+      return current.hits;
+    }
+    const found = documentHits(
+      current.selectedId,
+      located.node.title,
+      located.node.content,
+      current.query,
+      current.matchCase,
+    );
+    const order =
+      current.scope === "document"
+        ? [current.selectedId]
+        : documentsIn(current.project, "book", current.selectedId).map((doc) => doc.id);
+    const next = spliceDocumentHits(current.hits, current.selectedId, found, current.scope, order);
+    if (!sameFindHits(current.hits, next)) {
+      setHits(next);
+    }
+    return next;
+  }
+
   function move(delta: number) {
     const current = latest.current;
-    if (current.hits.length === 0) {
+    const hitsNow = freshHits();
+    if (hitsNow.length === 0) {
       setOpen(true);
       setFocusToken((value) => value + 1);
       return;
     }
-    const hit = current.hits[current.safeActive];
+    const safe = Math.min(Math.max(current.safeActive, 0), hitsNow.length - 1);
+    const index = sameFindHits(current.hits, hitsNow) ? safe : keptFindIndex(current.hits, hitsNow, safe);
+    const hit = hitsNow[index];
     if (hit && hit.documentId !== current.selectedId && delta > 0) {
+      setActive(index);
       setOpen(true);
       bump();
       openHit(hit);
       return;
     }
-    const next = (current.safeActive + delta + current.hits.length) % current.hits.length;
+    const next = (index + delta + hitsNow.length) % hitsNow.length;
     setActive(next);
     setOpen(true);
     bump();
-    openHit(current.hits[next] ?? null);
+    openHit(hitsNow[next] ?? null);
   }
 
   function findNext() {
     if (!latest.current.open) {
+      const hitsNow = freshHits();
+      const index = keptFindIndex(latest.current.hits, hitsNow, latest.current.safeActive);
+      setActive(index);
       setOpen(true);
       setFocusToken((value) => value + 1);
       bump();
-      openHit(latest.current.hits[latest.current.safeActive] ?? null);
+      openHit(hitsNow[index] ?? null);
       return;
     }
     move(1);
@@ -171,15 +173,21 @@ export function useFind(
 
   function replaceCurrent() {
     const current = latest.current;
-    const hit = current.hits[current.safeActive];
-    if (!hit || !current.query) {
+    if (!current.query) {
+      return;
+    }
+    const hitsNow = freshHits();
+    const index = keptFindIndex(current.hits, hitsNow, current.safeActive);
+    const hit = hitsNow[index];
+    if (!hit) {
+      setActive(0);
       return;
     }
     const moved: { step: NonNullable<ReturnType<typeof stepAfterReplace>> | null } = { step: null };
     current.onProject((book) => {
       const next = stepAfterReplace(
         book,
-        current.hits,
+        hitsNow,
         hit,
         current.replacement,
         current.query,

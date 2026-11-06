@@ -2,6 +2,8 @@ import { Extension } from "@tiptap/core";
 import type { Node as ProseNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { releaseBrowserSpellcheck } from "./spellcheck.ts";
+
 export type FindQuery = {
   query: string;
   matchCase: boolean;
@@ -46,16 +48,28 @@ export function findMarksPlugin(): Plugin<FindPluginState> {
         if (incoming) {
           return { ...incoming, decorations: highlight(state.doc, incoming) };
         }
-        if (!tr.docChanged || !value.query) {
+        if (!tr.docChanged || !value.query || value.decorations === DecorationSet.empty) {
           return value;
         }
-        return { ...value, decorations: value.decorations.map(tr.mapping, state.doc) };
+        return { ...value, from: null, to: null, hits: [], decorations: DecorationSet.empty };
       },
     },
     props: {
       decorations(state) {
         return findMarksKey.getState(state)?.decorations ?? DecorationSet.empty;
       },
+    },
+    view() {
+      return {
+        update(view, previous) {
+          const before = findMarksKey.getState(previous)?.decorations;
+          const after = findMarksKey.getState(view.state)?.decorations;
+          if (!before || before === DecorationSet.empty || after !== DecorationSet.empty || before === after) {
+            return;
+          }
+          releaseBrowserSpellcheck(view);
+        },
+      };
     },
   });
 }

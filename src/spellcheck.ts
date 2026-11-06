@@ -1,6 +1,7 @@
 import { Extension } from "@tiptap/core";
 import type { Node as ProseNode } from "@tiptap/pm/model";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { EditorState, Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
+import { ReplaceStep } from "@tiptap/pm/transform";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { EditorView } from "@tiptap/pm/view";
 import { wordAt, wordsIn } from "./dictionary.ts";
@@ -10,7 +11,17 @@ type DictionaryState = { known: Set<string>; marks: DecorationSet };
 
 export const dictionarySpellcheckKey = new PluginKey<DictionaryState>("project-dictionary");
 
-const spellingMarksKey = new PluginKey<DecorationSet>("spelling-marks");
+type SpelledWord = { from: number; to: number; text: string };
+
+type SpellingState = {
+  marks: DecorationSet;
+  shown: DecorationSet;
+  scene: boolean;
+  words: SpelledWord[];
+};
+
+const spellingMarksKey = new PluginKey<SpellingState>("spelling-marks");
+const spellDelay = 200;
 const rebuildDictionaryMarks = "rebuild-dictionary-marks";
 
 export type SpellingRange = { from: number; to: number };
@@ -118,92 +129,354 @@ function dictionaryMarks(doc: ProseNode, known: ReadonlySet<string>): Decoration
   return decorations.length > 0 ? DecorationSet.create(doc, decorations) : DecorationSet.empty;
 }
 
-function spellingMarksPlugin(): Plugin<DecorationSet> {
-  return new Plugin<DecorationSet>({
+function withoutKnownMarks(doc: ProseNode, marks: DecorationSet, known: ReadonlySet<string>): DecorationSet {
+  const all = marks.find();
+  const kept = all.filter(
+    (decoration) => !known.has(doc.textBetween(decoration.from, decoration.to).toLocaleLowerCase()),
+  );
+  if (kept.length === all.length) {
+    return marks;
+  }
+  return kept.length > 0 ? DecorationSet.create(doc, kept) : DecorationSet.empty;
+}
+
+function wordAround(doc: ProseNode, pos: number): SpelledWord | null {
+  const clamped = Math.min(Math.max(pos, 0), doc.content.size);
+  const $pos = doc.resolve(clamped);
+  if (!$pos.parent.isTextblock) {
+    return null;
+  }
+  const origin = $pos.start();
+  const text = $pos.parent.textBetween(0, $pos.parent.content.size, "\n", "\0");
+  const index = Math.min(Math.max(clamped - origin, 0), text.length);
+  const word = wordAt(text, index);
+  if (!word) {
+    return null;
+  }
+  return { from: origin + word.from, to: origin + word.to, text: word.word };
+}
+
+function wordBeingTyped(doc: ProseNode, from: number, to: number): SpelledWord | null {
+  if (from !== to) {
+    return null;
+  }
+  const word = wordAround(doc, from);
+  // The cursor at the start of a word is still on the boundary before it.
+  if (!word || from <= word.from || from > word.to) {
+    return null;
+  }
+  return word;
+}
+
+function overlaps(left: { from: number; to: number }, right: { from: number; to: number }): boolean {
+  return left.from < right.to && left.to > right.from;
+}
+
+function wordsInserted(tr: Transaction, doc: ProseNode): SpelledWord[] {
+  const words: SpelledWord[] = [];
+  for (let index = 0; index < tr.steps.length; index += 1) {
+    const step = tr.steps[index];
+    if (!(step instanceof ReplaceStep) || step.slice.size === 0) {
+      continue;
+    }
+    const later = tr.mapping.slice(index + 1);
+    const from = later.map(step.from, 1);
+    const to = later.map(step.from + step.slice.size, -1);
+    if (from >= to) {
+      continue;
+    }
+    doc.nodesBetween(from, to, (node, pos) => {
+      if (!node.isText || !node.text) {
+        return;
+      }
+      const start = Math.max(0, from - pos);
+      const end = Math.min(node.text.length, to - pos);
+      // A single character is the word the cursor is in. The caller already has that word.
+      if (start >= end || end - start <= 1) {
+        return false;
+      }
+      const slice = node.text.slice(start, end);
+      for (const found of wordsIn(slice)) {
+        const whole = wordAround(doc, pos + start + found.from);
+        if (whole) {
+          words.push(whole);
+        }
+      }
+      return false;
+    });
+  }
+  return words;
+}
+
+function finishedWords(
+  tr: Transaction,
+  before: EditorState,
+  after: EditorState,
+  open: SpelledWord | null,
+): SpelledWord[] {
+  const finished: SpelledWord[] = [];
+  const left = wordBeingTyped(before.doc, before.selection.from, before.selection.to);
+  for (const word of left ? mapWords([left], tr, after.doc) : []) {
+    if (!open || !overlaps(word, open)) {
+      finished.push(word);
+    }
+  }
+  if (tr.docChanged) {
+    for (const word of wordsInserted(tr, after.doc)) {
+      if (open && overlaps(open, word)) {
+        continue;
+      }
+      if (finished.some((item) => item.from === word.from && item.to === word.to)) {
+        continue;
+      }
+      finished.push(word);
+    }
+  }
+  return finished;
+}
+
+function mapWords(words: readonly SpelledWord[], tr: Transaction, doc: ProseNode): readonly SpelledWord[] {
+  if (!tr.docChanged) {
+    return words;
+  }
+  const next: SpelledWord[] = [];
+  for (const word of words) {
+    const from = tr.mapping.map(word.from, 1);
+    const to = tr.mapping.map(word.to, -1);
+    if (from >= to || doc.textBetween(from, to) !== word.text) {
+      continue;
+    }
+    next.push({ from, to, text: word.text });
+  }
+  return next;
+}
+
+function dropWord(marks: DecorationSet, open: SpelledWord | null): DecorationSet {
+  if (!open) {
+    return marks;
+  }
+  const hit = marks
+    .find(open.from, open.to)
+    .filter((decoration) => decoration.from < open.to && decoration.to > open.from);
+  return hit.length > 0 ? marks.remove(hit) : marks;
+}
+
+function pendingWords(
+  words: readonly SpelledWord[],
+  tr: Transaction,
+  before: EditorState,
+  after: EditorState,
+  open: SpelledWord | null,
+): SpelledWord[] {
+  const pending = mapWords(words, tr, after.doc).filter((word) => !open || !overlaps(word, open));
+  for (const word of finishedWords(tr, before, after, open)) {
+    if (pending.some((item) => item.from === word.from && item.to === word.to)) {
+      continue;
+    }
+    pending.push(word);
+  }
+  return pending;
+}
+
+function paint(marks: DecorationSet, doc: ProseNode, open: SpelledWord | null): DecorationSet {
+  if (!open || open.from >= open.to) {
+    return marks;
+  }
+  return marks.add(doc, [Decoration.inline(open.from, open.to, { spellcheck: "false" })]);
+}
+
+function misspellingSet(doc: ProseNode, ranges: readonly SpellingRange[]): DecorationSet {
+  const decorations = ranges
+    .filter((range) => range.from < range.to && range.to <= doc.content.size)
+    .map((range) => Decoration.inline(range.from, range.to, { class: "misspelled" }))
+    .sort((left, right) => left.from - right.from || left.to - right.to);
+  return decorations.length > 0 ? DecorationSet.create(doc, decorations) : DecorationSet.empty;
+}
+
+function mergeChecked(
+  marks: DecorationSet,
+  doc: ProseNode,
+  words: readonly SpelledWord[],
+  ranges: readonly SpellingRange[],
+): DecorationSet {
+  let next = marks;
+  for (const word of words) {
+    const hit = next.find(word.from, word.to);
+    if (hit.length > 0) {
+      next = next.remove(hit);
+    }
+  }
+  const additions = ranges
+    .filter(
+      (range) =>
+        range.from < range.to &&
+        range.to <= doc.content.size &&
+        words.some((word) => range.from >= word.from && range.to <= word.to),
+    )
+    .map((range) => Decoration.inline(range.from, range.to, { class: "misspelled" }))
+    .sort((left, right) => left.from - right.from || left.to - right.to);
+  return additions.length > 0 ? next.add(doc, additions) : next;
+}
+
+function wordChunks(words: readonly SpelledWord[]): { joined: string; chunks: TextChunk[] } {
+  let joined = "";
+  const chunks: TextChunk[] = [];
+  for (const word of words) {
+    if (joined.length > 0) {
+      joined += "\n";
+    }
+    chunks.push({ pos: word.from, start: joined.length, text: word.text });
+    joined += word.text;
+  }
+  return { joined, chunks };
+}
+
+type SpellJob = { scene: true; doc: ProseNode } | { scene: false; words: string };
+
+function spellJob(spelling: SpellingState, doc: ProseNode): SpellJob {
+  if (spelling.scene) {
+    return { scene: true, doc };
+  }
+  return { scene: false, words: spelling.words.map((word) => `${word.from}:${word.to}:${word.text}`).join("|") };
+}
+
+function sameJob(left: SpellJob, right: SpellJob): boolean {
+  if (left.scene && right.scene) {
+    return left.doc === right.doc;
+  }
+  if (!left.scene && !right.scene) {
+    return left.words === right.words;
+  }
+  return false;
+}
+
+export function spellingMarksPlugin(): Plugin<SpellingState> {
+  return new Plugin<SpellingState>({
     key: spellingMarksKey,
     state: {
-      init() {
-        return DecorationSet.empty;
+      init(_config, state) {
+        const open = wordBeingTyped(state.doc, state.selection.from, state.selection.to);
+        const marks = DecorationSet.empty;
+        return { marks, shown: paint(marks, state.doc, open), scene: true, words: [] };
       },
-      apply(tr, value, _old, state) {
-        const incoming: unknown = tr.getMeta(spellingMarksKey);
+      apply(tr, value, oldState, newState) {
+        const open = wordBeingTyped(newState.doc, newState.selection.from, newState.selection.to);
+        const incoming = tr.getMeta(spellingMarksKey);
         if (incoming instanceof DecorationSet) {
-          return incoming;
+          const marks = dropWord(incoming, open);
+          return { marks, shown: paint(marks, newState.doc, open), scene: false, words: [] };
         }
-        if (tr.docChanged) {
-          return value.map(tr.mapping, state.doc);
+        const dictionaryChanged = tr.getMeta(dictionarySpellcheckKey) !== undefined;
+        if (!tr.docChanged && !tr.selectionSet && !dictionaryChanged) {
+          return value;
         }
-        return value;
+        let marks = tr.docChanged ? value.marks.map(tr.mapping, newState.doc) : value.marks;
+        if (dictionaryChanged && marks !== DecorationSet.empty) {
+          const known = dictionarySpellcheckKey.getState(newState)?.known;
+          if (known && known.size > 0) {
+            marks = withoutKnownMarks(newState.doc, marks, known);
+          }
+        }
+        marks = dropWord(marks, open);
+        const words = value.scene ? value.words : pendingWords(value.words, tr, oldState, newState, open);
+        const shown = paint(marks, newState.doc, open);
+        if (marks === value.marks && shown === value.shown && words === value.words) {
+          return value;
+        }
+        return { marks, shown, scene: value.scene, words };
       },
     },
     props: {
       decorations(state) {
-        const marks = spellingMarksKey.getState(state) ?? DecorationSet.empty;
-        const known = dictionarySpellcheckKey.getState(state)?.known;
-        if (!known || known.size === 0) {
-          return marks;
-        }
-        const kept = marks.find().filter((decoration) => {
-          const word = state.doc.textBetween(decoration.from, decoration.to);
-          return !known.has(word.toLocaleLowerCase());
-        });
-        return DecorationSet.create(state.doc, kept);
+        return spellingMarksKey.getState(state)?.shown ?? DecorationSet.empty;
       },
     },
-    view() {
+    view(editorView) {
       let timer = 0;
       let generation = 0;
-      let retry = false;
       let reported = false;
-      return {
-        update(view, previous) {
-          const changed = !view.state.doc.eq(previous.doc);
-          if (!changed && !retry) {
-            return;
-          }
-          if (changed) {
-            retry = false;
-          }
-          window.clearTimeout(timer);
-          const gen = ++generation;
-          timer = window.setTimeout(() => {
-            if (view.isDestroyed) {
+      let armed: SpellJob | null = null;
+
+      const deliver = (
+        view: EditorView,
+        gen: number,
+        text: { joined: string; chunks: TextChunk[] },
+        marksFor: (ranges: SpellingRange[]) => DecorationSet | null,
+      ) => {
+        void requestMisspellings(text.joined)
+          .then((ranges) => {
+            if (gen !== generation || view.isDestroyed) {
               return;
             }
-            const collected = spellingText(view.state.doc);
-            const joined = collected.joined;
-            void requestMisspellings(joined)
-              .then((ranges) => {
-                reported = false;
-                retry = false;
-                if (gen !== generation || view.isDestroyed) {
-                  return;
-                }
-                const current = spellingText(view.state.doc);
-                if (current.joined !== joined) {
-                  return;
-                }
-                const decorations = rangesInChunks(current.chunks, ranges, new Set()).map((range) =>
-                  Decoration.inline(range.from, range.to, { class: "misspelled" }),
-                );
-                view.dispatch(
-                  view.state.tr
-                    .setMeta(spellingMarksKey, DecorationSet.create(view.state.doc, decorations))
-                    .setMeta(rebuildDictionaryMarks, true),
-                );
-              })
-              .catch((error: unknown) => {
-                if (gen !== generation) {
-                  return;
-                }
-                retry = true;
-                if (reported) {
-                  return;
-                }
-                reported = true;
-                reportFailure(error, "Spelling could not be checked.");
-              });
-          }, 200);
+            const known = dictionarySpellcheckKey.getState(view.state)?.known ?? new Set<string>();
+            const marks = marksFor(rangesInChunks(text.chunks, ranges, known));
+            if (!marks) {
+              return;
+            }
+            reported = false;
+            view.dispatch(view.state.tr.setMeta(spellingMarksKey, marks).setMeta("addToHistory", false));
+          })
+          .catch((error: unknown) => {
+            if (gen !== generation || view.isDestroyed) {
+              return;
+            }
+            if (!reported) {
+              reported = true;
+              reportFailure(error, "Spelling could not be checked.");
+            }
+            armed = null;
+          });
+      };
+
+      const sync = (view: EditorView) => {
+        const spelling = spellingMarksKey.getState(view.state);
+        if (!spelling) {
+          return;
+        }
+        const next = spellJob(spelling, view.state.doc);
+        if (armed && sameJob(armed, next)) {
+          return;
+        }
+        armed = next;
+        window.clearTimeout(timer);
+        const gen = ++generation;
+        if (!next.scene && next.words === "") {
+          return;
+        }
+        timer = window.setTimeout(() => {
+          if (gen !== generation || view.isDestroyed) {
+            return;
+          }
+          const current = spellingMarksKey.getState(view.state);
+          if (!current) {
+            return;
+          }
+          if (next.scene) {
+            if (!current.scene) {
+              return;
+            }
+            const text = spellingText(view.state.doc);
+            deliver(view, gen, text, (ranges) => misspellingSet(view.state.doc, ranges));
+            return;
+          }
+          const waiting = current.words;
+          if (waiting.length === 0) {
+            return;
+          }
+          deliver(view, gen, wordChunks(waiting), (ranges) => {
+            const live = spellingMarksKey.getState(view.state);
+            if (!live || live.scene) {
+              return null;
+            }
+            return mergeChecked(live.marks, view.state.doc, waiting, ranges);
+          });
+        }, spellDelay);
+      };
+
+      sync(editorView);
+      return {
+        update(view) {
+          sync(view);
         },
         destroy() {
           window.clearTimeout(timer);
@@ -212,6 +485,29 @@ function spellingMarksPlugin(): Plugin<DecorationSet> {
       };
     },
   });
+}
+
+export function spellingAwaiting(state: EditorState): "scene" | string[] {
+  const spelling = spellingMarksKey.getState(state);
+  if (!spelling) {
+    return [];
+  }
+  if (spelling.scene) {
+    return "scene";
+  }
+  return spelling.words.map((word) => word.text);
+}
+
+export function misspelledIn(state: EditorState): string[] {
+  const marks = spellingMarksKey.getState(state)?.marks;
+  if (!marks) {
+    return [];
+  }
+  return marks.find().map((decoration) => state.doc.textBetween(decoration.from, decoration.to));
+}
+
+export function applySpellMarks(state: EditorState, marks: DecorationSet): EditorState {
+  return state.apply(state.tr.setMeta(spellingMarksKey, marks).setMeta("addToHistory", false));
 }
 
 function requestMisspellings(text: string): Promise<SpellingRange[]> {
@@ -240,9 +536,34 @@ export function wordFromPoint(
   return { word: word.word, from: resolved.start() + word.from, to: resolved.start() + word.to };
 }
 
+const spellcheckReset = new WeakMap<EditorView, number>();
+
+// Find highlights split the scene into spans. After those spans are gone the
+// browser keeps checking that split text, so reset spellcheck once.
+export function releaseBrowserSpellcheck(view: EditorView): void {
+  const dom = view.dom;
+  if (!dom.isContentEditable || !dom.spellcheck) {
+    return;
+  }
+  dom.spellcheck = false;
+  const previous = spellcheckReset.get(view);
+  if (previous !== undefined) {
+    cancelAnimationFrame(previous);
+  }
+  spellcheckReset.set(
+    view,
+    requestAnimationFrame(() => {
+      spellcheckReset.delete(view);
+      if (!view.isDestroyed) {
+        dom.spellcheck = true;
+      }
+    }),
+  );
+}
+
 export function isMisspelled(view: EditorView, from: number, to: number): boolean {
-  const marks = spellingMarksKey.getState(view.state);
-  if (!marks || !marks.find(from, to).some((range) => range.from < to && range.to > from)) {
+  const marks = spellingMarksKey.getState(view.state)?.marks;
+  if (!marks?.find(from, to).some((range) => range.from < to && range.to > from)) {
     return false;
   }
   const known = dictionarySpellcheckKey.getState(view.state)?.known;
