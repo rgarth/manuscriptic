@@ -28,9 +28,12 @@ import { failureMessage } from "./failures";
 import { createBookLock, heldElsewhere } from "./bookLock";
 import {
   bookFileName,
+  folderFromBookPath,
+  readDialogDirectory,
   rememberRecentBook,
   titleFromBookPath,
   readFilePreferences,
+  writeDialogDirectory,
 } from "./filePrefs";
 import { findNode, firstDocumentId, openFolders, setView, type ProjectFile } from "./model/project";
 import { pickNovelSaveAs, pickNovelToOpen, pickScrivenerProject, resolveDirectory } from "./novelFile";
@@ -334,6 +337,7 @@ export function useBookFile(showNotice: Notice) {
       return;
     }
     await writeBook(path, created.files, [], true);
+    writeDialogDirectory(localStorage, path, path);
     noticeRef.current(null);
     if (projectRef.current) {
       await openBookWindow(path, created.title);
@@ -386,7 +390,7 @@ export function useBookFile(showNotice: Notice) {
     }
     fileBusy.current = true;
     try {
-      const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
+      const directory = await resolveDirectory(readDialogDirectory(localStorage, filePathRef.current));
       const picked = await pickScrivenerProject(directory);
       if (!picked) {
         return;
@@ -406,7 +410,8 @@ export function useBookFile(showNotice: Notice) {
         noticeRef.current("A book needs a name.");
         return;
       }
-      const path = await pickNovelSaveAs(directory, created.fileName, "Import Scrivener Project");
+      const saveIn = await resolveDirectory(folderFromBookPath(picked) || null);
+      const path = await pickNovelSaveAs(saveIn, created.fileName, "Import Scrivener Project");
       if (!path) {
         return;
       }
@@ -557,7 +562,7 @@ export function useBookFile(showNotice: Notice) {
         noticeRef.current("This book is still opening.");
         return;
       }
-      const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
+      const directory = await resolveDirectory(readDialogDirectory(localStorage, filePathRef.current));
       const path = await pickNovelSaveAs(directory, bookFileName(current.title));
       if (!path) {
         return;
@@ -568,6 +573,7 @@ export function useBookFile(showNotice: Notice) {
       }
       const files = filesToSave(current, historyRef.current);
       await writeBook(path, files, [], true);
+      writeDialogDirectory(localStorage, path, path);
       if (previous && previous !== path) {
         await bookLock.release(previous);
       }

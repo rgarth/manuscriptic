@@ -8,12 +8,14 @@ import {
   joinNovelPath,
   folderFromBookPath,
   preferenceDirectoryLabel,
+  readDialogDirectory,
   readFilePreferences,
   presentRecentBooks,
   readRecentBooks,
   recentMenuBooks,
   readLastCompile,
   rememberRecentBook,
+  writeDialogDirectory,
   writeOpenLast,
   writeLastCompile,
   writeSaveDirectory,
@@ -64,7 +66,7 @@ test("a blank or missing folder is Documents, and only an explicit false skips t
   assert.equal(booksOnStartup(storage, null), null);
 });
 
-test("the chosen folder is where open and save as start", () => {
+test("the chosen folder is the default file location", () => {
   const storage = memory();
   writeSaveDirectory(storage, "  /Users/me/Novels  ");
   const prefs = readFilePreferences(storage);
@@ -141,6 +143,18 @@ test("recent books keep the last ten paths, and a missing file is dropped", asyn
   );
   assert.deepEqual(readRecentBooks(storage), shown);
   assert.deepEqual(await loadRecentBooks(storage), shown);
+});
+
+test("import, save as, and compile start in the last folder used for that book", () => {
+  const storage = memory();
+  const bone = "/Users/me/Novels/Bone Eaters.manuscriptic";
+  assert.equal(readDialogDirectory(storage, null), null);
+  assert.equal(readDialogDirectory(storage, bone), "/Users/me/Novels");
+  writeDialogDirectory(storage, bone, "/Users/me/Desktop/Bone Eaters.pdf");
+  assert.equal(readDialogDirectory(storage, bone), "/Users/me/Desktop");
+  assert.equal(readDialogDirectory(storage, "/Users/me/Novels/Castus.manuscriptic"), "/Users/me/Novels");
+  storage.setItem("manuscriptic-dialog-directory", "{");
+  assert.equal(readDialogDirectory(storage, bone), "/Users/me/Novels");
 });
 
 test("the last compile is remembered for that book", () => {

@@ -17,7 +17,7 @@ use book_lock::{
     release_window, reserve_book, take_book_lock,
 };
 use documents::documents_directory;
-use fonts::list_fonts;
+use fonts::{list_fonts, read_font};
 use spellcheck::{misspellings, spelling_suggestions};
 use tauri::Manager;
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
@@ -41,6 +41,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             list_fonts,
+            read_font,
             documents_directory,
             read_book,
             read_history,

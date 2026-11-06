@@ -13,6 +13,7 @@ const directoryKey = "manuscriptic-save-directory";
 const openLastKey = "manuscriptic-open-last";
 const recentBooksKey = "manuscriptic-recent-books";
 const lastCompileKey = "manuscriptic-last-compile";
+const dialogDirectoryKey = "manuscriptic-dialog-directory";
 const snapshotMinutesKey = "manuscriptic-snapshot-minutes";
 const recentLimit = 10;
 
@@ -116,6 +117,29 @@ export function readLastCompile(storage: PrefStorage, path: string | null): Comp
   return entry;
 }
 
+export function readDialogDirectory(storage: PrefStorage, path: string | null): string | null {
+  const book = path?.trim() ?? "";
+  if (!book) {
+    return null;
+  }
+  const remembered = dialogDirectories(storage)[book];
+  if (remembered) {
+    return remembered;
+  }
+  return clean(folderFromBookPath(book));
+}
+
+export function writeDialogDirectory(storage: PrefStorage, path: string | null, chosenPath: string): void {
+  const book = path?.trim() ?? "";
+  const folder = clean(folderFromBookPath(chosenPath));
+  if (!book || !folder) {
+    return;
+  }
+  const directories = dialogDirectories(storage);
+  directories[book] = folder;
+  storage.setItem(dialogDirectoryKey, JSON.stringify(directories));
+}
+
 export function writeLastCompile(storage: PrefStorage, path: string | null, target: CompileTarget): void {
   const book = path?.trim() ?? "";
   if (!book || target.presetId.trim() === "") {
@@ -190,6 +214,33 @@ function compileTarget(value: unknown): CompileTarget | null {
     return null;
   }
   return { presetId, kind, open: "open" in value && value.open === true };
+}
+
+function dialogDirectories(storage: PrefStorage): Record<string, string> {
+  const raw = storage.getItem(dialogDirectoryKey);
+  if (!raw) {
+    return {};
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return {};
+  }
+  const directories: Record<string, string> = {};
+  for (const [path, folder] of Object.entries(parsed)) {
+    if (typeof folder !== "string") {
+      continue;
+    }
+    const cleaned = clean(folder);
+    if (cleaned) {
+      directories[path] = cleaned;
+    }
+  }
+  return directories;
 }
 
 function compileTargets(storage: PrefStorage): Record<string, CompileTarget> {

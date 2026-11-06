@@ -5,6 +5,10 @@ export function listFonts(): Promise<string[]> {
   return invoke<string[]>("list_fonts");
 }
 
+export function readFont(family: string, bold: boolean, italic: boolean): Promise<ArrayBuffer | number[]> {
+  return invoke<ArrayBuffer | number[]>("read_font", { family, bold, italic });
+}
+
 export function documentsDirectory(): Promise<string> {
   return invoke<string>("documents_directory");
 }

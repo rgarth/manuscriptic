@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { firstPreset, resolvedCompilePreferences, type CompilePreset } from "./bookCompile.ts";
 import { buildCompile, type CompileDocument } from "./compileShape.ts";
 import { readCompileIdentity } from "./compilePrefs.ts";
+import { loadCompileFonts } from "./compileFonts.ts";
 import { compileDocx } from "./docx.ts";
-import { reportFailure } from "./failures.ts";
-import { bookFileName, exportPath, readFilePreferences, readLastCompile, writeLastCompile } from "./filePrefs.ts";
+import { failureMessage, reportFailure } from "./failures.ts";
+import { bookFileName, exportPath, readDialogDirectory, readLastCompile, writeDialogDirectory, writeLastCompile } from "./filePrefs.ts";
 import type { ProjectFile } from "./model/project.ts";
 import { pickExportSave, resolveDirectory } from "./novelFile.ts";
 import { compilePdf } from "./pdf.ts";
@@ -30,11 +32,24 @@ function exportKind(value: string): ExportKind | null {
   }
 }
 
+async function compiledBytes(kind: ExportKind, doc: CompileDocument): Promise<Uint8Array> {
+  switch (kind) {
+    case "docx":
+      return compileDocx(doc);
+    case "pdf":
+      return compilePdf(doc, await loadCompileFonts(doc));
+    default: {
+      const unexpected: never = kind;
+      return unexpected;
+    }
+  }
+}
+
 const formats: {
-  [Kind in ExportKind]: { label: string; extension: string; write: (doc: CompileDocument) => Uint8Array };
+  [Kind in ExportKind]: { label: string; extension: string };
 } = {
-  docx: { label: "Word", extension: ".docx", write: compileDocx },
-  pdf: { label: "PDF", extension: ".pdf", write: compilePdf },
+  docx: { label: "Word", extension: ".docx" },
+  pdf: { label: "PDF", extension: ".pdf" },
 };
 
 export default function ExportDialog({
@@ -47,6 +62,7 @@ export default function ExportDialog({
   onClose: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const [presetId, setPresetId] = useState(() => chosenPreset(project, filePath));
   const [kind, setKind] = useState<ExportKind>(() => readLastCompile(localStorage, filePath)?.kind ?? "docx");
   const [openAfter, setOpenAfter] = useState(() => readLastCompile(localStorage, filePath)?.open ?? false);
@@ -69,17 +85,21 @@ export default function ExportDialog({
       reportFailure("Nothing is selected, so nothing was written.", "Nothing is selected, so nothing was written.");
       return;
     }
-    const bytes = format.write(compiled);
-    writeLastCompile(localStorage, filePath, { presetId: preset.id, kind, open: openAfter });
-    setBusy(true);
+    flushSync(() => {
+      setFailure(null);
+      setBusy(true);
+    });
     try {
-      const directory = await resolveDirectory(readFilePreferences(localStorage).directory);
+      const bytes = await compiledBytes(kind, compiled);
+      writeLastCompile(localStorage, filePath, { presetId: preset.id, kind, open: openAfter });
+      const directory = await resolveDirectory(readDialogDirectory(localStorage, filePath));
       const fileName = bookFileName(project.title).replace(/\.manuscriptic$/i, format.extension);
       const picked = await pickExportSave(directory, fileName, kind);
       if (!picked) {
         return;
       }
       const written = exportPath(picked, format.extension);
+      writeDialogDirectory(localStorage, filePath, written);
       await writeExport(written, bytes);
       if (openAfter) {
         try {
@@ -90,7 +110,9 @@ export default function ExportDialog({
       }
       onClose();
     } catch (error: unknown) {
-      reportFailure(error, "Could not write the compiled file.");
+      const message = failureMessage(error, "Could not compile the file.");
+      setFailure(message);
+      reportFailure(message, message);
     } finally {
       setBusy(false);
     }
@@ -136,6 +158,11 @@ export default function ExportDialog({
               </select>
             </label>
           </div>
+          {failure ? (
+            <p className="compile-blank" role="alert">
+              {failure}
+            </p>
+          ) : null}
           {compiled && compiled.missing.length > 0 ? (
             <p className="compile-blank">{emptyTokens(compiled.missing)}</p>
           ) : null}
@@ -149,7 +176,7 @@ export default function ExportDialog({
               Open when compiled
             </label>
             <button type="button" onClick={() => void compile()} disabled={busy}>
-              Compile
+              {busy ? "Compiling…" : "Compile"}
             </button>
           </div>
         </div>
