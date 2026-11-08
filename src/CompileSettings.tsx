@@ -19,7 +19,6 @@ import {
   type CompileSpacing,
   type HeadingJoin,
   type NumberStyle,
-  type PageNumbers,
   type SceneBreak,
 } from "./bookCompile.ts";
 import BookContents from "./BookContents.tsx";
@@ -28,10 +27,10 @@ import { folderRanks } from "./compileShape.ts";
 import { readCompileIdentity, writeCompileIdentity } from "./compilePrefs.ts";
 import { failureMessage, reportFailure } from "./failures.ts";
 import { addDictionaryWord, removeDictionaryWord, setBookCompile, type FolderNode, type ProjectFile } from "./model/project.ts";
-import { FontChoice } from "./FontChoice.tsx";
 import { alignments } from "./pageLayout.ts";
+import { Choice, Field, FontMenu, MarginFields } from "./settingFields.tsx";
 
-type CompilePane = "author" | "contents" | "structure" | "formatting" | "dictionary";
+type CompilePane = "author" | "contents" | "structure" | "formatting" | "pages" | "dictionary";
 
 const breakChoice: Record<SceneBreak, string> = {
   hash: "#",
@@ -43,12 +42,6 @@ const spacingChoice: Record<CompileSpacing, string> = {
   single: "Single",
   onehalf: "1.5",
   double: "Double",
-};
-
-const numberChoice: Record<PageNumbers, string> = {
-  off: "Off",
-  header: "Header",
-  footer: "Footer",
 };
 
 const numberOptions: { id: NumberStyle; label: string }[] = [
@@ -75,6 +68,7 @@ const panes: { id: CompilePane; label: string }[] = [
   { id: "contents", label: "Contents" },
   { id: "structure", label: "Structure" },
   { id: "formatting", label: "Formatting" },
+  { id: "pages", label: "Pages" },
   { id: "dictionary", label: "Dictionary" },
 ];
 
@@ -198,6 +192,11 @@ function compilerPane(
   onCompile: (compile: BookCompile) => void,
   onProject: (update: (project: ProjectFile) => ProjectFile) => void,
 ) {
+  function changeFormat(format: Partial<CompileFormat>) {
+    onProject((current) =>
+      setBookCompile(current, editPreset(current.compile, preset.id, (item) => ({ ...item, format: { ...item.format, ...format } }))),
+    );
+  }
   switch (pane) {
     case "author":
       return <AuthorOverride compile={project.compile} appAuthor={appAuthor} onCompile={onCompile} />;
@@ -212,16 +211,9 @@ function compilerPane(
         />
       );
     case "formatting":
-      return (
-        <FormattingSettings
-          format={preset.format}
-          onChange={(format) =>
-            onProject((current) =>
-              setBookCompile(current, editPreset(current.compile, preset.id, (item) => ({ ...item, format: { ...item.format, ...format } }))),
-            )
-          }
-        />
-      );
+      return <FormattingSettings format={preset.format} onChange={changeFormat} />;
+    case "pages":
+      return <PagesSettings format={preset.format} onChange={changeFormat} />;
     case "dictionary":
       return (
         <BookDictionary
@@ -437,29 +429,86 @@ function FormattingSettings({
           onChange={(align) => onChange({ align })}
         />
       </section>
+    </>
+  );
+}
+
+function PagesSettings({
+  format,
+  onChange,
+}: {
+  format: CompileFormat;
+  onChange: (patch: Partial<CompileFormat>) => void;
+}) {
+  return (
+    <>
+      <h3>Pages</h3>
       <section className="setting-group">
-        <h4>Page</h4>
-        <MarginFields format={format} onChange={onChange} />
-        <Field label="Header" value={format.header} onChange={(header) => onChange({ header })} />
-        <Field label="Footer" value={format.footer} onChange={(footer) => onChange({ footer })} />
+        <h4>Type</h4>
         <div className="setting-grid">
-          <Choice
-            label="Page numbers"
-            value={format.pageNumbers}
-            options={(["off", "header", "footer"] as const).map((id) => ({ id, label: numberChoice[id] }))}
-            onChange={(pageNumbers) => onChange({ pageNumbers })}
+          <FontMenu
+            label="Font"
+            ariaLabel="Header and footer font"
+            value={format.furnitureFont}
+            onChange={(furnitureFont) => onChange({ furnitureFont })}
           />
-          <label className="preference">
-            <input
-              type="checkbox"
-              checked={format.differentFirstPage}
-              onChange={(event) => onChange({ differentFirstPage: event.currentTarget.checked })}
-            />
-            No header and footer on first page
-          </label>
+          <Field
+            label="Size"
+            ariaLabel="Header and footer size"
+            value={String(format.furniturePoints)}
+            onChange={(points) => onChange({ furniturePoints: Number(points) })}
+          />
         </div>
       </section>
+      <section className="setting-group">
+        <h4>Margins (inches)</h4>
+        <MarginFields format={format} onChange={onChange} />
+      </section>
+      <label className="preference">
+        <input
+          type="checkbox"
+          checked={format.differentFirstPage}
+          onChange={(event) => onChange({ differentFirstPage: event.currentTarget.checked })}
+        />
+        No header and footer on first page
+      </label>
+      <RunningHead
+        label="Header"
+        value={format.header}
+        align={format.headerAlign}
+        onText={(header) => onChange({ header })}
+        onAlign={(headerAlign) => onChange({ headerAlign })}
+      />
+      <RunningHead
+        label="Footer"
+        value={format.footer}
+        align={format.footerAlign}
+        onText={(footer) => onChange({ footer })}
+        onAlign={(footerAlign) => onChange({ footerAlign })}
+      />
     </>
+  );
+}
+
+function RunningHead({
+  label,
+  value,
+  align,
+  onText,
+  onAlign,
+}: {
+  label: string;
+  value: string;
+  align: HeadingAlign;
+  onText: (value: string) => void;
+  onAlign: (align: HeadingAlign) => void;
+}) {
+  return (
+    <section className="setting-group">
+      <h4>{label}</h4>
+      <Field label={label} value={value} onChange={onText} />
+      <Choice label="Alignment" ariaLabel={`${label} alignment`} value={align} options={headingAlignments} onChange={onAlign} />
+    </section>
   );
 }
 
@@ -838,151 +887,3 @@ function pointSize(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function MarginFields({
-  format,
-  onChange,
-}: {
-  format: CompileFormat;
-  onChange: (patch: Partial<CompileFormat>) => void;
-}) {
-  function edge(side: keyof CompileFormat["margins"], raw: string) {
-    onChange({ margins: { ...format.margins, [side]: Number(raw) } });
-  }
-  return (
-    <div className="margin-row">
-      <span className="setting-label">Margins (inches)</span>
-      <Field label="Top" value={String(format.margins.top)} onChange={(value) => edge("top", value)} />
-      <Field label="Right" value={String(format.margins.right)} onChange={(value) => edge("right", value)} />
-      <Field label="Bottom" value={String(format.margins.bottom)} onChange={(value) => edge("bottom", value)} />
-      <Field label="Left" value={String(format.margins.left)} onChange={(value) => edge("left", value)} />
-    </div>
-  );
-}
-
-function FontMenu({
-  label,
-  ariaLabel,
-  value,
-  onChange,
-  disabled = false,
-  inherit = false,
-}: {
-  label: string;
-  ariaLabel: string;
-  value: string;
-  onChange: (font: string) => void;
-  disabled?: boolean;
-  inherit?: boolean;
-}) {
-  return (
-    <label className="setting">
-      <span className="setting-label">{label}</span>
-      <FontChoice
-        ariaLabel={ariaLabel}
-        value={value}
-        disabled={disabled}
-        inherit={inherit}
-        onChange={onChange}
-      />
-    </label>
-  );
-}
-
-function Field({
-  label,
-  value,
-  onChange,
-  disabled = false,
-  multiline = false,
-  placeholder,
-  ariaLabel,
-  token,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  disabled?: boolean;
-  multiline?: boolean;
-  placeholder?: string;
-  ariaLabel?: string;
-  token?: string;
-}) {
-  const name = ariaLabel ?? label;
-  return (
-    <label className="setting">
-      <span className="setting-label">
-        <span>{label}</span>
-        {token ? <span className="token">{token}</span> : null}
-      </span>
-      {multiline ? (
-        <textarea aria-label={name} value={value} disabled={disabled} rows={3} onChange={(event) => onChange(event.currentTarget.value)} />
-      ) : (
-        <input
-          aria-label={name}
-          value={value}
-          disabled={disabled}
-          placeholder={placeholder}
-          onChange={(event) => onChange(event.currentTarget.value)}
-        />
-      )}
-    </label>
-  );
-}
-
-function Choice<Id extends string>({
-  label,
-  value,
-  options,
-  onChange,
-  disabled = false,
-  ariaLabel,
-  menu = false,
-}: {
-  label: string;
-  value: Id;
-  options: { id: Id; label: string }[];
-  onChange: (id: Id) => void;
-  disabled?: boolean;
-  ariaLabel?: string;
-  menu?: boolean;
-}) {
-  const name = ariaLabel ?? label;
-  return (
-    <div className="setting">
-      <span className="setting-label">{label}</span>
-      {menu ? (
-        <select
-          aria-label={name}
-          value={value}
-          disabled={disabled}
-          onChange={(event) => {
-            const picked = options[event.currentTarget.selectedIndex];
-            if (picked) {
-              onChange(picked.id);
-            }
-          }}
-        >
-          {options.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <div className="segmented" role="group" aria-label={name}>
-          {options.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-pressed={item.id === value}
-              disabled={disabled}
-              onClick={() => onChange(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}

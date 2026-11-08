@@ -15,9 +15,13 @@ function document(paragraphs: CompileDocument["paragraphs"], patch: Partial<Comp
   return {
     paragraphs,
     header: [{ kind: "text", text: "Ada", marks: [] }, { kind: "page" }],
+    headerAlign: preferences.headerAlign,
     footer: [],
+    footerAlign: preferences.footerAlign,
+    furnitureFont: "Times New Roman",
+    furniturePoints: preferences.furniturePoints,
     margins: preferences.margins,
-    font: preferences.font,
+    font: "Times New Roman",
     points: preferences.points,
     spacing: preferences.spacing,
     spaceBefore: preferences.spaceBefore,
@@ -238,6 +242,40 @@ test("a compiled pdf is a real pdf of the same pages", async () => {
   assert.match(numbered[0] ?? "", /First/);
   assert.match(numbered[1] ?? "", /Ada2/);
   assert.match(numbered[1] ?? "", /Next/);
+});
+
+test("a running head uses its own face, size, and alignment", async () => {
+  assert.ok(courier?.regular);
+  const pdf = await compilePdf(
+    document(
+      [{ runs: [{ kind: "text", text: "Hello", marks: [] }], align: "left", indent: false, pageBreakBefore: false }],
+      {
+        header: [{ kind: "text", text: "Ada", marks: [] }],
+        footer: [{ kind: "text", text: "End", marks: [] }],
+        headerAlign: "right",
+        footerAlign: "center",
+        furnitureFont: "Courier",
+        furniturePoints: 10,
+        differentFirstPage: false,
+      },
+    ),
+    fonts,
+  );
+  const source = sourceOf(pdf);
+  const face = courier.regular;
+  assert.ok(face);
+  assert.match(source, new RegExp(postscript(face).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  assert.match(source, /10 Tf/);
+  assert.match(pageText(pdf).join(""), /Ada/);
+  assert.match(pageText(pdf).join(""), /End/);
+  const places = [...source.matchAll(/1 0 0 1 ([\d.]+) ([\d.]+) Tm/g)].map((item) => ({
+    x: Number(item[1]),
+    y: Number(item[2]),
+  }));
+  const header = places.find((place) => place.y === 756);
+  const footer = places.find((place) => place.y === 36);
+  assert.ok(header && header.x > 400);
+  assert.ok(footer && footer.x > 72 && footer.x < 400);
 });
 
 test("justified lines keep the words and leave the last line flush", async () => {

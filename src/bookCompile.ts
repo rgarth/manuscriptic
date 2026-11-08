@@ -1,4 +1,4 @@
-import { alignmentById, alignments, type Alignment } from "./pageLayout.ts";
+import { alignmentById, alignments, defaultFont, type Alignment } from "./pageLayout.ts";
 
 export const numberStyles = ["none", "folder", "arabic", "word", "roman"] as const;
 export type NumberStyle = (typeof numberStyles)[number];
@@ -162,15 +162,18 @@ export type CompileIdentity = {
   email: string;
 };
 
-export type PageNumbers = "off" | "header" | "footer";
+type PageNumbers = "off" | "header" | "footer";
 
 export type CompileSpacing = "single" | "onehalf" | "double";
 
 export type CompileFormat = {
   margins: { top: number; right: number; bottom: number; left: number };
   header: string;
+  headerAlign: HeadingAlign;
   footer: string;
-  pageNumbers: PageNumbers;
+  footerAlign: HeadingAlign;
+  furnitureFont: string;
+  furniturePoints: number;
   differentFirstPage: boolean;
   font: string;
   points: number;
@@ -211,10 +214,13 @@ export function defaultCompileFormat(): CompileFormat {
   return {
     margins: { top: 1, right: 1, bottom: 1, left: 1 },
     header: "{$author} / {$title} / {$page}",
+    headerAlign: "left",
     footer: "",
-    pageNumbers: "header",
+    footerAlign: "left",
+    furnitureFont: defaultFont,
+    furniturePoints: 12,
     differentFirstPage: true,
-    font: "Times New Roman",
+    font: defaultFont,
     points: 12,
     spacing: "double",
     spaceBefore: 0,
@@ -279,6 +285,13 @@ export function compileFormat(value: unknown): CompileFormat {
     return fallback;
   }
   const margins = isRecord(value.margins) ? value.margins : {};
+  const font = text(value.font) || fallback.font;
+  const points = clamp(numberValue(value.points), 8, 72, fallback.points);
+  const lines = placedFurniture(
+    value,
+    typeof value.header === "string" ? value.header : fallback.header,
+    text(value.footer),
+  );
   return {
     margins: {
       top: inches(margins.top, fallback.margins.top),
@@ -286,12 +299,15 @@ export function compileFormat(value: unknown): CompileFormat {
       bottom: inches(margins.bottom, fallback.margins.bottom),
       left: inches(margins.left, fallback.margins.left),
     },
-    header: typeof value.header === "string" ? value.header : fallback.header,
-    footer: text(value.footer),
-    pageNumbers: pageNumbers(value.pageNumbers),
+    header: lines.header,
+    headerAlign: headingAlign(value.headerAlign, "left"),
+    footer: lines.footer,
+    footerAlign: headingAlign(value.footerAlign, "left"),
+    furnitureFont: text(value.furnitureFont) || font,
+    furniturePoints: "furniturePoints" in value ? clamp(numberValue(value.furniturePoints), 8, 72, points) : points,
     differentFirstPage: value.differentFirstPage !== false,
-    font: text(value.font) || fallback.font,
-    points: clamp(numberValue(value.points), 8, 72, fallback.points),
+    font,
+    points,
     spacing: spacing(value.spacing),
     spaceBefore: clamp(numberValue(value.spaceBefore), 0, 72, fallback.spaceBefore),
     spaceAfter: clamp(numberValue(value.spaceAfter), 0, 72, fallback.spaceAfter),
@@ -441,15 +457,46 @@ function legacyHeading(value: unknown): CompileHeading | null {
   }
 }
 
-export function headingAlign(value: unknown): HeadingAlign {
+export function headingAlign(value: unknown, fallback: HeadingAlign = "center"): HeadingAlign {
   switch (value) {
     case "left":
     case "center":
     case "right":
       return value;
     default:
-      return "center";
+      return fallback;
   }
+}
+
+function placedFurniture(
+  value: Record<string, unknown>,
+  header: string,
+  footer: string,
+): { header: string; footer: string } {
+  if (!("pageNumbers" in value)) {
+    return { header, footer };
+  }
+  const place = pageNumbers(value.pageNumbers);
+  switch (place) {
+    case "off":
+      return { header: withoutPage(header), footer: withoutPage(footer) };
+    case "header":
+      return { header: withPage(header), footer: withoutPage(footer) };
+    case "footer":
+      return { header: withoutPage(header), footer: withPage(footer) };
+    default: {
+      const unexpected: never = place;
+      return unexpected;
+    }
+  }
+}
+
+function withPage(template: string): string {
+  return template.includes("{$page}") ? template : `${template}{$page}`;
+}
+
+function withoutPage(template: string): string {
+  return template.split("{$page}").join("");
 }
 
 function numberStyle(value: unknown): NumberStyle {

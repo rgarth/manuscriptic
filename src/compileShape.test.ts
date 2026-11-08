@@ -11,6 +11,7 @@ import {
   type CompilePreset,
 } from "./bookCompile.ts";
 import { buildCompile as compileDocument, folderRanks, type CompileParagraph } from "./compileShape.ts";
+import { defaultFont } from "./pageLayout.ts";
 import { toggleCompileRow } from "./compileTicks.ts";
 import type { EditorDoc } from "./model/editorDoc.ts";
 import {
@@ -223,7 +224,7 @@ test("front matter keeps the editor face while the manuscript uses the override"
     assert.equal(styled.font, undefined);
     assert.equal(styled.points, undefined);
   }
-  assert.equal(compiled.font, "Times New Roman");
+  assert.equal(compiled.font, defaultFont);
   assert.equal(compiled.points, 12);
 });
 

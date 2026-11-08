@@ -21,6 +21,7 @@
         <a href="#contents">Contents</a>
         <a href="#structure">Structure</a>
         <a href="#formatting">Formatting</a>
+        <a href="#pages">Pages</a>
         <a href="#dictionary">Dictionary</a>
         <a href="#compile">Compile</a>
       </nav>
@@ -75,7 +76,7 @@
           <li>The name in the binder is not printed on the page.</li>
           <li>A word can keep its own font and size.</li>
           <li>A paragraph can keep its own alignment. With none of its own, it uses the book's. Choosing the book's alignment again clears the paragraph's.</li>
-          <li>A new book is EB Garamond, 12 point, justified.</li>
+          <li>A new book is Times New Roman, 12 point, justified.</li>
           <li><code>{$author}</code>, <code>{$title}</code>, and the other tokens are filled when you compile. An empty one is named in the result.</li>
           <li>Compile writes ticked front matter, then the manuscript, then ticked back matter, then the other ticked publishing pages. Each front or back page starts on a new page.</li>
         </ul>
@@ -157,7 +158,19 @@
           <li>Front matter uses the editor's font, size, and alignment. On, so a front page keeps what you set while writing.</li>
           <li>Back matter uses the editor's font, size, and alignment. On, for the same reason.</li>
           <li>Turn a tick off and this page's font, size, and alignment replace that part. A word's own font, and a paragraph's own alignment, are kept only while the tick is on.</li>
-          <li>Margins start at 1 in. The header is <code>{$author} / {$title} / {$page}</code>. Page numbers sit in the header. The first page has neither header nor footer.</li>
+        </ul>
+      </article>
+
+      <article id="pages">
+        <h1>Pages</h1>
+        <p>Margins, and the lines at the top and bottom of each page, belong to the compile.</p>
+        <ul>
+          <li>Header and footer share one font and one size. A new compile uses Times New Roman at 12 point. A compile saved before this takes the font and size already set under Formatting.</li>
+          <li>Margins start at 1 in.</li>
+          <li>The header is <code>{$author} / {$title} / {$page}</code>, aligned left. The footer is empty.</li>
+          <li>Each line can align left, center, or right.</li>
+          <li><code>{$page}</code> prints the page number in whichever line contains it.</li>
+          <li>The first page has neither header nor footer.</li>
         </ul>
       </article>
 

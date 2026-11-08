@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { defaultFont } from "../pageLayout.ts";
 import {
   addLeaf,
   addSection,
@@ -52,7 +53,7 @@ test("a new novel has the manuscript roots", () => {
   assert.deepEqual(openFolders(setView(project, { expanded: [project.manuscript.id, project.trash.id] })), [
     project.manuscript.id,
   ]);
-  assert.equal(project.layout.font, "EB Garamond");
+  assert.equal(project.layout.font, defaultFont);
   assert.equal(project.layout.points, 12);
   assert.equal(project.layout.align, "justify");
   for (const [key, title] of Object.entries(rootTitles)) {
@@ -131,7 +132,7 @@ test("compile settings without levels keep the default divisions", () => {
   assert.equal(project?.compile.presets[0]?.sceneBreak, "stars");
   assert.deepEqual(project?.compile.presets[0]?.titleOnly, ["pro"]);
   assert.equal(project?.compile.useAppAuthor, true);
-  assert.equal(project?.compile.presets[0]?.format.font, "Times New Roman");
+  assert.equal(project?.compile.presets[0]?.format.font, defaultFont);
 });
 
 test("a new section joins every compile that already includes its parent", () => {
@@ -703,7 +704,7 @@ test("a saved publishing section stays as it was written", () => {
     assert.equal(back.matter, "back");
   }
   assert.deepEqual(project.dictionary, ["Castus"]);
-  assert.equal(project.layout.font, "EB Garamond");
+  assert.equal(project.layout.font, defaultFont);
   assert.equal(project.layout.align, "justify");
   const added = addDictionaryWord(project, "  ");
   assert.deepEqual(added.dictionary, ["Castus"]);

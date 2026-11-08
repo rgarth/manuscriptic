@@ -10,6 +10,7 @@ import {
   resolvedCompilePreferences,
 } from "./bookCompile.ts";
 import { readCompileIdentity, writeCompileIdentity } from "./compilePrefs.ts";
+import { defaultFont } from "./pageLayout.ts";
 
 function memory(initial: Record<string, string> = {}) {
   const values = { ...initial };
@@ -25,7 +26,7 @@ function memory(initial: Record<string, string> = {}) {
 
 test("a new compile format is a double-spaced submission", () => {
   const format = defaultCompileFormat();
-  assert.equal(format.font, "Times New Roman");
+  assert.equal(format.font, defaultFont);
   assert.equal(format.points, 12);
   assert.equal(format.spacing, "double");
   assert.equal(format.indent, 0.5);
@@ -33,11 +34,63 @@ test("a new compile format is a double-spaced submission", () => {
   assert.equal(format.passFont, false);
   assert.equal(format.passFront, true);
   assert.equal(format.passBack, true);
-  assert.equal(format.pageNumbers, "header");
   assert.equal(format.differentFirstPage, true);
   assert.deepEqual(format.margins, { top: 1, right: 1, bottom: 1, left: 1 });
   assert.equal(format.header, "{$author} / {$title} / {$page}");
+  assert.equal(format.headerAlign, "left");
+  assert.equal(format.footer, "");
+  assert.equal(format.footerAlign, "left");
+  assert.equal(format.furnitureFont, defaultFont);
+  assert.equal(format.furniturePoints, 12);
   assert.equal(defaultCompilePreferences().author, "");
+});
+
+test("an older running head keeps its line and takes the manuscript face", () => {
+  const kept = compileFormat({
+    font: "Courier",
+    points: 14,
+    header: "{$author} / {$title} / {$page}",
+    footer: "",
+    pageNumbers: "header",
+  });
+  assert.equal(kept.header, "{$author} / {$title} / {$page}");
+  assert.equal(kept.footer, "");
+  assert.equal(kept.furnitureFont, "Courier");
+  assert.equal(kept.furniturePoints, 14);
+  assert.equal(kept.headerAlign, "left");
+
+  const moved = compileFormat({
+    header: "{$author} / {$title} / {$page}",
+    footer: "Draft",
+    pageNumbers: "footer",
+  });
+  assert.equal(moved.header, "{$author} / {$title} / ");
+  assert.equal(moved.footer, "Draft{$page}");
+
+  const quiet = compileFormat({
+    header: "{$author} / {$page}",
+    footer: "{$page}",
+    pageNumbers: "off",
+  });
+  assert.equal(quiet.header, "{$author} / ");
+  assert.equal(quiet.footer, "");
+
+  const chosen = compileFormat({
+    font: "Courier",
+    points: 14,
+    header: "Title",
+    footer: "{$page}",
+    headerAlign: "right",
+    footerAlign: "center",
+    furnitureFont: "Palatino",
+    furniturePoints: 9,
+  });
+  assert.equal(chosen.header, "Title");
+  assert.equal(chosen.footer, "{$page}");
+  assert.equal(chosen.headerAlign, "right");
+  assert.equal(chosen.footerAlign, "center");
+  assert.equal(chosen.furnitureFont, "Palatino");
+  assert.equal(chosen.furniturePoints, 9);
 });
 
 test("author information round-trips and a broken file is refused", () => {

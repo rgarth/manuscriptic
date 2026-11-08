@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { bookFromFiles, filesForBook } from "./bookArchive.ts";
 import { defaultCompilePreferences, defaultLevel, editPreset, type CompilePreferences, type CompilePreset } from "./bookCompile.ts";
+import { defaultFont } from "./pageLayout.ts";
 import { buildCompile as compileDocument } from "./compileShape.ts";
 import { compileRows, toggleCompileRow } from "./compileTicks.ts";
 import { compileDocx } from "./docx.ts";
@@ -56,7 +57,7 @@ function prose(text: string): EditorDoc {
   return { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text }] }] };
 }
 
-function unzip(bytes: Uint8Array): { document: string; header: string; firstHeader: string; core: string } {
+function unzip(bytes: Uint8Array): { document: string; header: string; footer: string; firstHeader: string; core: string } {
   const dir = mkdtempSync(join(tmpdir(), "manuscriptic-docx-"));
   try {
     const file = join(dir, "book.docx");
@@ -67,6 +68,7 @@ function unzip(bytes: Uint8Array): { document: string; header: string; firstHead
     return {
       document: read("word/document.xml"),
       header: read("word/header1.xml"),
+      footer: read("word/footer1.xml"),
       firstHeader: read("word/header2.xml"),
       core: read("docProps/core.xml"),
     };
@@ -120,8 +122,49 @@ test("a docx carries the paragraph, the mark, the margin, and the header", () =>
   assert.match(header, /Ada Garth/);
   assert.match(header, /Bone Road/);
   assert.match(header, /PAGE/);
+  assert.match(header, /w:jc w:val="left"/);
+  assert.match(header, new RegExp(defaultFont));
+  assert.match(header, /w:sz w:val="24"/);
   assert.match(core, /<dc:title>Bone Road<\/dc:title>/);
   assert.match(core, /<dc:creator>Ada Garth<\/dc:creator>/);
+  assert.equal(firstHeader.includes("PAGE"), false);
+});
+
+test("a running head keeps the face, size, and alignment set for it", () => {
+  const opening = documentNode("Opening", "scene", scene());
+  const chapter = folderNode("A Silver Tide", [opening]);
+  const project = createNovelProject();
+  const book = {
+    ...project,
+    title: "Bone Road",
+    manuscript: { ...project.manuscript, children: [chapter] },
+  };
+  const included = new Set([book.manuscript.id, chapter.id, opening.id]);
+  const compiled = compileOf(
+    book,
+    included,
+    {
+      ...defaultCompilePreferences(),
+      author: "Ada Garth",
+      header: "{$title}",
+      headerAlign: "right",
+      footer: "{$page}",
+      footerAlign: "center",
+      furnitureFont: "Courier",
+      furniturePoints: 9,
+    },
+    2026,
+  );
+  const { header, footer, firstHeader } = unzip(compileDocx(compiled));
+  assert.match(header, /Bone Road/);
+  assert.equal(header.includes("PAGE"), false);
+  assert.match(header, /w:jc w:val="right"/);
+  assert.match(header, /Courier/);
+  assert.match(header, /w:sz w:val="18"/);
+  assert.match(footer, /PAGE/);
+  assert.match(footer, /w:jc w:val="center"/);
+  assert.match(footer, /w:sz w:val="18"/);
+  assert.equal(firstHeader.includes("Bone Road"), false);
   assert.equal(firstHeader.includes("PAGE"), false);
 });
 

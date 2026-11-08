@@ -1,6 +1,3 @@
-import regularUrl from "../node_modules/@fontsource-variable/eb-garamond/files/eb-garamond-latin-wght-normal.woff2?url";
-import italicUrl from "../node_modules/@fontsource-variable/eb-garamond/files/eb-garamond-latin-wght-italic.woff2?url";
-import { defaultFont } from "./pageLayout.ts";
 import type { CompileDocument, CompileRun } from "./compileShape.ts";
 import type { FontBytes, FontFiles, FontLibrary, FontSlot } from "./pdfFont.ts";
 import { readFont } from "./storage.ts";
@@ -16,11 +13,6 @@ export async function loadCompileFonts(doc: CompileDocument): Promise<FontLibrar
           files[style] = await systemFace(family, style);
         }),
       );
-      if (!files.regular && family === defaultFont) {
-        const bundled = await bundledDefault();
-        files.regular = bundled.regular;
-        files.italic ??= bundled.italic;
-      }
       if (!files.regular && !files.bold && !files.italic && !files.boldItalic) {
         throw new Error(`Could not find the font ${family}.`);
       }
@@ -43,6 +35,9 @@ function familiesIn(doc: CompileDocument): Map<string, Set<FontSlot>> {
     styles.add(styleName(bold, italic));
   }
   add(doc.font, false, false);
+  if (doc.header.length > 0 || doc.footer.length > 0) {
+    add(doc.furnitureFont, false, false);
+  }
   for (const paragraph of doc.paragraphs) {
     for (const run of paragraph.runs) {
       if (run.kind !== "text") {
@@ -118,19 +113,6 @@ function packedBytes(value: ArrayBuffer | Uint8Array | number[]): Uint8Array {
     return new Uint8Array(value);
   }
   return Uint8Array.from(value);
-}
-
-async function bundledDefault(): Promise<{ regular: FontBytes; italic: FontBytes }> {
-  const [regular, italic] = await Promise.all([bundledFace(regularUrl), bundledFace(italicUrl)]);
-  return { regular, italic };
-}
-
-async function bundledFace(url: string): Promise<FontBytes> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Could not find the font ${defaultFont}.`);
-  }
-  return { bytes: new Uint8Array(await response.arrayBuffer()), postscript: "", index: 0 };
 }
 
 function emptyFiles(): FontFiles {

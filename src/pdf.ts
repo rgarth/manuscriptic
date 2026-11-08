@@ -1,7 +1,8 @@
+import type { HeadingAlign } from "./bookCompile.ts";
 import type { Alignment } from "./pageLayout.ts";
 import type { Mark } from "./model/editorDoc.ts";
 import type { CompileDocument, CompileRun } from "./compileShape.ts";
-import { openBook, type BookFonts, type EncodedFace, type FontLibrary, type ShapedText } from "./pdfFont.ts";
+import { openBook, type BookFonts, type EncodedFace, type FontLibrary, type FontStyle, type ShapedText } from "./pdfFont.ts";
 
 const pageWidth = 612;
 const pageHeight = 792;
@@ -17,19 +18,27 @@ type TextPiece = {
 type Word = { kind: "break" } | ({ kind: "text" } & TextPiece);
 
 type DrawnLine = { pieces: TextPiece[]; width: number; align: Alignment; indent: number };
-type Furniture = { shaped: ShapedText; size: number };
+type Furniture = { shaped: ShapedText; size: number; align: HeadingAlign };
 type Page = { lines: DrawnLine[]; y: number[]; header: Furniture | null; footer: Furniture | null };
 
 export async function compilePdf(doc: CompileDocument, fonts: FontLibrary): Promise<Uint8Array> {
   const book = openBook(fonts);
-  const body = book.style(doc.font, false, false);
   const pages = paginate(doc, book);
+  let furniture: FontStyle | null = null;
   for (const [index, page] of pages.entries()) {
     const number = index + 1;
     const showHeader = doc.header.length > 0 && !(doc.differentFirstPage && index === 0);
     const showFooter = doc.footer.length > 0 && !(doc.differentFirstPage && index === 0);
-    page.header = showHeader ? { shaped: body.shape(furnitureText(doc.header, number), doc.points), size: doc.points } : null;
-    page.footer = showFooter ? { shaped: body.shape(furnitureText(doc.footer, number), doc.points), size: doc.points } : null;
+    if (!showHeader && !showFooter) {
+      continue;
+    }
+    furniture ??= book.style(doc.furnitureFont, false, false);
+    page.header = showHeader
+      ? { shaped: furniture.shape(furnitureText(doc.header, number), doc.furniturePoints), size: doc.furniturePoints, align: doc.headerAlign }
+      : null;
+    page.footer = showFooter
+      ? { shaped: furniture.shape(furnitureText(doc.footer, number), doc.furniturePoints), size: doc.furniturePoints, align: doc.footerAlign }
+      : null;
   }
   return writePdf(doc, pages, book.encode());
 }
@@ -321,16 +330,30 @@ async function writePdf(doc: CompileDocument, pages: Page[], faces: EncodedFace[
 function pageStream(page: Page, left: number, contentWidth: number): string {
   const commands: string[] = [];
   if (page.header && page.header.shaped.glyphs.length > 0) {
-    commands.push(drawShaped(page.header.shaped, page.header.size, 0, left, pageHeight - 36, 0));
+    commands.push(drawFurniture(page.header, left, contentWidth, pageHeight - 36));
   }
   page.lines.forEach((line, index) => {
     const y = page.y[index] ?? 0;
     commands.push(drawLine(line, left, y, contentWidth));
   });
   if (page.footer && page.footer.shaped.glyphs.length > 0) {
-    commands.push(drawShaped(page.footer.shaped, page.footer.size, 0, left, 36, 0));
+    commands.push(drawFurniture(page.footer, left, contentWidth, 36));
   }
   return commands.filter((command) => command.length > 0).join("\n");
+}
+
+function drawFurniture(item: Furniture, left: number, contentWidth: number, y: number): string {
+  return drawLine(
+    {
+      pieces: [{ shaped: item.shaped, size: item.size, rise: 0, underline: false, strike: false }],
+      width: item.shaped.width,
+      align: item.align,
+      indent: 0,
+    },
+    left,
+    y,
+    contentWidth,
+  );
 }
 
 function drawLine(line: DrawnLine, left: number, y: number, contentWidth: number): string {

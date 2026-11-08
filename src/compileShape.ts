@@ -8,7 +8,6 @@ import {
   type CompilePreferences,
   type CompileSpacing,
   type NumberStyle,
-  type PageNumbers,
   type SceneBreak,
 } from "./bookCompile.ts";
 import { fillDocument, fillText, type CompileValues, type FillPart } from "./compileVars.ts";
@@ -37,7 +36,11 @@ export type CompileParagraph = {
 export type CompileDocument = {
   paragraphs: CompileParagraph[];
   header: CompileRun[];
+  headerAlign: HeadingAlign;
   footer: CompileRun[];
+  footerAlign: HeadingAlign;
+  furnitureFont: string;
+  furniturePoints: number;
   margins: CompilePreferences["margins"];
   font: string;
   points: number;
@@ -88,8 +91,12 @@ export function buildCompile(
   ];
   return {
     paragraphs,
-    header: furniture(preferences.header, values, preferences.pageNumbers, "header", missing),
-    footer: furniture(preferences.footer, values, preferences.pageNumbers, "footer", missing),
+    header: furniture(preferences.header, values, missing),
+    headerAlign: preferences.headerAlign,
+    footer: furniture(preferences.footer, values, missing),
+    footerAlign: preferences.footerAlign,
+    furnitureFont: preferences.furnitureFont,
+    furniturePoints: preferences.furniturePoints,
     margins: preferences.margins,
     font: preferences.passFont ? project.layout.font : preferences.font,
     points: preferences.passFont ? project.layout.points : preferences.points,
@@ -903,23 +910,10 @@ function sceneBreakParagraph(sceneBreak: SceneBreak): CompileParagraph {
   }
 }
 
-function furniture(
-  template: string,
-  values: CompileValues,
-  pageNumbers: PageNumbers,
-  place: "header" | "footer",
-  missing: string[],
-): CompileRun[] {
+function furniture(template: string, values: CompileValues, missing: string[]): CompileRun[] {
   const filled = fillText(template, values, "furniture");
   rememberMissing(missing, filled.missing.filter((name) => name !== "page"));
-  let parts = filled.parts;
-  const showPage = pageNumbers === place;
-  if (!showPage) {
-    parts = parts.filter((part) => part.kind !== "page");
-  } else if (!parts.some((part) => part.kind === "page")) {
-    parts = [...parts, { kind: "page" }];
-  }
-  return parts.flatMap((part) => fillPartToRuns(part));
+  return filled.parts.flatMap((part) => fillPartToRuns(part));
 }
 
 function fillPartToRuns(part: FillPart): CompileRun[] {

@@ -30,7 +30,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  font-family: var(--editor-font, "EB Garamond Variable", "EB Garamond", Palatino, serif);
+  font-family: var(--editor-font, serif);
 }
 
 .editor-column > .page {

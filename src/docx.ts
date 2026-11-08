@@ -1,3 +1,4 @@
+import type { HeadingAlign } from "./bookCompile.ts";
 import type { CompileDocument, CompileParagraph, CompileRun } from "./compileShape.ts";
 import type { Alignment } from "./pageLayout.ts";
 import type { Mark } from "./model/editorDoc.ts";
@@ -15,13 +16,13 @@ export function compileDocx(doc: CompileDocument): Uint8Array {
     { path: "word/document.xml", data: xml(documentXml(doc)) },
     { path: "word/styles.xml", data: xml(stylesXml(doc)) },
     { path: "word/_rels/document.xml.rels", data: xml(documentRels(doc.differentFirstPage)) },
-    { path: "word/header1.xml", data: xml(storyXml("hdr", doc.header, doc)) },
-    { path: "word/footer1.xml", data: xml(storyXml("ftr", doc.footer, doc)) },
+    { path: "word/header1.xml", data: xml(storyXml("hdr", doc.header, doc, doc.headerAlign)) },
+    { path: "word/footer1.xml", data: xml(storyXml("ftr", doc.footer, doc, doc.footerAlign)) },
   ];
   if (doc.differentFirstPage) {
     files.push(
-      { path: "word/header2.xml", data: xml(storyXml("hdr", [], doc)) },
-      { path: "word/footer2.xml", data: xml(storyXml("ftr", [], doc)) },
+      { path: "word/header2.xml", data: xml(storyXml("hdr", [], doc, doc.headerAlign)) },
+      { path: "word/footer2.xml", data: xml(storyXml("ftr", [], doc, doc.footerAlign)) },
     );
   }
   return zipStore(files);
@@ -46,14 +47,16 @@ function paragraphXml(paragraph: CompileParagraph, doc: CompileDocument): string
   return `<w:p><w:pPr>${properties}</w:pPr>${runs}</w:p>`;
 }
 
-function runXml(run: CompileRun, doc: CompileDocument): string {
+function runXml(run: CompileRun, doc: CompileDocument, face?: { font: string; points: number }): string {
+  const font = face?.font;
+  const points = face?.points;
   switch (run.kind) {
     case "text":
-      return `<w:r>${runProperties(doc, run.marks, run.font, run.points)}<w:t xml:space="preserve">${escapeXml(run.text)}</w:t></w:r>`;
+      return `<w:r>${runProperties(doc, run.marks, run.font || font, run.points || points)}<w:t xml:space="preserve">${escapeXml(run.text)}</w:t></w:r>`;
     case "break":
-      return `<w:r>${runProperties(doc, [])}<w:br/></w:r>`;
+      return `<w:r>${runProperties(doc, [], font, points)}<w:br/></w:r>`;
     case "page":
-      return `<w:r>${runProperties(doc, [])}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${runProperties(doc, [])}<w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r>${runProperties(doc, [])}<w:fldChar w:fldCharType="end"/></w:r>`;
+      return `<w:r>${runProperties(doc, [], font, points)}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${runProperties(doc, [], font, points)}<w:instrText xml:space="preserve"> PAGE </w:instrText></w:r><w:r>${runProperties(doc, [], font, points)}<w:fldChar w:fldCharType="end"/></w:r>`;
     default: {
       const unexpected: never = run;
       return unexpected;
@@ -101,11 +104,12 @@ function sectionXml(doc: CompileDocument): string {
   return `<w:sectPr>${header}${footer}${first}<w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="${inchesToTwips(doc.margins.top)}" w:right="${inchesToTwips(doc.margins.right)}" w:bottom="${inchesToTwips(doc.margins.bottom)}" w:left="${inchesToTwips(doc.margins.left)}" w:header="720" w:footer="720" w:gutter="0"/>${title}</w:sectPr>`;
 }
 
-function storyXml(tag: "hdr" | "ftr", runs: readonly CompileRun[], doc: CompileDocument): string {
-  const body = runs.map((run) => runXml(run, doc)).join("");
+function storyXml(tag: "hdr" | "ftr", runs: readonly CompileRun[], doc: CompileDocument, align: HeadingAlign): string {
+  const face = { font: doc.furnitureFont, points: doc.furniturePoints };
+  const body = runs.map((run) => runXml(run, doc, face)).join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:${tag} xmlns:w="${word}">
-  <w:p>${body}</w:p>
+  <w:p><w:pPr><w:jc w:val="${justification(align)}"/></w:pPr>${body}</w:p>
 </w:${tag}>`;
 }
 
