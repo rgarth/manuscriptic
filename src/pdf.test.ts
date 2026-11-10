@@ -44,14 +44,13 @@ function file(name: string): FontBytes | null {
   return { bytes: new Uint8Array(readFileSync(path)), postscript: "", index: 0 };
 }
 
-function garamond(): FontBytes {
-  const path = "node_modules/@fontsource-variable/eb-garamond/files/eb-garamond-latin-wght-normal.woff2";
-  return { bytes: new Uint8Array(readFileSync(path)), postscript: "", index: 0 };
+function liberationSerif(): FontBytes {
+  return { bytes: new Uint8Array(readFileSync("src/fonts/liberation/LiberationSerif-Regular.ttf")), postscript: "", index: 0 };
 }
 
 function filesOf(regular: FontBytes | null, bold: FontBytes | null, italic: FontBytes | null, boldItalic: FontBytes | null): FontFiles {
   return {
-    regular: regular ?? garamond(),
+    regular: regular ?? liberationSerif(),
     bold,
     italic,
     boldItalic,
@@ -389,9 +388,9 @@ test("a font collection contributes the face that was asked for", async () => {
 });
 
 test("a font with compound glyphs still prints the letters", async () => {
-  const face = garamond();
+  const face = liberationSerif();
   const embedded = new Map<string, FontFiles>([
-    ["EB Garamond", { regular: face, bold: null, italic: null, boldItalic: null }],
+    ["Liberation Serif", { regular: face, bold: null, italic: null, boldItalic: null }],
   ]);
   const pdf = await compilePdf(
     document(
@@ -403,7 +402,7 @@ test("a font with compound glyphs still prints the letters", async () => {
           pageBreakBefore: false,
         },
       ],
-      { font: "EB Garamond", header: [], differentFirstPage: false },
+      { font: "Liberation Serif", header: [], differentFirstPage: false },
     ),
     embedded,
   );

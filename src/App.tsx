@@ -5,6 +5,7 @@ import { installAppMenu } from "./appMenu";
 import { insertScene, insertSection } from "./binderActions";
 import { commands, registerCommands } from "./commands";
 import Desk, { Gate, preloadSceneEditor, type DeskDialog } from "./Desk";
+import FontRemapDialog from "./FontRemapDialog";
 import Settings from "./Settings";
 import { booksOnStartup, readSnapshotMinutes, type SnapshotMinutes } from "./filePrefs";
 import { menuCommand, type MenuCommand } from "./menuCommand";
@@ -341,6 +342,15 @@ export default function App() {
   const importMatter = file.answerImportMatter ? (
     <ImportMatterDialog onAnswer={file.answerImportMatter} />
   ) : null;
+  const pendingFonts = file.fontRemap;
+  const fontRemap = pendingFonts ? (
+    <FontRemapDialog
+      key={pendingFonts.ask.missing.join("\0")}
+      ask={pendingFonts.ask}
+      onRemap={pendingFonts.resolve}
+      onCancel={() => pendingFonts.resolve(null)}
+    />
+  ) : null;
 
   if (!project) {
     return (
@@ -392,6 +402,7 @@ export default function App() {
       onDeleteSnapshot={file.removeSnapshot}
     />
       {importMatter}
+      {fontRemap}
     </>
   );
 }

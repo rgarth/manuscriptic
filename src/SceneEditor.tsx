@@ -8,7 +8,6 @@ import { scrollTopForCaret } from "./typewriter";
 import {
   alignments,
   displayPixels,
-  fontFamily,
   fontName,
   fontSizePoints,
   fontSizeText,
@@ -17,6 +16,7 @@ import {
   type Alignment,
   type PageLayout,
 } from "./pageLayout";
+import { displayFontFamily } from "./bookFonts.ts";
 import { registerCommands } from "./commands";
 import Hint from "./Hint.tsx";
 import { formatCommands, formatCommandsIn } from "./formatCommands";
@@ -27,7 +27,7 @@ import { marksInside } from "./find";
 import { dictionarySpellcheckKey, isMisspelled, projectDictionary, suggestionCase, wordFromPoint } from "./spellcheck";
 import { reportFailure } from "./failures";
 import { spellingSuggestions } from "./storage";
-import { FontChoice } from "./FontChoice.tsx";
+import { FontChoice, useAvailableFonts } from "./FontChoice.tsx";
 
 type SceneEditorProps = {
   title: string;
@@ -166,7 +166,7 @@ export default function SceneEditor({
   const spacing = useSyncExternalStore(subscribeEditorPrefs, readSpacing, readSpacing);
   const shape = manuscript ? indent : "none";
   const pageStyle = {
-    "--editor-font": fontFamily(layout.font),
+    "--editor-font": displayFontFamily(layout.font),
     "--editor-size": String(displayPixels(layout.points, zoom)),
     "--editor-pt": String(pointScale(zoom)),
     "--editor-align": layout.align,
@@ -409,6 +409,7 @@ function WordMenuPop({
 
 function CharacterFace({ editor, layout }: { editor: Editor | null; layout: PageLayout }) {
   const range = useRef<{ from: number; to: number } | null>(null);
+  const fonts = useAvailableFonts();
   const face = useCharacterFace(editor);
   const font = face.font ?? layout.font;
   const points = face.points ?? layout.points;
@@ -432,6 +433,7 @@ function CharacterFace({ editor, layout }: { editor: Editor | null; layout: Page
         <FontChoice
           className="font-choice"
           ariaLabel="Typeface"
+          fonts={fonts}
           value={font}
           onChange={(next) => {
             const commands = chain();

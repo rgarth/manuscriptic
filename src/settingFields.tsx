@@ -1,5 +1,5 @@
 import type { CompileFormat } from "./bookCompile.ts";
-import { FontChoice } from "./FontChoice.tsx";
+import { FontChoice, useAvailableFonts } from "./FontChoice.tsx";
 
 export function MarginFields({
   format,
@@ -36,10 +36,18 @@ export function FontMenu({
   disabled?: boolean;
   inherit?: boolean;
 }) {
+  const fonts = useAvailableFonts();
   return (
     <label className="setting">
       <span className="setting-label">{label}</span>
-      <FontChoice ariaLabel={ariaLabel} value={value} disabled={disabled} inherit={inherit} onChange={onChange} />
+      <FontChoice
+        ariaLabel={ariaLabel}
+        fonts={fonts}
+        value={value}
+        disabled={disabled}
+        inherit={inherit}
+        onChange={onChange}
+      />
     </label>
   );
 }

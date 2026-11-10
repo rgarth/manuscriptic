@@ -125,4 +125,12 @@ mod tests {
         assert!(bold.weight >= 600);
         assert_ne!(regular.postscript, bold.postscript);
     }
+
+    #[test]
+    fn a_missing_windows_face_is_not_invented() {
+        if read_face("Times New Roman", false, false).is_some() {
+            return;
+        }
+        assert!(!collect_font_names().iter().any(|name| name == "Times New Roman"));
+    }
 }

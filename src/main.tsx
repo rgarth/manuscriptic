@@ -1,3 +1,5 @@
+import "./fonts/liberation.css";
+import "./fonts/remap.css";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";

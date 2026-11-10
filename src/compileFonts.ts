@@ -1,25 +1,52 @@
+import { bundledFace } from "./bundledFontFaces.ts";
+import { isBundledFontFamily } from "./bundledFonts.ts";
 import type { CompileDocument, CompileRun } from "./compileShape.ts";
 import type { FontBytes, FontFiles, FontLibrary, FontSlot } from "./pdfFont.ts";
 import { readFont } from "./storage.ts";
+
+export class MissingFontError extends Error {
+  readonly family: string;
+
+  constructor(family: string) {
+    super(`Could not find the font ${family}. Install it, or reopen the book to choose a replacement.`);
+    this.name = "MissingFontError";
+    this.family = family;
+  }
+}
 
 export async function loadCompileFonts(doc: CompileDocument): Promise<FontLibrary> {
   const wanted = familiesIn(doc);
   const library = new Map<string, FontFiles>();
   await Promise.all(
     [...wanted.entries()].map(async ([family, styles]) => {
-      const files = emptyFiles();
-      await Promise.all(
-        [...styles].map(async (style) => {
-          files[style] = await systemFace(family, style);
-        }),
-      );
-      if (!files.regular && !files.bold && !files.italic && !files.boldItalic) {
-        throw new Error(`Could not find the font ${family}.`);
-      }
-      library.set(family, files);
+      library.set(family, await loadFamily(family, styles));
     }),
   );
   return library;
+}
+
+async function loadFamily(family: string, styles: Set<FontSlot>): Promise<FontFiles> {
+  const files = emptyFiles();
+  await Promise.all(
+    [...styles].map(async (style) => {
+      files[style] = await loadFace(family, style);
+    }),
+  );
+  if (!files.regular && !files.bold && !files.italic && !files.boldItalic) {
+    throw new MissingFontError(family);
+  }
+  return files;
+}
+
+async function loadFace(family: string, style: FontSlot): Promise<FontBytes | null> {
+  if (isBundledFontFamily(family)) {
+    try {
+      return await bundledFace(family, style);
+    } catch {
+      return null;
+    }
+  }
+  return systemFace(family, style);
 }
 
 function familiesIn(doc: CompileDocument): Map<string, Set<FontSlot>> {
@@ -29,8 +56,8 @@ function familiesIn(doc: CompileDocument): Map<string, Set<FontSlot>> {
     let styles = wanted.get(name);
     if (!styles) {
       styles = new Set();
-      wanted.set(name, styles);
     }
+    wanted.set(name, styles);
     styles.add("regular");
     styles.add(styleName(bold, italic));
   }

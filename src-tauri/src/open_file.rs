@@ -19,7 +19,14 @@ fn open_with_system(path: &str) -> Result<(), String> {
     run(command)
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(target_os = "linux")]
+fn open_with_system(path: &str) -> Result<(), String> {
+    let mut command = std::process::Command::new("xdg-open");
+    command.arg(path);
+    run(command)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn open_with_system(path: &str) -> Result<(), String> {
     let _ = path;
     Err("Opening the compiled file is not supported here.".to_string())
@@ -33,3 +40,4 @@ fn run(mut command: std::process::Command) -> Result<(), String> {
         Err("The compiled file could not be opened.".to_string())
     }
 }
+

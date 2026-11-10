@@ -41,7 +41,6 @@ input:focus-visible {
 ::selection {
   background: var(--wash);
 }
-
 .icon {
   width: 16px;
   height: 16px;
@@ -53,7 +52,6 @@ input:focus-visible {
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-
 .icon-letter {
   fill: currentColor;
   stroke: none;
@@ -278,8 +276,9 @@ input:focus-visible {
 .compile-body .compile-choice-label select {
   width: 100%;
   font: inherit;
-  line-height: inherit;
-  height: calc(1.35em + 14px);
+  line-height: normal;
+  height: auto;
+  min-height: calc(1.35em + 14px);
   padding: 6px 8px;
   border: 1px solid var(--rule);
   border-radius: 4px;
@@ -709,7 +708,9 @@ input:focus-visible {
 
 .dialog.settings input:not([type="checkbox"]),
 .dialog.settings select {
-  height: calc(1.35em + 14px);
+  height: auto;
+  min-height: calc(1.35em + 14px);
+  line-height: normal;
 }
 
 .dialog.settings .setting input,
@@ -995,3 +996,4 @@ input:focus-visible {
   font-weight: 560;
   letter-spacing: -0.02em;
 }
+

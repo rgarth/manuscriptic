@@ -3,7 +3,8 @@ import { FontFamily, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
 import StarterKit from "@tiptap/starter-kit";
-import { alignmentOrNull, fontFamily, fontSizePoints, type Alignment } from "./pageLayout.ts";
+import { displayFontFamily } from "./bookFonts.ts";
+import { alignmentOrNull, fontSizePoints, type Alignment } from "./pageLayout.ts";
 
 const characterFont = FontFamily.extend({
   addGlobalAttributes() {
@@ -18,7 +19,7 @@ const characterFont = FontFamily.extend({
               if (!attributes.fontFamily) {
                 return {};
               }
-              return { style: `font-family: ${fontFamily(attributes.fontFamily)}` };
+              return { style: `font-family: ${displayFontFamily(attributes.fontFamily)}` };
             },
           },
         },

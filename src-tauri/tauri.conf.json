@@ -28,6 +28,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",
@@ -40,7 +45,9 @@
       {
         "ext": ["manuscriptic"],
         "name": "Manuscriptic book",
+        "mimeType": "application/x-manuscriptic",
         "rank": "Owner",
+        "role": "Editor",
         "exportedType": {
           "identifier": "app.manuscriptic.book",
           "conformsTo": ["public.data"]

@@ -2,18 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { takePendingFailures } from "./failures.ts";
 import { getEditorPrefs, indentEm, lineSpacing, nextZoom, paragraphGap, paragraphIndent, setIndent, setSpacing, setTypewriter, setZoom, spacingLine, zoomPercent } from "./editorPrefs.ts";
-import { alignmentById, defaultFont, displayPixels, fontFamily, fontName, pointSize } from "./pageLayout.ts";
+import { displayFontFamily } from "./bookFonts.ts";
+import { alignmentById, displayPixels, fontName, pointSize } from "./pageLayout.ts";
 
-test("the book face defaults to the app face and a chosen face is kept", () => {
-  assert.equal(defaultFont, "Times New Roman");
-  assert.equal(fontName(null), defaultFont);
-  assert.equal(fontName("garamond"), defaultFont);
-  assert.equal(fontName("baskerville"), defaultFont);
-  assert.equal(fontName("EB Garamond"), "EB Garamond");
+test("the book face defaults to Liberation Serif and any other face is kept", () => {
+  assert.equal(fontName(null), "Liberation Serif");
+  assert.equal(fontName("garamond"), "garamond");
   assert.equal(fontName("  Comic Sans MS  "), "Comic Sans MS");
-  assert.match(fontFamily("Comic Sans MS"), /^"Comic Sans MS"/);
-  assert.match(fontFamily(defaultFont), new RegExp(`^"${defaultFont}"`));
-  assert.match(fontFamily("EB Garamond"), /^"EB Garamond"/);
+  assert.equal(displayFontFamily("Liberation Serif"), `"Liberation Serif", serif`);
 });
 
 test("the page defaults to justified and can sit left, center, or right", () => {
