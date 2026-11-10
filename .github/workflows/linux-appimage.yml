@@ -71,11 +71,23 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           find dist -print
-          mapfile -t files < <(find dist -type f -name '*.AppImage' | sort)
-          if [[ ${#files[@]} -eq 0 ]]; then
+          mapfile -t found < <(find dist -type f -name '*.AppImage' | sort)
+          if [[ ${#found[@]} -eq 0 ]]; then
             echo "::error::No AppImages were built."
             exit 1
           fi
+          files=()
+          for src in "${found[@]}"; do
+            base="$(basename "$src")"
+            dir="$(dirname "$src")"
+            if [[ "$base" != *_linux_* && "$base" =~ ^(.*)_([^_]+)\.AppImage$ ]]; then
+              dest="$dir/${BASH_REMATCH[1]}_linux_${BASH_REMATCH[2]}.AppImage"
+              mv "$src" "$dest"
+              files+=("$dest")
+            else
+              files+=("$src")
+            fi
+          done
           tag="${GITHUB_REF_NAME}"
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
