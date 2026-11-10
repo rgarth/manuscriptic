@@ -1,0 +1,6 @@
+.font-remap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}

@@ -220,7 +220,7 @@ export function defaultCompileFormat(): CompileFormat {
     furnitureFont: defaultFont,
     furniturePoints: 12,
     differentFirstPage: true,
-    font: defaultFont,
+    font: "Liberation Serif",
     points: 12,
     spacing: "double",
     spaceBefore: 0,

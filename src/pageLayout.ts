@@ -1,4 +1,5 @@
-export const defaultFont = "Times New Roman";
+/** Default face for new books. Always bundled. */
+export const defaultFont = "Liberation Serif";
 
 export const alignments = [
   { id: "left", label: "Align Left" },
@@ -18,17 +19,10 @@ export type PageLayout = {
 const defaultPoints = 12;
 
 export function fontName(id: string | null): string {
-  if (!id || !id.trim() || id === "garamond" || id === "literata" || id === "baskerville") {
+  if (!id || !id.trim()) {
     return defaultFont;
   }
   return id.trim();
-}
-
-export function fontFamily(name: string): string {
-  const chosen = fontName(name);
-  const quoted = `"${chosen.replace(/"/g, "")}"`;
-  const fallback = chosen === defaultFont ? "Times, serif" : `"${defaultFont}", Times, serif`;
-  return `${quoted}, ${fallback}`;
 }
 
 export function pointSize(value: string | number | null): number {

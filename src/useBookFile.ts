@@ -35,6 +35,7 @@ import {
   readFilePreferences,
   writeDialogDirectory,
 } from "./filePrefs";
+import { createFontRemap, type FontRemapPending } from "./fontRemap.ts";
 import { findNode, firstDocumentId, openFolders, setView, type ProjectFile } from "./model/project";
 import { pickNovelSaveAs, pickNovelToOpen, pickScrivenerProject, resolveDirectory } from "./novelFile";
 import { projectFromScrivener, scrivenerTitle } from "./scrivener/import";
@@ -53,6 +54,7 @@ export function useBookFile(showNotice: Notice) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [history, setHistory] = useState<BookHistory | null>(null);
   const [answerImportMatter, setAnswerImportMatter] = useState<((choice: boolean | null) => void) | null>(null);
+  const [fontRemap, setFontRemap] = useState<FontRemapPending | null>(null);
 
   const skipNextSave = useRef(true);
   const generation = useRef(0);
@@ -89,6 +91,19 @@ export function useBookFile(showNotice: Notice) {
   projectRef.current = project;
   filePathRef.current = filePath;
   historyRef.current = history;
+
+  const fonts = useRef<ReturnType<typeof createFontRemap> | null>(null);
+  if (!fonts.current) {
+    fonts.current = createFontRemap({
+      notice: (error, fallback) => noticeRef.current(error, fallback),
+      currentPath: () => filePathRef.current,
+      currentProject: () => projectRef.current,
+      historySettled: () => disk.current.phase !== "unread",
+      applyProject: (next) => setProject(next),
+      setPending: setFontRemap,
+    });
+  }
+  const fontRemapCtl = fonts.current;
 
   function filesForSave(current: ProjectFile, bookHistory: BookHistory): BookFiles {
     const pages = filesForBook(current);
@@ -218,6 +233,7 @@ export function useBookFile(showNotice: Notice) {
       window.clearTimeout(pendingSave.current);
       pendingSave.current = null;
     }
+    fontRemapCtl.invalidate();
     historyRef.current = bookHistory;
     filePathRef.current = path;
     setHistory(bookHistory);
@@ -251,6 +267,7 @@ export function useBookFile(showNotice: Notice) {
 
   function dropBook() {
     cancelSave();
+    fontRemapCtl.invalidate();
     historyRef.current = null;
     filePathRef.current = null;
     storedFiles.current = null;
@@ -277,29 +294,36 @@ export function useBookFile(showNotice: Notice) {
     }
     rememberDisk(opened.files, opened.history);
     showBook(opened.project, path, opened.history);
+    await fontRemapCtl.settle(path);
   }
 
   async function attachHistory(path: string) {
-    const text = await readHistory(path);
-    if (filePathRef.current !== path) {
-      return;
+    try {
+      const text = await readHistory(path);
+      if (filePathRef.current !== path) {
+        return;
+      }
+      if (text == null) {
+        disk.current = { phase: "absent" };
+        return;
+      }
+      const loaded = historyFromFiles({ ...(storedFiles.current ?? {}), [historyFile]: text });
+      if (!loaded) {
+        throw new Error("That book could not be read.");
+      }
+      if (filePathRef.current !== path) {
+        return;
+      }
+      storedFiles.current = { ...(storedFiles.current ?? {}), [historyFile]: text };
+      disk.current = { phase: "ready", history: loaded, text };
+      skipNextSave.current = true;
+      historyRef.current = loaded;
+      setHistory(loaded);
+    } finally {
+      if (filePathRef.current === path && disk.current.phase === "unread") {
+        disk.current = { phase: "absent" };
+      }
     }
-    if (text == null) {
-      disk.current = { phase: "absent" };
-      return;
-    }
-    const loaded = historyFromFiles({ ...(storedFiles.current ?? {}), [historyFile]: text });
-    if (!loaded) {
-      throw new Error("That book could not be read.");
-    }
-    if (filePathRef.current !== path) {
-      return;
-    }
-    storedFiles.current = { ...(storedFiles.current ?? {}), [historyFile]: text };
-    disk.current = { phase: "ready", history: loaded, text };
-    skipNextSave.current = true;
-    historyRef.current = loaded;
-    setHistory(loaded);
   }
 
   async function loadBook(path: string) {
@@ -322,6 +346,7 @@ export function useBookFile(showNotice: Notice) {
     } catch (error: unknown) {
       noticeRef.current(error, "Could not read the book's history.");
     }
+    await fontRemapCtl.settle(path);
   }
 
   async function refuseOpenBook(path: string): Promise<boolean> {
@@ -349,6 +374,7 @@ export function useBookFile(showNotice: Notice) {
     rememberDisk(created.files, created.history);
     showBook(created.project, path, created.history);
     bookLock.held();
+    await fontRemapCtl.settle(path);
   }
 
   async function createBook() {
@@ -640,6 +666,7 @@ export function useBookFile(showNotice: Notice) {
     createBook,
     importScrivener,
     answerImportMatter,
+    fontRemap,
     openNovelFile,
     saveNovelFile,
     onWindowBlur() {

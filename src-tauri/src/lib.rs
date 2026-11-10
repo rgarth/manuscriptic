@@ -6,22 +6,27 @@ mod open_file;
 mod scrivener;
 mod spellcheck;
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex};
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use book_file::{file_exists, read_book, read_history, write_book, write_export};
 use open_file::open_compiled;
 use scrivener::read_scrivener;
 use book_lock::{
-    book_is_open, claim_book_lock, holds_book, raise_book_window, refresh_book_lock, release_book_lock,
-    release_window, reserve_book, take_book_lock,
+    book_is_open, claim_book_lock, raise_book_window, refresh_book_lock, release_book_lock,
+    release_window, take_book_lock,
 };
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
+use book_lock::{holds_book, reserve_book};
 use documents::documents_directory;
 use fonts::{list_fonts, read_font};
 use spellcheck::{misspellings, spelling_suggestions};
 use tauri::Manager;
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
 static BOOK_WINDOWS: AtomicU64 = AtomicU64::new(1);
 
 struct Launch {
@@ -81,18 +86,50 @@ fn open_requested_books(app: &tauri::AppHandle, event: tauri::RunEvent) {
         tauri::RunEvent::MainEventsCleared => settle_launch(),
         #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
         tauri::RunEvent::Opened { urls } => note_or_open(app, urls),
+        #[cfg(not(any(target_os = "macos", target_os = "ios", target_os = "android")))]
+        _ => {
+            let _ = app;
+        }
+        #[cfg(any(target_os = "macos", target_os = "ios", target_os = "android"))]
         _ => {}
     }
 }
 
 fn settle_launch() {
     // Finder's open callback arrives before the run loop goes idle, so this event means the launch list is complete.
+    // On Linux and Windows, associated files arrive as command-line arguments instead.
     let mut launch = LAUNCH.lock().unwrap_or_else(|err| err.into_inner());
     if launch.settled {
         return;
     }
+    for path in argv_books() {
+        remember_launch(&mut launch.paths, &path);
+    }
     launch.settled = true;
     LAUNCH_READY.notify_all();
+}
+
+fn argv_books() -> Vec<String> {
+    std::env::args().skip(1).filter_map(|arg| book_arg(&arg)).collect()
+}
+
+fn book_arg(arg: &str) -> Option<String> {
+    if let Ok(url) = tauri::Url::parse(arg) {
+        if let Some(path) = opened_book(&url) {
+            return Some(path);
+        }
+    }
+    let path = std::path::Path::new(arg);
+    let extension = path.extension().and_then(|item| item.to_str())?;
+    if !extension.eq_ignore_ascii_case("manuscriptic") {
+        return None;
+    }
+    Some(
+        std::fs::canonicalize(path)
+            .unwrap_or_else(|_| path.to_path_buf())
+            .to_string_lossy()
+            .into_owned(),
+    )
 }
 
 #[tauri::command]
@@ -125,6 +162,7 @@ fn opened_book(url: &tauri::Url) -> Option<String> {
     Some(path.to_string_lossy().into_owned())
 }
 
+#[cfg(any(target_os = "macos", target_os = "ios", target_os = "android", test))]
 fn book_page(path: &str) -> String {
     let mut url = tauri::Url::parse("https://manuscriptic.invalid/index.html").expect("book page");
     url.query_pairs_mut().append_pair("book", path);
@@ -249,7 +287,7 @@ fn report_open(app: &tauri::AppHandle, path: &str, error: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{book_page, opened_book, remember_launch};
+    use super::{book_arg, book_page, opened_book, remember_launch};
 
     #[test]
     fn a_manuscriptic_file_opens_and_another_file_does_not() {
@@ -259,6 +297,20 @@ mod tests {
         assert_eq!(opened_book(&titled).as_deref(), Some("/Novels/Castus.MANUSCRIPTIC"));
         let other = tauri::Url::from_file_path("/Novels/notes.txt").expect("other");
         assert_eq!(opened_book(&other), None);
+    }
+
+    #[test]
+    fn a_command_line_book_is_taken_and_other_args_are_not() {
+        assert_eq!(
+            book_arg("/Novels/Castus.manuscriptic").as_deref(),
+            Some("/Novels/Castus.manuscriptic")
+        );
+        assert_eq!(
+            book_arg("file:///Novels/Castus.manuscriptic").as_deref(),
+            Some("/Novels/Castus.manuscriptic")
+        );
+        assert_eq!(book_arg("--help"), None);
+        assert_eq!(book_arg("/Novels/notes.txt"), None);
     }
 
     #[test]

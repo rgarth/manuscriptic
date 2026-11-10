@@ -1,0 +1,85 @@
+/* Liberation fonts are bundled under the SIL Open Font License (see OFL.txt). */
+
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: normal;
+  font-weight: 400;
+  src: url("./liberation/LiberationSerif-Regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: italic;
+  font-weight: 400;
+  src: url("./liberation/LiberationSerif-Italic.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: normal;
+  font-weight: 700;
+  src: url("./liberation/LiberationSerif-Bold.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Serif";
+  font-style: italic;
+  font-weight: 700;
+  src: url("./liberation/LiberationSerif-BoldItalic.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Sans";
+  font-style: normal;
+  font-weight: 400;
+  src: url("./liberation/LiberationSans-Regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Sans";
+  font-style: italic;
+  font-weight: 400;
+  src: url("./liberation/LiberationSans-Italic.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Sans";
+  font-style: normal;
+  font-weight: 700;
+  src: url("./liberation/LiberationSans-Bold.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Sans";
+  font-style: italic;
+  font-weight: 700;
+  src: url("./liberation/LiberationSans-BoldItalic.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Mono";
+  font-style: normal;
+  font-weight: 400;
+  src: url("./liberation/LiberationMono-Regular.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Mono";
+  font-style: italic;
+  font-weight: 400;
+  src: url("./liberation/LiberationMono-Italic.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Mono";
+  font-style: normal;
+  font-weight: 700;
+  src: url("./liberation/LiberationMono-Bold.ttf") format("truetype");
+}
+
+@font-face {
+  font-family: "Liberation Mono";
+  font-style: italic;
+  font-weight: 700;
+  src: url("./liberation/LiberationMono-BoldItalic.ttf") format("truetype");
+}

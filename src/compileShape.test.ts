@@ -11,8 +11,8 @@ import {
   type CompilePreset,
 } from "./bookCompile.ts";
 import { buildCompile as compileDocument, folderRanks, type CompileParagraph } from "./compileShape.ts";
-import { defaultFont } from "./pageLayout.ts";
 import { toggleCompileRow } from "./compileTicks.ts";
+import { defaultFont } from "./pageLayout.ts";
 import type { EditorDoc } from "./model/editorDoc.ts";
 import {
   createNovelProject,

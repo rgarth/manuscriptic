@@ -4,7 +4,7 @@
 
 Manuscriptic is a writing app for authors. Notes and your manuscript live side by side in a binder. Rich text lets you control headings, fonts, and style. The manuscript can be compiled into a single document for reading, or for submitting for publication.
 
-I use it for my own books. I run it on a Mac. Windows builds are on the releases page. Linux is untested, though it should compile with minimal effort.
+I use it for my own books. I run it on a Mac. Windows and Linux AppImage builds are on the releases page.
 
 The [guide](https://rgarth.github.io/manuscriptic/) explains the binder, the pages around the book, snapshots, and compile.
 
@@ -12,7 +12,7 @@ The [guide](https://rgarth.github.io/manuscriptic/) explains the binder, the pag
 
 ## Download
 
-The latest Windows and Mac builds are on the [releases page](https://github.com/rgarth/manuscriptic/releases).
+The latest Windows, Mac, and Linux AppImage builds (arm64 and x86_64) are on the [releases page](https://github.com/rgarth/manuscriptic/releases). On Linux, download the matching AppImage, mark it executable (`chmod a+x …AppImage`), and run it.
 
 ## Features
 
@@ -47,6 +47,8 @@ I am not responsible if Manuscriptic shreds your next bestselling idea, or your 
 ## Licence
 
 [MIT](LICENSE).
+
+Bundled Liberation fonts (Serif, Sans, Mono) are under the [SIL Open Font License](src/fonts/liberation/OFL.txt).
 
 ## Building it
 

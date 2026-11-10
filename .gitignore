@@ -9,8 +9,14 @@ lerna-debug.log*
 
 node_modules
 dist
+dist-linux
 dist-ssr
 *.local
+build-appimage-*.log
+src-tauri/target-x86_64
+.tmp-build
+tools-x86_64
+*.core
 
 # Editor directories and files
 .vscode/*
