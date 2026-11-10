@@ -26,6 +26,7 @@ jobs:
       - name: Attach AppImages to v0.3.0
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           find dist -print
           mapfile -t files < <(find dist -type f -name '*.AppImage' | sort)
