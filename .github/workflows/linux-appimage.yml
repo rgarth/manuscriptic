@@ -69,10 +69,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          shopt -s nullglob
-          files=(dist/*.AppImage)
+          find dist -print
+          mapfile -t files < <(find dist -type f -name '*.AppImage' | sort)
           if [[ ${#files[@]} -eq 0 ]]; then
-            echo "No AppImages were built." >&2
+            echo "::error::No AppImages were built."
             exit 1
           fi
           tag="${GITHUB_REF_NAME}"

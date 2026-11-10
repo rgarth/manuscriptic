@@ -1,0 +1,40 @@
+name: Publish built Linux AppImages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-linux-assets.yml
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download AppImages from the 0.3.0 build
+        uses: actions/download-artifact@v4
+        with:
+          run-id: 42768784659
+          pattern: Manuscriptic-linux-*
+          path: dist
+          merge-multiple: true
+          github-token: ${{ github.token }}
+
+      - name: Attach AppImages to v0.3.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          find dist -print
+          mapfile -t files < <(find dist -type f -name '*.AppImage' | sort)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::No AppImages in the downloaded artifacts."
+            exit 1
+          fi
+          if ! gh release upload v0.3.0 "${files[@]}" --clobber 2>err.txt; then
+            echo "::error::$(tr '\n' ' ' < err.txt)"
+            cat err.txt
+            exit 1
+          fi
