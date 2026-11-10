@@ -111,7 +111,11 @@ function mapBookFonts(project: ProjectFile, replace: (face: string) => string): 
 
 function mapPreset(preset: CompilePreset, replace: (face: string) => string): CompilePreset {
   const font = replaceNamed(preset.format.font, replace);
-  const format = font === preset.format.font ? preset.format : { ...preset.format, font };
+  const furnitureFont = replaceNamed(preset.format.furnitureFont, replace);
+  const format =
+    font === preset.format.font && furnitureFont === preset.format.furnitureFont
+      ? preset.format
+      : { ...preset.format, font, furnitureFont };
   const scenes = mapHeading(preset.scenes, replace);
   const levels = mapList(preset.levels, (level) => mapHeading(level, replace));
   if (format === preset.format && scenes === preset.scenes && levels === preset.levels) {

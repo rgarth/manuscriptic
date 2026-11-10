@@ -13,7 +13,7 @@ test("displayFontFamily quotes the named face", () => {
   assert.equal(displayFontFamily("Comic Sans MS"), `"Comic Sans MS", serif`);
 });
 
-test("collectBookFonts includes layout, compile body, headings, and scene marks", () => {
+test("collectBookFonts includes layout, compile body, furniture, headings, and scene marks", () => {
   let project = createNovelProject();
   project = setPageLayout(project, { ...project.layout, font: "Times New Roman" });
   const scene = documentNode("Opening", "scene", {
@@ -38,6 +38,7 @@ test("collectBookFonts includes layout, compile body, headings, and scene marks"
       ...project.compile,
       presets: project.compile.presets.map((preset) => ({
         ...preset,
+        format: { ...preset.format, furnitureFont: "Georgia" },
         scenes: { ...preset.scenes, titleFont: "Palatino", nameFont: "" },
         levels: preset.levels.map((level, index) =>
           index === 0 ? { ...level, nameFont: "Goudy Old Style", titleFont: "" } : level,
@@ -49,6 +50,7 @@ test("collectBookFonts includes layout, compile body, headings, and scene marks"
   assert.ok(names.includes("Times New Roman"));
   assert.ok(names.includes("Liberation Serif"));
   assert.ok(names.includes("Courier New"));
+  assert.ok(names.includes("Georgia"));
   assert.ok(names.includes("Palatino"));
   assert.ok(names.includes("Goudy Old Style"));
   assert.ok(!names.includes(""));
@@ -62,7 +64,7 @@ test("missingBookFonts lists faces that are not available", () => {
   assert.deepEqual(missingBookFonts(project, [...available, "Times New Roman"]), []);
 });
 
-test("rewriteBookFonts updates layout, compile body, headings, and scene marks", () => {
+test("rewriteBookFonts updates layout, compile body, furniture, headings, and scene marks", () => {
   let project = createNovelProject();
   project = setPageLayout(project, { ...project.layout, font: "Times New Roman" });
   const scene = documentNode("Opening", "scene", {
@@ -87,7 +89,7 @@ test("rewriteBookFonts updates layout, compile body, headings, and scene marks",
       ...project.compile,
       presets: project.compile.presets.map((preset) => ({
         ...preset,
-        format: { ...preset.format, font: "Times New Roman" },
+        format: { ...preset.format, font: "Times New Roman", furnitureFont: "Times New Roman" },
         scenes: { ...preset.scenes, titleFont: "Times New Roman", nameFont: "" },
         levels: preset.levels.map((level, index) =>
           index === 0 ? { ...level, nameFont: "Times New Roman", titleFont: "" } : level,
@@ -98,6 +100,7 @@ test("rewriteBookFonts updates layout, compile body, headings, and scene marks",
   const rewritten = rewriteBookFonts(project, { "Times New Roman": "Liberation Serif" });
   assert.equal(rewritten.layout.font, "Liberation Serif");
   assert.equal(rewritten.compile.presets[0]?.format.font, "Liberation Serif");
+  assert.equal(rewritten.compile.presets[0]?.format.furnitureFont, "Liberation Serif");
   assert.equal(rewritten.compile.presets[0]?.scenes.titleFont, "Liberation Serif");
   assert.equal(rewritten.compile.presets[0]?.scenes.nameFont, "");
   assert.equal(rewritten.compile.presets[0]?.levels[0]?.nameFont, "Liberation Serif");
